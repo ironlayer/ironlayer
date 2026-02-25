@@ -1,0 +1,56 @@
+{
+  "base": "snap-base-002",
+  "plan_id": "2d92b91530751f27d3b4faf85679bd9a43202c46ba22e26db93ae49c495c357e",
+  "steps": [
+    {
+      "depends_on": [
+        "ca1ac96f8cee9ef30e721d0389d9b549354620a6b666108b3b3005d5945ce52e"
+      ],
+      "estimated_compute_seconds": 300.0,
+      "estimated_cost_usd": 0.21,
+      "input_range": {
+        "end": "2025-06-15",
+        "start": "2025-05-16"
+      },
+      "model": "analytics.orders_daily",
+      "parallel_group": 2,
+      "reason": "downstream of raw.events",
+      "run_type": "INCREMENTAL",
+      "step_id": "be1ac5c2673910abc2dbda45816e7b04cc7357ad10f6e73834d741e04913ff2f"
+    },
+    {
+      "depends_on": [],
+      "estimated_compute_seconds": 300.0,
+      "estimated_cost_usd": 0.21,
+      "input_range": null,
+      "model": "raw.events",
+      "parallel_group": 0,
+      "reason": "SQL logic changed",
+      "run_type": "FULL_REFRESH",
+      "step_id": "d78df77c03c66cd380b50d609dcf8f7de90c21503ee3f3f17f6ac050fce3627e"
+    },
+    {
+      "depends_on": [
+        "d78df77c03c66cd380b50d609dcf8f7de90c21503ee3f3f17f6ac050fce3627e"
+      ],
+      "estimated_compute_seconds": 300.0,
+      "estimated_cost_usd": 0.21,
+      "input_range": null,
+      "model": "staging.events_clean",
+      "parallel_group": 1,
+      "reason": "downstream of raw.events",
+      "run_type": "FULL_REFRESH",
+      "step_id": "ca1ac96f8cee9ef30e721d0389d9b549354620a6b666108b3b3005d5945ce52e"
+    }
+  ],
+  "summary": {
+    "estimated_cost_usd": 0.63,
+    "models_changed": [
+      "analytics.orders_daily",
+      "raw.events",
+      "staging.events_clean"
+    ],
+    "total_steps": 3
+  },
+  "target": "snap-target-002"
+}

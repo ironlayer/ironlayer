@@ -1,0 +1,134 @@
+{{/*
+============================================================================
+API Deployment -- FastAPI control plane
+============================================================================
+Runs Uvicorn serving api.main:app on port 8000.  An init container executes
+Alembic migrations against PostgreSQL before the main container starts.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ironlayer.api.fullname" . }}
+  labels:
+    {{- include "ironlayer.api.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ironlayer.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Force a rollout when the ConfigMap or Secret changes.
+        checksum/config: {{ include (print $.Template.BasePath "/api-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- if .Values.mtls.enabled }}
+        {{- if eq .Values.mtls.provider "istio" }}
+        sidecar.istio.io/inject: "true"
+        traffic.sidecar.istio.io/excludeOutboundPorts: "{{ .Values.api.port }}"
+        {{- else if eq .Values.mtls.provider "linkerd" }}
+        linkerd.io/inject: {{ .Values.mtls.linkerd.proxyInjectMode | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ironlayer.api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.api.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "ironlayer.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "ironlayer.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+      {{- if .Values.api.migrations.enabled }}
+      initContainers:
+        - name: alembic-migrate
+          image: {{ include "ironlayer.image" (dict "imageRoot" .Values.api.image "global" .Values.global "chart" .Chart) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /app/core_engine && \
+              alembic -c core_engine/state/migrations/alembic.ini upgrade head
+          env:
+            - name: ALEMBIC_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ironlayer.secretName" . }}
+                  key: database-url
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "ironlayer.image" (dict "imageRoot" .Values.api.image "global" .Values.global "chart" .Chart) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "ironlayer.api.fullname" . }}-config
+          env:
+            # Secrets injected individually to avoid leaking the entire secret
+            # object into the container environment.
+            - name: API_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ironlayer.secretName" . }}
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ironlayer.secretName" . }}
+                  key: jwt-secret
+            # The AI engine is reached over the in-cluster service.
+            - name: API_AI_ENGINE_URL
+              value: "http://{{ include "ironlayer.ai.fullname" . }}:{{ .Values.aiEngine.port }}"
+          livenessProbe:
+            {{- toYaml .Values.api.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.api.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

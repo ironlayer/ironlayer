@@ -1,0 +1,92 @@
+{{/*
+============================================================================
+AI Engine Deployment -- FastAPI advisory service
+============================================================================
+Runs Uvicorn serving ai_engine.main:app on port 8001.  No init container
+required -- the AI engine has no database migrations.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ironlayer.ai.fullname" . }}
+  labels:
+    {{- include "ironlayer.ai.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.aiEngine.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ironlayer.ai.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/ai-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- if .Values.mtls.enabled }}
+        {{- if eq .Values.mtls.provider "istio" }}
+        sidecar.istio.io/inject: "true"
+        traffic.sidecar.istio.io/excludeOutboundPorts: "{{ .Values.aiEngine.port }}"
+        {{- else if eq .Values.mtls.provider "linkerd" }}
+        linkerd.io/inject: {{ .Values.mtls.linkerd.proxyInjectMode | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.aiEngine.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ironlayer.ai.selectorLabels" . | nindent 8 }}
+        {{- with .Values.aiEngine.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "ironlayer.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "ironlayer.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+        - name: ai-engine
+          image: {{ include "ironlayer.image" (dict "imageRoot" .Values.aiEngine.image "global" .Values.global "chart" .Chart) }}
+          imagePullPolicy: {{ .Values.aiEngine.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.aiEngine.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "ironlayer.ai.fullname" . }}-config
+          env:
+            {{- if .Values.secrets.llmApiKey }}
+            - name: AI_ENGINE_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ironlayer.secretName" . }}
+                  key: llm-api-key
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.aiEngine.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.aiEngine.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.aiEngine.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      {{- with .Values.aiEngine.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aiEngine.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aiEngine.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

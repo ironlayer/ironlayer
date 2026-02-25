@@ -1,0 +1,20 @@
+{{/*
+============================================================================
+AI Engine Service -- ClusterIP exposing port 8001
+============================================================================
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ironlayer.ai.fullname" . }}
+  labels:
+    {{- include "ironlayer.ai.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.aiEngine.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "ironlayer.ai.selectorLabels" . | nindent 4 }}

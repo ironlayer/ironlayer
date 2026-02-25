@@ -1,0 +1,5 @@
+# Astro CVE-2025-64764 (marketing site only)
+# Installed: astro 4.16.19, fixed in 5.15.8
+# Suppressed because 4->5 is a major version jump requiring migration.
+# Tracked for resolution during planned Astro 5 migration.
+CVE-2025-64764

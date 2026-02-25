@@ -1,0 +1,25 @@
+{{/*
+============================================================================
+API ConfigMap -- non-secret environment variables for the API pod.
+============================================================================
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ironlayer.api.fullname" . }}-config
+  labels:
+    {{- include "ironlayer.api.labels" . | nindent 4 }}
+data:
+  API_HOST: {{ .Values.api.host | quote }}
+  API_PORT: {{ .Values.api.port | quote }}
+  API_DEBUG: {{ .Values.api.debug | quote }}
+  API_PLATFORM_ENV: {{ .Values.api.platformEnv | quote }}
+  API_STRUCTURED_LOGGING: {{ .Values.api.structuredLogging | quote }}
+  API_CORS_ORIGINS: {{ .Values.api.corsOrigins | quote }}
+  API_RATE_LIMIT_ENABLED: {{ .Values.api.rateLimitEnabled | quote }}
+  API_RATE_LIMIT_REQUESTS_PER_MINUTE: {{ .Values.api.rateLimitRequestsPerMinute | quote }}
+  API_RATE_LIMIT_BURST_MULTIPLIER: {{ .Values.api.rateLimitBurstMultiplier | quote }}
+  API_RATE_LIMIT_AUTH_ENDPOINTS_PER_MINUTE: {{ .Values.api.rateLimitAuthEndpointsPerMinute | quote }}
+  API_TOKEN_REVOCATION_ENABLED: {{ .Values.api.tokenRevocationEnabled | quote }}
+  AUTH_MODE: {{ .Values.api.authMode | quote }}
+  JWT_ALGORITHM: {{ .Values.api.jwtAlgorithm | quote }}

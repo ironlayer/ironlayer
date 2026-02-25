@@ -1,0 +1,72 @@
+{{/*
+============================================================================
+Horizontal Pod Autoscaler -- optional auto-scaling for API and AI Engine
+============================================================================
+Enable via `autoscaling.enabled: true` in values.  When active, the
+replicaCount field in the corresponding Deployment is ignored; the HPA
+controls replica count instead.
+*/}}
+{{- if .Values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ironlayer.api.fullname" . }}
+  labels:
+    {{- include "ironlayer.api.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ironlayer.api.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.api.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.api.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.api.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.api.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.api.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.api.targetMemoryUtilizationPercentage }}
+    {{- end }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ironlayer.ai.fullname" . }}
+  labels:
+    {{- include "ironlayer.ai.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ironlayer.ai.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.aiEngine.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.aiEngine.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.aiEngine.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.aiEngine.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.aiEngine.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.aiEngine.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}

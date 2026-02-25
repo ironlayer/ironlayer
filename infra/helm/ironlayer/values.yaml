@@ -1,0 +1,337 @@
+# ============================================================================
+# IronLayer Helm Chart -- Default Values
+# ============================================================================
+# Override these values per environment using -f <env>.yaml or --set flags.
+
+# ---------------------------------------------------------------------------
+# Global settings shared across all sub-charts and templates.
+# ---------------------------------------------------------------------------
+global:
+  # Container registry prefix applied to every image reference.
+  imageRegistry: ""
+  # Pull secrets available to all pods (list of secret names).
+  imagePullSecrets: []
+  #   - name: my-registry-secret
+
+# ---------------------------------------------------------------------------
+# API -- FastAPI control plane (port 8000)
+# ---------------------------------------------------------------------------
+api:
+  replicaCount: 2
+
+  image:
+    repository: ironlayer/api
+    tag: ""  # Defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  # -- Uvicorn / FastAPI runtime settings
+  host: "0.0.0.0"
+  port: 8000
+  debug: "false"
+
+  platformEnv: production
+  structuredLogging: "true"
+
+  # -- CORS
+  corsOrigins: '["https://ironlayer.example.com"]'
+
+  # -- Rate limiting
+  rateLimitEnabled: "true"
+  rateLimitRequestsPerMinute: "60"
+  rateLimitBurstMultiplier: "1.5"
+  rateLimitAuthEndpointsPerMinute: "20"
+
+  # -- Token management
+  tokenRevocationEnabled: "true"
+
+  # -- Auth
+  authMode: jwt
+  jwtAlgorithm: HS256
+
+  # -- Kubernetes resource constraints
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -- Probes
+  livenessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+  # -- Service account (uses shared serviceAccount section below)
+  serviceAccount:
+    # Set to override the shared service account for this workload.
+    nameOverride: ""
+
+  # -- Init container: Alembic migrations
+  migrations:
+    enabled: true
+    # Extra flags forwarded to `alembic upgrade head`.
+    extraArgs: []
+
+# ---------------------------------------------------------------------------
+# AI Engine -- advisory service (port 8001)
+# ---------------------------------------------------------------------------
+aiEngine:
+  replicaCount: 1
+
+  image:
+    repository: ironlayer/ai-engine
+    tag: ""  # Defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  port: 8001
+
+  # -- LLM integration
+  llmEnabled: "false"
+  llmProvider: anthropic
+  llmModel: claude-sonnet-4-20250514
+  llmTimeout: "30"
+  llmMaxTokens: "4096"
+
+  # -- Scoring / classification thresholds
+  costModelPath: /app/ai_engine/ai_engine/models/cost_model.json
+  riskThresholdHigh: "0.8"
+  riskThresholdMedium: "0.5"
+  semanticSimilarityThreshold: "0.85"
+
+  # -- Kubernetes resource constraints
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -- Probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+  serviceAccount:
+    nameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Frontend -- React SPA served by Nginx (port 3000)
+# ---------------------------------------------------------------------------
+frontend:
+  replicaCount: 2
+
+  image:
+    repository: ironlayer/frontend
+    tag: ""  # Defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  port: 3000
+
+  # -- Kubernetes resource constraints
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  # -- Probes
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # -- Pod scheduling constraints
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+  serviceAccount:
+    nameOverride: ""
+
+# ---------------------------------------------------------------------------
+# PostgreSQL -- Bitnami subchart configuration
+# ---------------------------------------------------------------------------
+postgresql:
+  enabled: true
+
+  auth:
+    username: ironlayer
+    password: ""  # Set via --set or a secret in production
+    database: ironlayer
+    existingSecret: ""
+
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  # Metrics sidecar (optional -- enable for Prometheus scraping)
+  metrics:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Secrets -- sensitive values injected as a Kubernetes Secret.
+# In production prefer an external secret operator; these defaults are for
+# initial bootstrapping only.
+# ---------------------------------------------------------------------------
+secrets:
+  # Full asyncpg connection string.
+  databaseUrl: "postgresql+asyncpg://ironlayer:changeme@ironlayer-postgresql:5432/ironlayer"
+
+  # JWT signing secret -- MUST be overridden in production.
+  jwtSecret: "changeme-generate-a-real-secret"
+
+  # Optional: Anthropic (or other) LLM provider key. Leave empty to disable.
+  llmApiKey: ""
+
+# ---------------------------------------------------------------------------
+# Ingress -- Expose the frontend and API through an Ingress controller.
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+
+  className: nginx
+
+  annotations: {}
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+  hosts:
+    - host: ironlayer.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: frontend
+        - path: /api/
+          pathType: Prefix
+          backend: api
+
+  tls: []
+  #   - secretName: ironlayer-tls
+  #     hosts:
+  #       - ironlayer.example.com
+
+# ---------------------------------------------------------------------------
+# Horizontal Pod Autoscaler -- optional auto-scaling for API and AI Engine.
+# ---------------------------------------------------------------------------
+autoscaling:
+  enabled: false
+
+  api:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+
+  aiEngine:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+
+# ---------------------------------------------------------------------------
+# mTLS -- Mutual TLS between services via service mesh.
+# ---------------------------------------------------------------------------
+# IronLayer supports annotation-based mTLS configuration for both Istio and
+# Linkerd service meshes.  Enable this section and set your provider to inject
+# sidecar proxies with automatic mTLS between API ↔ AI Engine ↔ PostgreSQL.
+mtls:
+  enabled: false
+
+  # Service mesh provider: "istio" or "linkerd"
+  provider: istio
+
+  # Istio-specific: PeerAuthentication mode (STRICT = enforce mTLS)
+  istio:
+    mode: STRICT
+
+  # Linkerd-specific: auto-inject annotation
+  linkerd:
+    proxyInjectMode: enabled
+
+  # cert-manager integration for certificate issuance (Istio only).
+  certManager:
+    enabled: false
+    issuerRef:
+      name: ironlayer-ca-issuer
+      kind: ClusterIssuer
+
+# ---------------------------------------------------------------------------
+# Service Account -- shared across workloads unless overridden per-service.
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/ironlayer
+  automountServiceAccountToken: false

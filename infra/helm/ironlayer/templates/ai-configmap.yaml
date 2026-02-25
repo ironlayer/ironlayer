@@ -1,0 +1,22 @@
+{{/*
+============================================================================
+AI Engine ConfigMap -- non-secret environment variables for the AI pod.
+============================================================================
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ironlayer.ai.fullname" . }}-config
+  labels:
+    {{- include "ironlayer.ai.labels" . | nindent 4 }}
+data:
+  AI_ENGINE_PORT: {{ .Values.aiEngine.port | quote }}
+  AI_ENGINE_LLM_ENABLED: {{ .Values.aiEngine.llmEnabled | quote }}
+  AI_ENGINE_LLM_PROVIDER: {{ .Values.aiEngine.llmProvider | quote }}
+  AI_ENGINE_LLM_MODEL: {{ .Values.aiEngine.llmModel | quote }}
+  AI_ENGINE_LLM_TIMEOUT: {{ .Values.aiEngine.llmTimeout | quote }}
+  AI_ENGINE_LLM_MAX_TOKENS: {{ .Values.aiEngine.llmMaxTokens | quote }}
+  AI_ENGINE_COST_MODEL_PATH: {{ .Values.aiEngine.costModelPath | quote }}
+  AI_ENGINE_RISK_THRESHOLD_HIGH: {{ .Values.aiEngine.riskThresholdHigh | quote }}
+  AI_ENGINE_RISK_THRESHOLD_MEDIUM: {{ .Values.aiEngine.riskThresholdMedium | quote }}
+  AI_ENGINE_SEMANTIC_SIMILARITY_THRESHOLD: {{ .Values.aiEngine.semanticSimilarityThreshold | quote }}

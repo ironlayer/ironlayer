@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# IronLayer — Database Migration Runner
+# ---------------------------------------------------------------------------
+#
+# Runs Alembic migrations against the production database.
+# Uses the API image (which includes core_engine + alembic + psycopg3).
+#
+# The ALEMBIC_DATABASE_URL environment variable must be set.
+# The env.py automatically normalises the URL to use the psycopg3 sync
+# driver — no psycopg2 install required.
+#
+# Usage (Container App Job):
+#   az containerapp job start --name your-app-migrate ...
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=ironlayer-api:latest
+FROM ${BASE_IMAGE}
+
+ENV PYTHONPATH=/app
+WORKDIR /app
+
+CMD ["python", "-m", "alembic", "-c", "core_engine/state/migrations/alembic.ini", "upgrade", "head"]

@@ -1,0 +1,103 @@
+{{/*
+============================================================================
+mTLS Configuration -- Service mesh mutual TLS settings
+============================================================================
+Creates the PeerAuthentication resource (Istio) or annotated ConfigMap
+(Linkerd) to enforce mTLS between IronLayer services.
+
+Only rendered when .Values.mtls.enabled is true.
+*/}}
+{{- if .Values.mtls.enabled }}
+
+{{- if eq .Values.mtls.provider "istio" }}
+# ---------------------------------------------------------------------------
+# Istio PeerAuthentication -- enforce mTLS for the IronLayer namespace
+# ---------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: {{ include "ironlayer.fullname" . }}-mtls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ironlayer.labels" . | nindent 4 }}
+spec:
+  mtls:
+    mode: {{ .Values.mtls.istio.mode }}
+  # Per-port overrides: allow health-check probes from kubelet (no sidecar).
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  portLevelMtls:
+    {{ .Values.api.port }}:
+      mode: {{ .Values.mtls.istio.mode }}
+    {{ .Values.aiEngine.port }}:
+      mode: {{ .Values.mtls.istio.mode }}
+---
+# ---------------------------------------------------------------------------
+# Istio DestinationRule -- enforce mTLS client-side for inter-service calls
+# ---------------------------------------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "ironlayer.fullname" . }}-mtls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ironlayer.labels" . | nindent 4 }}
+spec:
+  host: "*.{{ .Release.Namespace }}.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+
+{{- if and .Values.mtls.certManager.enabled .Values.mtls.certManager.issuerRef }}
+---
+# ---------------------------------------------------------------------------
+# cert-manager Certificate -- auto-issued TLS cert for service identities
+# ---------------------------------------------------------------------------
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "ironlayer.fullname" . }}-mtls-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ironlayer.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "ironlayer.fullname" . }}-mtls-tls
+  duration: 2160h  # 90 days
+  renewBefore: 360h  # 15 days
+  issuerRef:
+    name: {{ .Values.mtls.certManager.issuerRef.name }}
+    kind: {{ .Values.mtls.certManager.issuerRef.kind }}
+  dnsNames:
+    - "{{ include "ironlayer.api.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local"
+    - "{{ include "ironlayer.ai.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local"
+{{- end }}
+
+{{- else if eq .Values.mtls.provider "linkerd" }}
+# ---------------------------------------------------------------------------
+# Linkerd mTLS Configuration -- annotation-based, no CRDs required
+# ---------------------------------------------------------------------------
+# Linkerd uses pod annotations (injected in deployment templates) to enable
+# automatic mTLS.  This ConfigMap stores the mesh configuration metadata
+# for reference and tooling integration.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ironlayer.fullname" . }}-mtls-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ironlayer.labels" . | nindent 4 }}
+  annotations:
+    linkerd.io/inject: {{ .Values.mtls.linkerd.proxyInjectMode | quote }}
+data:
+  provider: linkerd
+  inject-mode: {{ .Values.mtls.linkerd.proxyInjectMode | quote }}
+  # Linkerd enforces mTLS automatically between meshed pods.
+  # No additional CRDs are needed — the proxy sidecar handles certificate
+  # rotation and mutual authentication via the Linkerd identity controller.
+  services: |
+    - {{ include "ironlayer.api.fullname" . }}
+    - {{ include "ironlayer.ai.fullname" . }}
+{{- end }}
+
+{{- end }}

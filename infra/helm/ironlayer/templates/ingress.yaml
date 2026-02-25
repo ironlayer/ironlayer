@@ -1,0 +1,56 @@
+{{/*
+============================================================================
+Ingress -- Conditional ingress resource for external traffic
+============================================================================
+Routes / to the frontend and /api/ to the API service.  Supports TLS
+termination via cert-manager or pre-provisioned secrets.
+*/}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ironlayer.fullname" . }}
+  labels:
+    {{- include "ironlayer.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "ironlayer.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - secretName: {{ .secretName }}
+      hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                {{- if eq .backend "api" }}
+                name: {{ include "ironlayer.api.fullname" $ }}
+                port:
+                  number: {{ $.Values.api.port }}
+                {{- else }}
+                name: {{ include "ironlayer.frontend.fullname" $ }}
+                port:
+                  number: {{ $.Values.frontend.port }}
+                {{- end }}
+          {{- end }}
+    {{- end }}
+{{- end }}

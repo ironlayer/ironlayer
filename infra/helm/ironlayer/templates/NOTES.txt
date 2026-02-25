@@ -1,0 +1,51 @@
+============================================================================
+  IronLayer {{ .Chart.Version }}  (app {{ .Chart.AppVersion }})
+============================================================================
+
+Thank you for installing IronLayer!
+
+{{- if .Values.ingress.enabled }}
+
+The application is exposed via Ingress:
+{{- range .Values.ingress.hosts }}
+  {{- range .paths }}
+  {{ if eq .backend "api" }}API{{ else }}Frontend{{ end }}: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ (index $.Values.ingress.hosts 0).host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else }}
+
+No Ingress is configured.  Access the services via port-forward:
+
+  # Frontend (React SPA)
+  kubectl port-forward svc/{{ include "ironlayer.frontend.fullname" . }} {{ .Values.frontend.port }}:{{ .Values.frontend.port }}
+  open http://localhost:{{ .Values.frontend.port }}
+
+  # API (FastAPI control plane)
+  kubectl port-forward svc/{{ include "ironlayer.api.fullname" . }} {{ .Values.api.port }}:{{ .Values.api.port }}
+  curl http://localhost:{{ .Values.api.port }}/api/v1/health
+
+  # AI Engine (advisory service)
+  kubectl port-forward svc/{{ include "ironlayer.ai.fullname" . }} {{ .Values.aiEngine.port }}:{{ .Values.aiEngine.port }}
+  curl http://localhost:{{ .Values.aiEngine.port }}/health
+{{- end }}
+
+To check the rollout status:
+
+  kubectl rollout status deployment/{{ include "ironlayer.api.fullname" . }}
+  kubectl rollout status deployment/{{ include "ironlayer.ai.fullname" . }}
+  kubectl rollout status deployment/{{ include "ironlayer.frontend.fullname" . }}
+
+{{- if .Values.api.migrations.enabled }}
+
+Alembic migrations run automatically as an init container on the API
+deployment.  Check the init container logs if the API pod is stuck in Init:
+
+  kubectl logs deployment/{{ include "ironlayer.api.fullname" . }} -c alembic-migrate
+{{- end }}
+
+IMPORTANT: Make sure you have overridden the default secrets before
+running in production:
+
+  helm upgrade {{ .Release.Name }} ./infra/helm/ironlayer \
+    --set secrets.databaseUrl="postgresql+asyncpg://..." \
+    --set secrets.jwtSecret="$(openssl rand -base64 32)"

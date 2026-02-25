@@ -1,0 +1,28 @@
+apiVersion: v2
+name: ironlayer
+description: >-
+  IronLayer -- Databricks SQL transformation orchestration platform.
+  Deploys the API control plane, AI advisory engine, React frontend,
+  and a PostgreSQL system-of-record database.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - databricks
+  - sql
+  - orchestration
+  - transformation
+  - lineage
+
+home: https://github.com/your-org/ironlayer
+maintainers:
+  - name: IronLayer Team
+
+dependencies:
+  # Bitnami PostgreSQL subchart -- pinned to a known-good major version.
+  # Run `helm dependency update` after cloning to pull the subchart archive.
+  - name: postgresql
+    version: ">=15.0.0 <16.0.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

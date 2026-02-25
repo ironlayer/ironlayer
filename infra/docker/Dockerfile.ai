@@ -1,0 +1,28 @@
+FROM python:3.11-slim AS builder
+
+RUN pip install poetry==1.7.1 && \
+    poetry config virtualenvs.create false
+
+WORKDIR /build
+
+COPY ai_engine/pyproject.toml ai_engine/poetry.lock* /build/ai_engine/
+COPY ai_engine/ai_engine/ /build/ai_engine/ai_engine/
+
+RUN cd /build/ai_engine && poetry install --only main --no-root --no-interaction
+
+FROM python:3.11-slim AS runtime
+
+RUN groupadd -r ironlayer && useradd -r -g ironlayer -d /app ironlayer
+
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+WORKDIR /app
+
+COPY ai_engine/ai_engine/ /app/ai_engine/
+
+USER ironlayer
+
+EXPOSE 8001
+
+CMD ["uvicorn", "ai_engine.main:app", "--host", "0.0.0.0", "--port", "8001"]

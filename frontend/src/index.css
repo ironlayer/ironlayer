@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply text-gray-100 bg-surface;
+  }
+
+  ::selection {
+    @apply bg-ironlayer-600/40 text-white;
+  }
+}
+
+@layer components {
+  /*
+   * Dark mode color overrides.
+   * Instead of editing every component, we override Tailwind's default
+   * gray / white utilities to produce dark-friendly colours.
+   *
+   * bg-white   → surface-50  (#16161e)
+   * bg-gray-50 → surface     (#0a0a0f)
+   * Borders → white/[0.06]
+   * Text    → gray-100 / 300 / 400 / 500
+   */
+
+  /* ---- Cards / panels ---- */
+  .bg-white {
+    background-color: #16161e !important; /* surface-50 */
+  }
+  .bg-gray-50 {
+    background-color: #0a0a0f !important; /* surface */
+  }
+  .bg-gray-100 {
+    background-color: #1c1c28 !important; /* surface-100 */
+  }
+
+  /* ---- Borders ---- */
+  .border-gray-200,
+  .border-gray-100,
+  .border-gray-300 {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+  .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+  .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  /* ---- Text (headings / primary) ---- */
+  .text-gray-900 {
+    color: #f1f5f9 !important; /* near-white */
+  }
+  .text-gray-800 {
+    color: #e2e8f0 !important;
+  }
+  .text-gray-700 {
+    color: #cbd5e1 !important;
+  }
+  /* ---- Text (secondary) ---- */
+  .text-gray-600 {
+    color: #94a3b8 !important;
+  }
+  .text-gray-500 {
+    color: #64748b !important;
+  }
+  .text-gray-400 {
+    color: #475569 !important;
+  }
+  .text-gray-300 {
+    color: #94a3b8 !important;
+  }
+
+  /* ---- Hovers ---- */
+  .hover\:bg-gray-50:hover {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+  }
+  .hover\:bg-gray-100:hover {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+  }
+  .hover\:text-gray-900:hover {
+    color: #f8fafc !important;
+  }
+
+  /* ---- Focus rings ---- */
+  .focus\:border-ironlayer-400:focus,
+  .focus\:border-ironlayer-500:focus {
+    border-color: #3381ff !important;
+  }
+  .focus\:ring-ironlayer-400:focus,
+  .focus\:ring-ironlayer-500:focus {
+    --tw-ring-color: rgba(51, 129, 255, 0.4) !important;
+  }
+
+  /* ---- Inputs ---- */
+  input,
+  textarea,
+  select {
+    @apply bg-surface-100 text-gray-100 border-white/[0.1] placeholder:text-gray-600;
+  }
+  input:focus,
+  textarea:focus,
+  select:focus {
+    @apply border-ironlayer-500/60 ring-ironlayer-500/30;
+  }
+
+  /* ---- Ironlayer brand tints (dark mode friendly) ---- */
+  .bg-ironlayer-50 {
+    background-color: rgba(51, 129, 255, 0.08) !important;
+  }
+  .bg-ironlayer-100 {
+    background-color: rgba(51, 129, 255, 0.12) !important;
+  }
+  .bg-ironlayer-200 {
+    background-color: rgba(51, 129, 255, 0.16) !important;
+  }
+  .text-ironlayer-700 {
+    color: #59a3ff !important; /* ironlayer-400 */
+  }
+  .text-ironlayer-800 {
+    color: #8ec4ff !important; /* ironlayer-300 */
+  }
+  .border-ironlayer-200 {
+    border-color: rgba(51, 129, 255, 0.2) !important;
+  }
+
+  /* ---- Status badges (dark variants) ---- */
+  .bg-green-50 {
+    background-color: rgba(6, 214, 160, 0.1) !important;
+  }
+  .text-green-700 {
+    color: #06d6a0 !important;
+  }
+  .bg-blue-50 {
+    background-color: rgba(51, 129, 255, 0.1) !important;
+  }
+  .text-blue-700 {
+    color: #59a3ff !important;
+  }
+  .bg-yellow-50 {
+    background-color: rgba(245, 158, 11, 0.1) !important;
+  }
+  .text-yellow-700 {
+    color: #f59e0b !important;
+  }
+  .bg-red-50 {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+  }
+  .text-red-700 {
+    color: #f87171 !important;
+  }
+  .border-red-200 {
+    border-color: rgba(239, 68, 68, 0.2) !important;
+  }
+
+  /* ---- Shadow toning ---- */
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    --tw-shadow-color: rgba(0, 0, 0, 0.3);
+  }
+
+  /* ---- Ring ---- */
+  .ring-gray-200 {
+    --tw-ring-color: rgba(255, 255, 255, 0.06) !important;
+  }
+}

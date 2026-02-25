@@ -1,0 +1,20 @@
+{{/*
+============================================================================
+Frontend Service -- ClusterIP exposing port 3000
+============================================================================
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ironlayer.frontend.fullname" . }}
+  labels:
+    {{- include "ironlayer.frontend.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.frontend.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "ironlayer.frontend.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,25 @@
+{
+  "base": "snap-base-001",
+  "plan_id": "d978c1a4ab6354be0c3f4b1e4eed91f6ff4a731914b6cf030ef0439963d3cfbe",
+  "steps": [
+    {
+      "depends_on": [],
+      "estimated_compute_seconds": 300.0,
+      "estimated_cost_usd": 0.21,
+      "input_range": null,
+      "model": "analytics.revenue_summary",
+      "parallel_group": 0,
+      "reason": "SQL logic changed",
+      "run_type": "FULL_REFRESH",
+      "step_id": "945ff63dbea9cd98d43578f46c3c71c9abf077b318b7bfe24cdc5e78cfc8f8b8"
+    }
+  ],
+  "summary": {
+    "estimated_cost_usd": 0.21,
+    "models_changed": [
+      "analytics.revenue_summary"
+    ],
+    "total_steps": 1
+  },
+  "target": "snap-target-001"
+}

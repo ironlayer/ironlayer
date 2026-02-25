@@ -1,0 +1,28 @@
+{
+  "base": "snap-base-003",
+  "plan_id": "55cc78c52ee4b4df422ceaf4f26592679af64e4b33803bbc566b04435d329f56",
+  "steps": [
+    {
+      "depends_on": [],
+      "estimated_compute_seconds": 300.0,
+      "estimated_cost_usd": 0.21,
+      "input_range": {
+        "end": "2025-06-15",
+        "start": "2025-06-01"
+      },
+      "model": "analytics.orders_daily",
+      "parallel_group": 0,
+      "reason": "SQL logic changed",
+      "run_type": "INCREMENTAL",
+      "step_id": "78396193a7dd718063791aa25a13f3d2c1a7901b388ce2396d0271ac5854fdda"
+    }
+  ],
+  "summary": {
+    "estimated_cost_usd": 0.21,
+    "models_changed": [
+      "analytics.orders_daily"
+    ],
+    "total_steps": 1
+  },
+  "target": "snap-target-003"
+}

@@ -1,0 +1,67 @@
+{{/*
+============================================================================
+Frontend ConfigMap -- nginx.conf for the React SPA
+============================================================================
+Serves static files from /usr/share/nginx/html and reverse-proxies all
+/api/* requests to the API ClusterIP service.  The SPA catch-all ensures
+that client-side routing works correctly.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ironlayer.frontend.fullname" . }}-config
+  labels:
+    {{- include "ironlayer.frontend.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen {{ .Values.frontend.port }};
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # ---------- Security headers ----------
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
+        # ---------- Gzip compression ----------
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+        gzip_min_length 256;
+
+        # ---------- Reverse proxy to API ----------
+        location /api/ {
+            proxy_pass http://{{ include "ironlayer.api.fullname" . }}:{{ .Values.api.port }}/api/;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Timeouts aligned with long-running plan computations.
+            proxy_connect_timeout 10s;
+            proxy_read_timeout    120s;
+            proxy_send_timeout    120s;
+        }
+
+        # ---------- Static assets (cache-busted by Vite hashes) ----------
+        location /assets/ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            try_files $uri =404;
+        }
+
+        # ---------- SPA catch-all ----------
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # ---------- Health check for liveness probe ----------
+        location = /nginx-health {
+            access_log off;
+            return 200 "ok";
+            add_header Content-Type text/plain;
+        }
+    }

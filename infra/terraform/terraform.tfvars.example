@@ -1,0 +1,100 @@
+# =============================================================================
+# IronLayer Terraform Variables — Example Configuration
+# =============================================================================
+#
+# Copy this file to terraform.tfvars and fill in values for your environment.
+# Values shown are production defaults unless noted otherwise.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# NEVER commit terraform.tfvars to version control (it's in .gitignore).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General
+# -----------------------------------------------------------------------------
+
+project_name        = "ironlayer"
+environment         = "production"        # production | staging | development
+azure_location      = "eastus2"
+resource_group_name = "ironlayer-dev"
+
+# Additional tags applied to every resource.
+# tags = {
+#   Owner      = "platform-team"
+#   CostCenter = "engineering"
+# }
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+
+vnet_address_space = "10.0.0.0/16"
+
+# -----------------------------------------------------------------------------
+# Database
+# -----------------------------------------------------------------------------
+
+# Azure PostgreSQL Flexible Server SKU.
+# Dev/staging:  "B_Standard_B1ms"  (burstable, ~$13/month)
+# Production:   "GP_Standard_D2s_v3" (general purpose, ~$125/month)
+postgresql_sku_name       = "GP_Standard_D2s_v3"
+postgresql_zone_redundant = true   # false for dev/staging
+postgresql_storage_mb     = 32768  # 32 GB
+
+db_name     = "ironlayer"
+db_username = "ironlayer"
+
+# -----------------------------------------------------------------------------
+# Container Apps — API
+# -----------------------------------------------------------------------------
+
+api_cpu          = 0.5    # vCPU cores
+api_memory       = "1Gi"
+api_min_replicas = 1
+api_max_replicas = 4
+api_image_tag    = "latest"
+
+# -----------------------------------------------------------------------------
+# Container Apps — AI Engine
+# -----------------------------------------------------------------------------
+
+ai_cpu          = 0.5
+ai_memory       = "1Gi"
+ai_min_replicas = 1
+ai_max_replicas = 2
+ai_image_tag    = "latest"
+
+# -----------------------------------------------------------------------------
+# Container Apps — Frontend
+# -----------------------------------------------------------------------------
+
+frontend_cpu          = 0.25
+frontend_memory       = "0.5Gi"
+frontend_min_replicas = 1
+frontend_max_replicas = 4
+frontend_image_tag    = "latest"
+
+# -----------------------------------------------------------------------------
+# TLS / Domain
+# -----------------------------------------------------------------------------
+
+# Custom domain (leave empty to use Azure-provided *.azurecontainerapps.io FQDN).
+# domain_name = "app.ironlayer.app"
+
+# -----------------------------------------------------------------------------
+# Secrets
+# -----------------------------------------------------------------------------
+
+# JWT signing secret. Leave empty to auto-generate a 64-character random secret.
+# jwt_secret = ""
+
+# LLM integration (Anthropic Claude).
+llm_enabled = false
+# llm_api_key = "sk-ant-..."
+
+# -----------------------------------------------------------------------------
+# Observability
+# -----------------------------------------------------------------------------
+
+log_retention_days = 30   # 30-730 days

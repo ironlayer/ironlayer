@@ -1,0 +1,20 @@
+{{/*
+============================================================================
+API Service -- ClusterIP exposing port 8000
+============================================================================
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ironlayer.api.fullname" . }}
+  labels:
+    {{- include "ironlayer.api.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.api.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "ironlayer.api.selectorLabels" . | nindent 4 }}
