@@ -17,6 +17,10 @@ from rich.tree import Tree
 if TYPE_CHECKING:
     from core_engine.models.model_definition import ModelDefinition
     from core_engine.models.plan import Plan
+    from core_engine.sql_toolkit._types import (
+        ColumnLineageResult,
+        CrossModelColumnLineage,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,3 +403,137 @@ def display_migration_report(
         console.print("[yellow bold]Warnings:[/yellow bold]")
         for warning in warnings:
             console.print(f"  [yellow]- {warning}[/yellow]")
+
+
+# ---------------------------------------------------------------------------
+# Column-level lineage
+# ---------------------------------------------------------------------------
+
+_TRANSFORM_STYLES: dict[str, str] = {
+    "direct": "green",
+    "expression": "cyan",
+    "aggregation": "magenta",
+    "window": "magenta",
+    "case": "yellow",
+    "literal": "dim",
+}
+
+
+def display_column_lineage(
+    console: Console,
+    model_name: str,
+    column_lineage: ColumnLineageResult,
+) -> None:
+    """Render column-level lineage for a single model.
+
+    Shows each output column and the source columns it derives from,
+    including the transformation type (direct, expression, aggregation,
+    window, case, literal).
+
+    Parameters
+    ----------
+    console:
+        Rich console to write to (typically stderr).
+    model_name:
+        The focal model name.
+    column_lineage:
+        The :class:`ColumnLineageResult` to display.
+    """
+    tree = Tree(
+        f"[bold yellow]{model_name}[/bold yellow]  column lineage",
+        guide_style="dim",
+    )
+
+    if not column_lineage.column_lineage:
+        tree.add("[dim]no column lineage computed[/dim]")
+        console.print(Panel(tree, title="Column Lineage", border_style="yellow"))
+        return
+
+    for col_name, nodes in sorted(column_lineage.column_lineage.items()):
+        col_branch = tree.add(f"[bold white]{col_name}[/bold white]")
+
+        for node in nodes:
+            transform_style = _TRANSFORM_STYLES.get(node.transform_type, "white")
+            transform_label = f"[{transform_style}]{node.transform_type}[/{transform_style}]"
+
+            if node.source_table and node.source_column:
+                source_label = (
+                    f"[blue]{node.source_table}[/blue].[cyan]{node.source_column}[/cyan]"
+                )
+            elif node.source_column:
+                source_label = f"[cyan]{node.source_column}[/cyan]"
+            elif node.source_table:
+                source_label = f"[blue]{node.source_table}[/blue]"
+            else:
+                source_label = "[dim]literal/unknown[/dim]"
+
+            col_branch.add(f"{transform_label} ← {source_label}")
+
+    console.print(Panel(tree, title="Column Lineage", border_style="yellow"))
+
+    # Summary.
+    total_cols = len(column_lineage.column_lineage)
+    unresolved = len(column_lineage.unresolved_columns)
+    parts = [f"[bold]{total_cols}[/bold] column(s) traced"]
+    if unresolved:
+        parts.append(f"[yellow]{unresolved} unresolved[/yellow]")
+    console.print(", ".join(parts))
+
+    if column_lineage.unresolved_columns:
+        console.print(
+            f"[dim]Unresolved: {', '.join(column_lineage.unresolved_columns)}[/dim]"
+        )
+
+
+def display_cross_model_column_lineage(
+    console: Console,
+    result: CrossModelColumnLineage,
+) -> None:
+    """Render cross-model column lineage for a single column.
+
+    Shows the full trace from target model/column back through
+    upstream models to source tables.
+
+    Parameters
+    ----------
+    console:
+        Rich console to write to (typically stderr).
+    result:
+        The :class:`CrossModelColumnLineage` to display.
+    """
+    tree = Tree(
+        f"[bold yellow]{result.target_model}[/bold yellow]"
+        f".[bold white]{result.target_column}[/bold white]",
+        guide_style="dim",
+    )
+
+    if not result.lineage_path:
+        tree.add("[dim]no lineage path found[/dim]")
+        console.print(
+            Panel(tree, title="Cross-Model Column Lineage", border_style="yellow")
+        )
+        return
+
+    # Group lineage nodes by source table for cleaner display.
+    by_table: dict[str | None, list] = {}
+    for node in result.lineage_path:
+        by_table.setdefault(node.source_table, []).append(node)
+
+    for table, nodes in by_table.items():
+        table_label = f"[blue]{table}[/blue]" if table else "[dim]unknown source[/dim]"
+        table_branch = tree.add(table_label)
+
+        for node in nodes:
+            transform_style = _TRANSFORM_STYLES.get(node.transform_type, "white")
+            col_label = (
+                f"[cyan]{node.source_column}[/cyan]"
+                if node.source_column
+                else "[dim]?[/dim]"
+            )
+            transform_label = f"[{transform_style}]{node.transform_type}[/{transform_style}]"
+            table_branch.add(f"{col_label}  ({transform_label})")
+
+    console.print(
+        Panel(tree, title="Cross-Model Column Lineage", border_style="yellow")
+    )
+    console.print(f"[bold]{len(result.lineage_path)}[/bold] lineage hop(s) traced")

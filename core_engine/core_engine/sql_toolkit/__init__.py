@@ -8,6 +8,7 @@ Usage::
     result = tk.parser.parse_one("SELECT * FROM orders", Dialect.DATABRICKS)
     tables = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
     transpiled = tk.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.DUCKDB)
+    lineage = tk.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS)
 
 The default implementation delegates to SQLGlot.  A different backend can be
 swapped in via ``register_implementation()`` without touching consumer code.
@@ -16,8 +17,10 @@ swapped in via ``register_implementation()`` without touching consumer code.
 from ._factory import get_sql_toolkit, register_implementation, reset_toolkit
 from ._protocols import (
     SqlDiffer,
+    SqlLineageAnalyzer,
     SqlNormalizer,
     SqlParser,
+    SqlQualifier,
     SqlRenderer,
     SqlRewriter,
     SqlSafetyGuard,
@@ -28,17 +31,23 @@ from ._protocols import (
 from ._types import (
     AstDiffResult,
     ColumnExtractionResult,
+    ColumnLineageNode,
+    ColumnLineageResult,
     ColumnRef,
+    CrossModelColumnLineage,
     Dialect,
     DiffEdit,
     DiffEditKind,
     NormalizationResult,
     ParseResult,
+    QualifyResult,
     RewriteResult,
     RewriteRule,
     SafetyCheckResult,
     SafetyViolation,
     ScopeResult,
+    SimplifyResult,
+    SqlLineageError,
     SqlNode,
     SqlNodeKind,
     SqlNormalizationError,
@@ -64,6 +73,8 @@ __all__ = [
     "SqlDiffer",
     "SqlSafetyGuard",
     "SqlRewriter",
+    "SqlLineageAnalyzer",
+    "SqlQualifier",
     # Types
     "Dialect",
     "SqlNodeKind",
@@ -82,9 +93,15 @@ __all__ = [
     "SafetyViolation",
     "RewriteResult",
     "RewriteRule",
+    "ColumnLineageNode",
+    "ColumnLineageResult",
+    "CrossModelColumnLineage",
+    "QualifyResult",
+    "SimplifyResult",
     # Exceptions
     "SqlToolkitError",
     "SqlParseError",
     "SqlTranspileError",
     "SqlNormalizationError",
+    "SqlLineageError",
 ]

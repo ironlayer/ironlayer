@@ -23,6 +23,8 @@ import typer
 from rich.console import Console
 
 from cli.display import (
+    display_column_lineage,
+    display_cross_model_column_lineage,
     display_lineage,
     display_migration_report,
     display_model_list,
@@ -47,6 +49,13 @@ migrate_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(migrate_app, name="migrate")
+
+mcp_app = typer.Typer(
+    name="mcp",
+    help="MCP (Model Context Protocol) server for AI assistant integration.",
+    no_args_is_help=True,
+)
+app.add_typer(mcp_app, name="mcp")
 
 # Register the init and dev commands.
 from cli.commands.dev import dev_command
@@ -1168,8 +1177,30 @@ def lineage(
         "-m",
         help="Canonical model name to trace lineage for.",
     ),
+    column: str | None = typer.Option(
+        None,
+        "--column",
+        "-c",
+        help=(
+            "Column name to trace.  When provided, switches to column-level "
+            "lineage mode.  Without --column, shows table-level lineage."
+        ),
+    ),
+    depth: int = typer.Option(
+        50,
+        "--depth",
+        help="Maximum traversal depth for cross-model column tracing.",
+        min=1,
+        max=200,
+    ),
 ) -> None:
-    """Display upstream and downstream lineage for a model."""
+    """Display upstream and downstream lineage for a model.
+
+    By default shows table-level lineage (upstream/downstream models).
+    Use --column/-c to switch to column-level lineage, tracing a
+    specific output column back through the DAG to its source tables
+    and columns.
+    """
     from core_engine.graph import build_dag, get_downstream, get_upstream
     from core_engine.loader import load_models_from_directory
 
@@ -1197,6 +1228,63 @@ def lineage(
             console.print(f"[dim]Available models: {available}[/dim]")
         raise typer.Exit(code=3)
 
+    # ---------------------------------------------------------------
+    # Column-level lineage mode
+    # ---------------------------------------------------------------
+    if column is not None:
+        from core_engine.graph import (
+            compute_model_column_lineage,
+            trace_column_across_dag,
+        )
+        from core_engine.sql_toolkit import Dialect
+
+        # Build model_name -> clean_sql mapping.
+        model_sql_map: dict[str, str] = {}
+        for m in model_defs:
+            sql = m.clean_sql if m.clean_sql else m.raw_sql
+            if sql:
+                model_sql_map[m.name] = sql
+
+        if model not in model_sql_map:
+            console.print(f"[red]No SQL found for model '{model}'.[/red]")
+            raise typer.Exit(code=3)
+
+        try:
+            cross_lineage = trace_column_across_dag(
+                dag=dag,
+                target_model=model,
+                target_column=column,
+                model_sql_map=model_sql_map,
+                dialect=Dialect.DATABRICKS,
+                max_depth=depth,
+            )
+        except Exception as exc:
+            console.print(f"[red]Column lineage failed: {exc}[/red]")
+            raise typer.Exit(code=3) from exc
+
+        if _json_output:
+            result: dict[str, Any] = {
+                "model": model,
+                "column": column,
+                "lineage_path": [
+                    {
+                        "column": node.column,
+                        "source_table": node.source_table,
+                        "source_column": node.source_column,
+                        "transform_type": node.transform_type,
+                        "transform_sql": node.transform_sql,
+                    }
+                    for node in cross_lineage.lineage_path
+                ],
+            }
+            sys.stdout.write(json.dumps(result, indent=2) + "\n")
+        else:
+            display_cross_model_column_lineage(console, cross_lineage)
+        return
+
+    # ---------------------------------------------------------------
+    # Table-level lineage mode (default)
+    # ---------------------------------------------------------------
     upstream = sorted(get_upstream(dag, model))
     downstream = sorted(get_downstream(dag, model))
 
@@ -2036,3 +2124,77 @@ def migrate_from_sqlmesh(
         console.print(f"[red]Migration failed: {exc}[/red]")
         _emit_metrics("migrate.from_sqlmesh.error", {"error": str(exc)})
         raise typer.Exit(code=3) from exc
+
+
+# ---------------------------------------------------------------------------
+# MCP server commands
+# ---------------------------------------------------------------------------
+
+
+@mcp_app.command("serve")
+def mcp_serve(
+    transport: str = typer.Option(
+        "stdio",
+        "--transport",
+        "-t",
+        help="Transport type: 'stdio' (default) or 'sse'.",
+    ),
+    port: int = typer.Option(
+        3333,
+        "--port",
+        "-p",
+        help="Port for SSE transport (ignored for stdio).",
+    ),
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Bind address for SSE transport. Use 0.0.0.0 for all interfaces.",
+    ),
+) -> None:
+    """Start the IronLayer MCP server.
+
+    The MCP server exposes IronLayer's SQL intelligence as tools that
+    AI coding assistants can discover and invoke.
+
+    \b
+    For Claude Code / Cursor (stdio transport):
+        ironlayer mcp serve
+
+    \b
+    For remote access (SSE transport):
+        ironlayer mcp serve --transport sse --port 3333
+
+    \b
+    Claude Code config (~/.claude/claude_desktop_config.json):
+        {
+          "mcpServers": {
+            "ironlayer": {
+              "command": "ironlayer",
+              "args": ["mcp", "serve"]
+            }
+          }
+        }
+    """
+    import asyncio
+
+    try:
+        from cli.mcp.server import run_sse, run_stdio
+    except SystemExit as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if transport == "stdio":
+        if not _json_output:
+            # Only print to stderr — stdout is reserved for MCP protocol.
+            console.print("[dim]Starting IronLayer MCP server (stdio)...[/dim]")
+        asyncio.run(run_stdio())
+    elif transport == "sse":
+        console.print(
+            f"[bold]Starting IronLayer MCP server (SSE) on {host}:{port}[/bold]"
+        )
+        asyncio.run(run_sse(host=host, port=port))
+    else:
+        console.print(
+            f"[red]Unknown transport '{transport}'. Use 'stdio' or 'sse'.[/red]"
+        )
+        raise typer.Exit(code=1)

@@ -45,9 +45,17 @@ class CanonicalizerVersion(str, Enum):
 
     Adding a new version here and updating ``CURRENT_VERSION`` will
     automatically invalidate all cached hashes, forcing plan regeneration.
+
+    **V1** — baseline canonicalisation: parse, uppercase keywords, strip
+    comments, collapse whitespace, reorder CTEs.
+
+    **V2** — extends V1 with column qualification (via schema) and
+    boolean simplification.  Requires ``schema`` to be provided for
+    full benefit.  Falls back to V1 behaviour when schema is absent.
     """
 
     V1 = "v1"
+    V2 = "v2"
 
 
 CURRENT_VERSION: CanonicalizerVersion = CanonicalizerVersion.V1
@@ -59,7 +67,12 @@ _MULTI_SPACE_RE = re.compile(r"\s+")
 
 
 @profile_operation("sql.normalize")
-def normalize_sql(sql: str, *, version: CanonicalizerVersion | None = None) -> str:
+def normalize_sql(
+    sql: str,
+    *,
+    version: CanonicalizerVersion | None = None,
+    schema: dict[str, dict[str, str]] | None = None,
+) -> str:
     """Return a canonical representation of *sql* under the given rule-set version.
 
     Parameters
@@ -68,6 +81,10 @@ def normalize_sql(sql: str, *, version: CanonicalizerVersion | None = None) -> s
         Raw SQL text to normalise.
     version:
         Canonicalisation version to use.  Defaults to ``CURRENT_VERSION``.
+    schema:
+        Optional schema mapping ``{table_name: {column_name: type}}``.
+        Only used by V2 canonicalisation for column qualification and
+        boolean simplification.  Ignored by V1.
 
     Returns
     -------
@@ -79,6 +96,9 @@ def normalize_sql(sql: str, *, version: CanonicalizerVersion | None = None) -> s
 
     if version == CanonicalizerVersion.V1:
         return _normalize_v1(sql)
+
+    if version == CanonicalizerVersion.V2:
+        return _normalize_v2(sql, schema=schema)
 
     # Defensive fallback for unknown versions.
     logger.warning("Unknown canonicalizer version %s; falling back to V1", version)
@@ -112,12 +132,66 @@ def _normalize_v1(sql: str) -> str:
         raise NormalizationError(str(exc)) from exc
 
 
+def _normalize_v2(
+    sql: str,
+    *,
+    schema: dict[str, dict[str, str]] | None = None,
+) -> str:
+    """Canonicalisation rule-set V2.
+
+    Extends V1 with two additional steps when schema is available:
+    1. Qualify unqualified column references (``SELECT id`` becomes
+       ``SELECT orders.id`` when schema maps ``orders.id``).
+    2. Simplify boolean expressions (``NOT NOT x`` → ``x``,
+       ``WHERE TRUE AND x > 5`` → ``WHERE x > 5``).
+
+    When schema is None or empty, V2 falls back to V1 behaviour
+    (the extra steps are no-ops without type information).
+    """
+    # Start with V1 normalisation as the baseline.
+    v1_result = _normalize_v1(sql)
+
+    if not v1_result:
+        return v1_result
+
+    if not schema:
+        # Without schema, qualification is impossible — V2 degrades
+        # gracefully to V1 output.
+        return v1_result
+
+    tk = get_sql_toolkit()
+
+    # Step 1: Qualify columns using schema information.
+    try:
+        qualify_result = tk.qualifier.qualify_columns(
+            v1_result, schema, Dialect.DATABRICKS
+        )
+        qualified_sql = qualify_result.qualified_sql
+    except Exception:
+        logger.debug("V2 qualification failed, using V1 output", exc_info=True)
+        qualified_sql = v1_result
+
+    # Step 2: Simplify boolean expressions.
+    try:
+        simplify_result = tk.qualifier.simplify(qualified_sql, Dialect.DATABRICKS)
+        simplified_sql = simplify_result.simplified_sql
+    except Exception:
+        logger.debug("V2 simplification failed, using qualified output", exc_info=True)
+        simplified_sql = qualified_sql
+
+    # Final whitespace normalisation pass.
+    simplified_sql = _MULTI_SPACE_RE.sub(" ", simplified_sql).strip()
+
+    return simplified_sql
+
+
 @profile_operation("sql.hash")
 def compute_canonical_hash(
     sql: str,
     *,
     version: CanonicalizerVersion | None = None,
     metadata: dict[str, str] | None = None,
+    schema: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """Return the SHA-256 hex digest of the versioned canonical SQL + metadata.
 
@@ -140,6 +214,8 @@ def compute_canonical_hash(
     metadata:
         Optional metadata dictionary (e.g. kind, materialization, time_column)
         to include in the hash computation.
+    schema:
+        Optional schema mapping for V2 canonicalisation.  Ignored by V1.
 
     Returns
     -------
@@ -149,7 +225,7 @@ def compute_canonical_hash(
     if version is None:
         version = CURRENT_VERSION
 
-    normalised = normalize_sql(sql, version=version)
+    normalised = normalize_sql(sql, version=version, schema=schema)
 
     hasher = hashlib.sha256()
     # Include version prefix so hashes are scoped to the rule-set.

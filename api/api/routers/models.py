@@ -292,6 +292,132 @@ async def get_model_lineage(
     }
 
 
+@router.get("/{model_name:path}/column-lineage")
+async def get_column_lineage(
+    model_name: str,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    _role: Role = Depends(require_permission(Permission.READ_MODELS)),
+    column: str | None = Query(
+        default=None,
+        description=(
+            "Specific column to trace.  If omitted, returns lineage for "
+            "all output columns of the model."
+        ),
+    ),
+) -> dict[str, Any]:
+    """Return column-level lineage for a model.
+
+    When *column* is provided, traces that single column back through
+    the SQL to its source tables and columns.  Without *column*,
+    returns lineage for every output column in the model.
+
+    Column lineage is computed from the model's SQL using AST-based
+    analysis — no warehouse connection required.
+    """
+    from pathlib import Path
+
+    from core_engine.graph.column_lineage import compute_model_column_lineage
+    from core_engine.sql_toolkit import Dialect, SqlLineageError
+
+    repo = ModelRepository(session, tenant_id=tenant_id)
+    target = await repo.get(model_name)
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
+
+    # Load the model's SQL from the repo path.
+    model_sql: str | None = None
+    if target.repo_path:
+        sql_path = Path(target.repo_path)
+        if sql_path.exists():
+            try:
+                raw = sql_path.read_text(encoding="utf-8")
+                # Strip YAML header if present.
+                if raw.startswith("---"):
+                    end = raw.find("---", 3)
+                    if end != -1:
+                        model_sql = raw[end + 3 :].strip()
+                    else:
+                        model_sql = raw
+                else:
+                    model_sql = raw
+            except Exception:
+                logger.warning(
+                    "Could not read SQL from %s for model %s",
+                    target.repo_path,
+                    model_name,
+                    exc_info=True,
+                )
+
+    if not model_sql:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"No SQL available for model {model_name}. "
+                "Column lineage requires the model's SQL source."
+            ),
+        )
+
+    try:
+        lineage_result = compute_model_column_lineage(
+            model_name=model_name,
+            sql=model_sql,
+            dialect=Dialect.DATABRICKS,
+        )
+    except SqlLineageError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Column lineage analysis failed: {exc}",
+        ) from exc
+
+    # If a specific column was requested, filter to just that column.
+    if column:
+        if column not in lineage_result.column_lineage:
+            available = sorted(lineage_result.column_lineage.keys())
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Column '{column}' not found in model output. "
+                    f"Available columns: {', '.join(available[:20])}"
+                ),
+            )
+
+        nodes = lineage_result.column_lineage[column]
+        return {
+            "model_name": model_name,
+            "column": column,
+            "lineage": [
+                {
+                    "source_table": n.source_table,
+                    "source_column": n.source_column,
+                    "transform_type": n.transform_type,
+                    "transform_sql": n.transform_sql,
+                }
+                for n in nodes
+            ],
+            "unresolved": list(lineage_result.unresolved_columns),
+        }
+
+    # Return all columns.
+    all_lineage: dict[str, list[dict[str, Any]]] = {}
+    for col_name, nodes in lineage_result.column_lineage.items():
+        all_lineage[col_name] = [
+            {
+                "source_table": n.source_table,
+                "source_column": n.source_column,
+                "transform_type": n.transform_type,
+                "transform_sql": n.transform_sql,
+            }
+            for n in nodes
+        ]
+
+    return {
+        "model_name": model_name,
+        "columns": all_lineage,
+        "unresolved": list(lineage_result.unresolved_columns),
+    }
+
+
 @router.get("/{model_name:path}")
 async def get_model(
     model_name: str,

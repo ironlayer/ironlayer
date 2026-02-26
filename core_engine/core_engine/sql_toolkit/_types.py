@@ -24,6 +24,7 @@ class Dialect(str, enum.Enum):
 
     DATABRICKS = "databricks"
     DUCKDB = "duckdb"
+    REDSHIFT = "redshift"
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +327,79 @@ class RewriteResult:
 
 
 # ---------------------------------------------------------------------------
+# Column-Level Lineage Types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ColumnLineageNode:
+    """A single node in a column lineage trace.
+
+    Represents one hop: an output column was derived from a source column,
+    potentially through a transformation (expression).
+    """
+
+    column: str
+    source_table: str | None = None
+    source_column: str | None = None
+    transform_type: str = "direct"  # direct|expression|aggregation|window|case|literal
+    transform_sql: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ColumnLineageResult:
+    """Result of column lineage analysis for a single SQL statement.
+
+    Maps each output column to the list of source columns it derives from.
+    A single output column may derive from multiple source columns (e.g.,
+    ``col_a + col_b AS total``).
+    """
+
+    model_name: str
+    column_lineage: dict[str, tuple[ColumnLineageNode, ...]]
+    unresolved_columns: tuple[str, ...] = ()
+    dialect: Dialect = Dialect.DATABRICKS
+
+
+@dataclass(frozen=True, slots=True)
+class CrossModelColumnLineage:
+    """End-to-end column lineage across the model DAG.
+
+    Traces a single column from a target model back through all upstream
+    models to the ultimate source tables/columns.
+    """
+
+    target_model: str
+    target_column: str
+    lineage_path: tuple[ColumnLineageNode, ...] = ()
+
+
+# ---------------------------------------------------------------------------
+# Qualifier / Simplifier Types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class QualifyResult:
+    """Result of column/table qualification."""
+
+    qualified_sql: str
+    original_sql: str
+    columns_qualified: int = 0
+    tables_qualified: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class SimplifyResult:
+    """Result of boolean expression simplification."""
+
+    simplified_sql: str
+    original_sql: str
+    simplifications_applied: int = 0
+
+
+# ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
 
@@ -344,3 +418,7 @@ class SqlTranspileError(SqlToolkitError):
 
 class SqlNormalizationError(SqlToolkitError):
     """SQL could not be normalised."""
+
+
+class SqlLineageError(SqlToolkitError):
+    """Column lineage analysis failed."""

@@ -11,13 +11,17 @@ from typing import Protocol, runtime_checkable
 from ._types import (
     AstDiffResult,
     ColumnExtractionResult,
+    ColumnLineageNode,
+    ColumnLineageResult,
     Dialect,
     NormalizationResult,
     ParseResult,
+    QualifyResult,
     RewriteResult,
     RewriteRule,
     SafetyCheckResult,
     ScopeResult,
+    SimplifyResult,
     SqlNode,
     TranspileResult,
 )
@@ -266,6 +270,85 @@ class SqlRewriter(Protocol):
         ...
 
 
+@runtime_checkable
+class SqlLineageAnalyzer(Protocol):
+    """Trace column-level lineage through SQL statements."""
+
+    def trace_column_lineage(
+        self,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+        *,
+        schema: dict[str, dict[str, str]] | None = None,
+    ) -> ColumnLineageResult:
+        """Trace the lineage of all output columns in a SQL statement.
+
+        Args:
+            sql: A single SQL statement (SELECT with optional CTEs).
+            dialect: SQL dialect for parsing.
+            schema: Optional schema mapping ``{table_name: {column_name: type}}``.
+                    Enables resolution of ``SELECT *`` and unqualified columns.
+
+        Returns:
+            ColumnLineageResult mapping each output column to its sources.
+
+        Raises:
+            SqlLineageError: If lineage analysis fails.
+        """
+        ...
+
+    def trace_single_column(
+        self,
+        column: str,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+        *,
+        schema: dict[str, dict[str, str]] | None = None,
+    ) -> tuple[ColumnLineageNode, ...]:
+        """Trace a single output column back to its source columns.
+
+        Args:
+            column: The output column name to trace.
+            sql: The SQL statement containing the column.
+            dialect: SQL dialect.
+            schema: Optional schema mapping.
+
+        Returns:
+            Tuple of ColumnLineageNode entries for this column.
+        """
+        ...
+
+
+@runtime_checkable
+class SqlQualifier(Protocol):
+    """Qualify column and table references using schema information."""
+
+    def qualify_columns(
+        self,
+        sql: str,
+        schema: dict[str, dict[str, str]],
+        dialect: Dialect = Dialect.DATABRICKS,
+    ) -> QualifyResult:
+        """Qualify unqualified column references using schema information.
+
+        Resolves ambiguous column references (e.g., ``SELECT id`` becomes
+        ``SELECT orders.id``) using the provided schema mapping.
+        """
+        ...
+
+    def simplify(
+        self,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+    ) -> SimplifyResult:
+        """Simplify boolean expressions in SQL.
+
+        Applies: double-negation removal, constant folding,
+        AND/OR identity, De Morgan's simplification.
+        """
+        ...
+
+
 # ---------------------------------------------------------------------------
 # Composite Protocol
 # ---------------------------------------------------------------------------
@@ -309,4 +392,12 @@ class SqlToolkit(Protocol):
 
     @property
     def rewriter(self) -> SqlRewriter:
+        ...
+
+    @property
+    def lineage_analyzer(self) -> SqlLineageAnalyzer:
+        ...
+
+    @property
+    def qualifier(self) -> SqlQualifier:
         ...

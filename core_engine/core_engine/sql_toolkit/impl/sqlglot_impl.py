@@ -23,22 +23,31 @@ from sqlglot import diff as sqlglot_diff_module
 from sqlglot import exp
 from sqlglot.diff import Keep
 from sqlglot.errors import ErrorLevel, ParseError, SqlglotError
+from sqlglot.lineage import lineage as sqlglot_lineage
+from sqlglot.optimizer.qualify import qualify as sqlglot_qualify
 from sqlglot.optimizer.scope import build_scope
+from sqlglot.optimizer.simplify import simplify as sqlglot_simplify
+from sqlglot.schema import MappingSchema
 
 from .._types import (
     AstDiffResult,
     ColumnExtractionResult,
+    ColumnLineageNode,
+    ColumnLineageResult,
     ColumnRef,
     Dialect,
     DiffEdit,
     DiffEditKind,
     NormalizationResult,
     ParseResult,
+    QualifyResult,
     RewriteResult,
     RewriteRule,
     SafetyCheckResult,
     SafetyViolation,
     ScopeResult,
+    SimplifyResult,
+    SqlLineageError,
     SqlNode,
     SqlNodeKind,
     SqlNormalizationError,
@@ -1417,6 +1426,470 @@ class SqlGlotRewriter:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Lineage Analyzer
+# ---------------------------------------------------------------------------
+
+_AGG_EXPRESSION_NAMES: frozenset[str] = frozenset(
+    {
+        "Sum",
+        "Count",
+        "Avg",
+        "Min",
+        "Max",
+        "ArrayAgg",
+        "GroupConcat",
+        "Stddev",
+        "StddevPop",
+        "StddevSamp",
+        "Variance",
+        "VariancePop",
+        "ApproxDistinct",
+        "CountIf",
+        "Percentile",
+    }
+)
+
+
+class SqlGlotLineageAnalyzer:
+    """SQLGlot-backed column lineage analyzer.
+
+    Uses ``sqlglot.lineage.lineage()`` to trace each output column back
+    through CTEs, joins, subqueries, and expressions to source table
+    columns.  Falls back to conservative behaviour (marking columns as
+    unresolved) when sqlglot cannot determine lineage — this matches the
+    codebase's principle of "when in doubt, assume changed/unknown".
+    """
+
+    def trace_column_lineage(
+        self,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+        *,
+        schema: dict[str, dict[str, str]] | None = None,
+    ) -> ColumnLineageResult:
+        """Trace lineage for all output columns in a SQL statement.
+
+        When a schema is provided and the query contains ``SELECT *``,
+        this method uses ``sqlglot.optimizer.qualify`` to expand the
+        star into explicit column references before tracing.  This
+        converts an otherwise-unresolvable ``*`` into full per-column
+        lineage — a critical improvement for migration validation where
+        users need to verify every column survived the transition.
+
+        Without a schema, ``*`` is still recorded as unresolved (safe
+        default — we never fabricate lineage data we can't prove).
+        """
+        dialect_str = _dialect_value(dialect)
+
+        # Parse to extract output column names.
+        try:
+            ast = sqlglot.parse_one(sql, read=dialect_str, error_level=ErrorLevel.RAISE)
+        except (ParseError, SqlglotError) as exc:
+            raise SqlLineageError(f"Cannot parse SQL for lineage: {exc}") from exc
+
+        output_columns = self._extract_output_column_names(ast)
+
+        # ── SELECT * expansion ──────────────────────────────────────
+        # When the query uses ``SELECT *`` and we have schema info,
+        # use sqlglot's qualify optimizer to expand ``*`` into the
+        # actual column list.  This produces a rewritten SQL string
+        # that the lineage engine can trace column-by-column.
+        effective_sql = sql
+        if "*" in output_columns and schema:
+            try:
+                mapping_schema = MappingSchema(schema, dialect=dialect_str)
+                qualified_ast = sqlglot_qualify(
+                    ast,
+                    schema=mapping_schema,
+                    dialect=dialect_str,
+                    validate_qualify_columns=False,
+                )
+                expanded_columns = self._extract_output_column_names(qualified_ast)
+                if expanded_columns and "*" not in expanded_columns:
+                    # Expansion succeeded — use the qualified SQL and
+                    # the expanded column list for lineage tracing.
+                    output_columns = expanded_columns
+                    effective_sql = qualified_ast.sql(dialect=dialect_str)
+                    logger.debug(
+                        "SELECT * expanded to %d columns via qualify",
+                        len(expanded_columns),
+                    )
+            except Exception:
+                # Expansion failed — fall back to original SQL with
+                # ``*`` marked as unresolved (safe default).
+                logger.debug(
+                    "SELECT * expansion via qualify failed; falling back",
+                    exc_info=True,
+                )
+
+        column_lineage: dict[str, tuple[ColumnLineageNode, ...]] = {}
+        unresolved: list[str] = []
+
+        for col_name in output_columns:
+            try:
+                nodes = self.trace_single_column(
+                    col_name, effective_sql, dialect, schema=schema
+                )
+                column_lineage[col_name] = nodes
+            except (SqlLineageError, Exception):
+                # Conservative: mark as unresolved rather than crash.
+                unresolved.append(col_name)
+                logger.debug(
+                    "Column lineage unresolved for '%s': falling back to unresolved",
+                    col_name,
+                    exc_info=True,
+                )
+
+        return ColumnLineageResult(
+            model_name="",  # Caller fills this in.
+            column_lineage=column_lineage,
+            unresolved_columns=tuple(sorted(unresolved)),
+            dialect=dialect,
+        )
+
+    def trace_single_column(
+        self,
+        column: str,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+        *,
+        schema: dict[str, dict[str, str]] | None = None,
+    ) -> tuple[ColumnLineageNode, ...]:
+        """Trace a single output column to its source columns."""
+        dialect_str = _dialect_value(dialect)
+
+        # Build MappingSchema if schema provided.
+        mapping_schema: MappingSchema | None = None
+        if schema:
+            try:
+                mapping_schema = MappingSchema(schema, dialect=dialect_str)
+            except Exception:
+                logger.debug("Failed to build MappingSchema, proceeding without", exc_info=True)
+                mapping_schema = None
+
+        try:
+            lineage_node = sqlglot_lineage(
+                column,
+                sql,
+                schema=mapping_schema or {},
+                dialect=dialect_str,
+            )
+        except Exception as exc:
+            raise SqlLineageError(
+                f"sqlglot.lineage failed for column '{column}': {exc}"
+            ) from exc
+
+        # Walk the lineage tree and collect all leaf (source) nodes.
+        nodes: list[ColumnLineageNode] = []
+        self._walk_lineage_tree(lineage_node, column, nodes)
+
+        if not nodes:
+            # Lineage returned but no source columns found — likely a literal.
+            nodes.append(
+                ColumnLineageNode(
+                    column=column,
+                    source_table=None,
+                    source_column=None,
+                    transform_type="literal",
+                    transform_sql=lineage_node.expression.sql(dialect=dialect_str)
+                    if lineage_node.expression
+                    else "",
+                )
+            )
+
+        return tuple(nodes)
+
+    def _walk_lineage_tree(
+        self,
+        node: Any,
+        output_column: str,
+        acc: list[ColumnLineageNode],
+    ) -> None:
+        """Recursively walk a sqlglot LineageNode tree.
+
+        Leaf nodes (no downstream) are the actual source columns.
+        Interior nodes represent intermediate transforms.
+
+        sqlglot's lineage API returns leaf nodes where:
+        - ``node.name`` is a dot-separated string like ``"table.column"``
+        - ``node.expression`` is typically ``exp.Column`` for direct
+          references or ``exp.Table`` for table-level leaf nodes.
+        We must parse ``node.name`` as a fallback when the expression
+        is a Table (which carries table info but not the column name).
+        """
+        downstream = getattr(node, "downstream", [])
+
+        if not downstream:
+            # Leaf node — this is a source column.
+            source_table: str | None = None
+            source_column: str | None = None
+            expression = getattr(node, "expression", None)
+            name_str: str = getattr(node, "name", "") or ""
+
+            if expression is not None:
+                if isinstance(expression, exp.Column):
+                    source_column = expression.name
+                    if expression.table:
+                        source_table = expression.table
+                elif isinstance(expression, exp.Table):
+                    # Table leaf: the expression holds the table, but the
+                    # column name is encoded in ``node.name`` as
+                    # ``"table.column"`` or just ``"column"``.
+                    source_table = expression.name
+                    if name_str:
+                        # Parse "table.column" → extract column part.
+                        parts = name_str.split(".")
+                        if len(parts) >= 2:
+                            source_column = parts[-1]
+                            # If source_table is empty, try to get it
+                            # from the dot-separated name.
+                            if not source_table:
+                                source_table = parts[-2]
+                        else:
+                            source_column = parts[0]
+                else:
+                    # Expression is something else (literal, function, etc.)
+                    # Try to extract column from name_str.
+                    if name_str:
+                        parts = name_str.split(".")
+                        source_column = parts[-1]
+                        if len(parts) >= 2:
+                            source_table = parts[-2]
+                    else:
+                        try:
+                            source_column = expression.sql()
+                        except Exception:
+                            source_column = None
+            elif name_str:
+                # No expression at all, but name is available.
+                parts = name_str.split(".")
+                source_column = parts[-1]
+                if len(parts) >= 2:
+                    source_table = parts[-2]
+
+            transform_type = self._classify_transform(node)
+            transform_sql = ""
+            if expression is not None:
+                try:
+                    transform_sql = expression.sql()
+                except (SqlglotError, AttributeError):
+                    pass
+
+            acc.append(
+                ColumnLineageNode(
+                    column=output_column,
+                    source_table=source_table,
+                    source_column=source_column,
+                    transform_type=transform_type,
+                    transform_sql=transform_sql,
+                )
+            )
+        else:
+            # Interior node — recurse into downstream.
+            for child in downstream:
+                self._walk_lineage_tree(child, output_column, acc)
+
+    @staticmethod
+    def _classify_transform(node: Any) -> str:
+        """Classify the transformation type of a lineage node.
+
+        Inspects the expression attached to the node to determine the
+        category of transformation applied.  Handles the fact that
+        sqlglot's lineage API returns ``exp.Table`` expressions at
+        leaf nodes for direct column references.
+        """
+        expression = getattr(node, "expression", None)
+        if expression is None:
+            return "direct"
+
+        # Unwrap Alias to inspect the underlying expression.
+        # sqlglot's lineage API often returns ``exp.Alias`` at leaf nodes
+        # (e.g. ``42 AS magic_number``).  We need to classify based on
+        # the inner expression, not the Alias wrapper itself.
+        inner = expression
+        if isinstance(inner, exp.Alias):
+            inner = inner.this
+
+        # Direct column reference.
+        if isinstance(inner, exp.Column):
+            return "direct"
+
+        # Table leaf node in lineage tree — this represents a direct
+        # source column reference (the column info is in node.name).
+        if isinstance(inner, exp.Table):
+            return "direct"
+
+        inner_class_name = type(inner).__name__
+
+        # Aggregate functions.
+        if inner_class_name in _AGG_EXPRESSION_NAMES or isinstance(inner, exp.AggFunc):
+            return "aggregation"
+
+        # Window functions.
+        if isinstance(inner, exp.Window):
+            return "window"
+
+        # CASE expressions.
+        if isinstance(inner, (exp.Case, exp.If)):
+            return "case"
+
+        # Literal values.
+        if isinstance(inner, (exp.Literal, exp.Null, exp.Boolean)):
+            return "literal"
+
+        # Check if inner expression contains aggregate functions (nested).
+        for child_expr in inner.walk():
+            if isinstance(child_expr, exp.AggFunc) or type(child_expr).__name__ in _AGG_EXPRESSION_NAMES:
+                return "aggregation"
+            if isinstance(child_expr, exp.Window):
+                return "window"
+
+        # Any other expression (arithmetic, string ops, casts, etc.).
+        return "expression"
+
+    @staticmethod
+    def _extract_output_column_names(ast: exp.Expression) -> list[str]:
+        """Extract output column names from a SELECT statement.
+
+        Handles aliases, bare column references, and star expansions.
+        Returns names in SELECT order.
+        """
+        columns: list[str] = []
+
+        # Find the outermost SELECT.
+        select = ast.find(exp.Select)
+        if select is None:
+            return columns
+
+        for expr in select.expressions:
+            if isinstance(expr, exp.Alias):
+                columns.append(expr.alias)
+            elif isinstance(expr, exp.Column):
+                columns.append(expr.name)
+            elif isinstance(expr, exp.Star):
+                columns.append("*")
+            else:
+                # Unnamed expression — use SQL text as identifier.
+                sql_text = expr.sql()
+                columns.append(sql_text[:64] if len(sql_text) > 64 else sql_text)
+
+        return columns
+
+
+# ---------------------------------------------------------------------------
+# Qualifier / Simplifier
+# ---------------------------------------------------------------------------
+
+
+class SqlGlotQualifier:
+    """SQLGlot-backed column qualifier and boolean simplifier.
+
+    Uses ``sqlglot.optimizer.qualify`` to resolve ambiguous column
+    references when schema information is available, and
+    ``sqlglot.optimizer.simplify`` to reduce boolean expressions.
+    """
+
+    def qualify_columns(
+        self,
+        sql: str,
+        schema: dict[str, dict[str, str]],
+        dialect: Dialect = Dialect.DATABRICKS,
+    ) -> QualifyResult:
+        """Qualify unqualified column references using schema information."""
+        dialect_str = _dialect_value(dialect)
+        warnings: list[str] = []
+
+        try:
+            ast = sqlglot.parse_one(sql, read=dialect_str, error_level=ErrorLevel.RAISE)
+        except (ParseError, SqlglotError) as exc:
+            return QualifyResult(
+                qualified_sql=sql,
+                original_sql=sql,
+                warnings=[f"Parse error: {exc}"],
+            )
+
+        # Count unqualified columns before.
+        pre_unqualified = sum(
+            1 for col in ast.find_all(exp.Column) if not col.table
+        )
+
+        try:
+            mapping = MappingSchema(schema, dialect=dialect_str)
+            qualified_ast = sqlglot_qualify(
+                ast,
+                schema=mapping,
+                dialect=dialect_str,
+                qualify_columns=True,
+                qualify_tables=True,
+                validate_qualify_columns=False,
+            )
+        except Exception as exc:
+            logger.debug("Qualification failed: %s", exc, exc_info=True)
+            warnings.append(f"Qualification partially failed: {exc}")
+            qualified_ast = ast
+
+        # Count unqualified columns after.
+        post_unqualified = sum(
+            1 for col in qualified_ast.find_all(exp.Column) if not col.table
+        )
+        columns_qualified = max(0, pre_unqualified - post_unqualified)
+
+        qualified_sql = qualified_ast.sql(dialect=dialect_str)
+
+        return QualifyResult(
+            qualified_sql=qualified_sql,
+            original_sql=sql,
+            columns_qualified=columns_qualified,
+            tables_qualified=0,
+            warnings=warnings,
+        )
+
+    def simplify(
+        self,
+        sql: str,
+        dialect: Dialect = Dialect.DATABRICKS,
+    ) -> SimplifyResult:
+        """Simplify boolean expressions in SQL."""
+        dialect_str = _dialect_value(dialect)
+
+        try:
+            ast = sqlglot.parse_one(sql, read=dialect_str, error_level=ErrorLevel.RAISE)
+        except (ParseError, SqlglotError):
+            return SimplifyResult(
+                simplified_sql=sql,
+                original_sql=sql,
+                simplifications_applied=0,
+            )
+
+        original_node_count = sum(1 for _ in ast.walk())
+
+        try:
+            simplified_ast = sqlglot_simplify(ast, dialect=dialect_str)
+        except Exception:
+            logger.debug("Simplification failed, returning original", exc_info=True)
+            return SimplifyResult(
+                simplified_sql=sql,
+                original_sql=sql,
+                simplifications_applied=0,
+            )
+
+        simplified_node_count = sum(1 for _ in simplified_ast.walk())
+        simplifications = max(0, original_node_count - simplified_node_count)
+        simplified_sql = simplified_ast.sql(dialect=dialect_str)
+
+        return SimplifyResult(
+            simplified_sql=simplified_sql,
+            original_sql=sql,
+            simplifications_applied=simplifications,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Composite Toolkit
+# ---------------------------------------------------------------------------
+
+
 class SqlGlotToolkit:
     """Composite :class:`SqlToolkit` backed by SQLGlot.
 
@@ -1434,6 +1907,8 @@ class SqlGlotToolkit:
         self._differ = SqlGlotDiffer()
         self._safety_guard = SqlGlotSafetyGuard()
         self._rewriter = SqlGlotRewriter()
+        self._lineage_analyzer = SqlGlotLineageAnalyzer()
+        self._qualifier = SqlGlotQualifier()
 
     @property
     def parser(self) -> SqlGlotParser:
@@ -1466,3 +1941,11 @@ class SqlGlotToolkit:
     @property
     def rewriter(self) -> SqlGlotRewriter:
         return self._rewriter
+
+    @property
+    def lineage_analyzer(self) -> SqlGlotLineageAnalyzer:
+        return self._lineage_analyzer
+
+    @property
+    def qualifier(self) -> SqlGlotQualifier:
+        return self._qualifier
