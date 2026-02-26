@@ -1,5 +1,5 @@
 name: "IronLayer Plan"
-description: "Generate a deterministic execution plan from a git diff and post it as a PR comment."
+description: "Run ironlayer plan on a PR, post a formatted comment with the execution plan, and upload the plan artifact."
 branding:
   icon: "database"
   color: "blue"
@@ -14,17 +14,45 @@ inputs:
     required: false
     default: "3.11"
   ironlayer-version:
-    description: "IronLayer package version to install (e.g. '0.1.0'). Use 'latest' for the newest release."
+    description: "IronLayer package version (e.g. '0.1.0'). Defaults to latest."
     required: false
     default: "latest"
   api-url:
-    description: "IronLayer Cloud API URL for AI-powered cost estimates (optional)."
+    description: "IronLayer API URL for AI-powered analysis (optional)."
     required: false
     default: ""
   api-token:
-    description: "IronLayer Cloud API token for AI-powered cost estimates (optional). Store as a repository secret."
+    description: "IronLayer API token (optional). Store as a repository secret."
     required: false
     default: ""
+  comment:
+    description: "Post or update a PR comment with the plan summary."
+    required: false
+    default: "true"
+  upload-artifact:
+    description: "Upload plan.json as a workflow artifact."
+    required: false
+    default: "true"
+
+outputs:
+  plan-id:
+    description: "The deterministic plan ID (SHA-256)."
+    value: ${{ steps.plan.outputs.plan_id }}
+  total-steps:
+    description: "Number of execution steps in the plan."
+    value: ${{ steps.plan.outputs.total_steps }}
+  estimated-cost:
+    description: "Estimated compute cost in USD."
+    value: ${{ steps.plan.outputs.estimated_cost }}
+  models-changed:
+    description: "Comma-separated list of changed model names."
+    value: ${{ steps.plan.outputs.models_changed }}
+  plan-status:
+    description: "Plan generation status: success, empty, or failed."
+    value: ${{ steps.plan.outputs.plan_status }}
+  plan-json-path:
+    description: "Path to the generated plan.json file."
+    value: ${{ steps.plan.outputs.plan_json_path }}
 
 runs:
   using: "composite"
@@ -43,22 +71,6 @@ runs:
           pip install --quiet "ironlayer==${{ inputs.ironlayer-version }}"
         fi
 
-    - name: Configure cloud credentials
-      if: inputs.api-token != ''
-      shell: bash
-      run: |
-        mkdir -p ~/.ironlayer
-        API_URL="${{ inputs.api-url }}"
-        if [ -z "$API_URL" ]; then
-          API_URL="https://api.ironlayer.app"
-        fi
-        cat > ~/.ironlayer/config.toml <<TOML
-        [cloud]
-        api_url = "$API_URL"
-        api_token = "${{ inputs.api-token }}"
-        TOML
-        chmod 600 ~/.ironlayer/config.toml
-
     - name: Generate execution plan
       id: plan
       shell: bash
@@ -67,103 +79,131 @@ runs:
         IRONLAYER_API_TOKEN: ${{ inputs.api-token }}
       run: |
         set +e
-        PLAN_OUTPUT=$(ironlayer --json plan "${{ inputs.repo-path }}" \
+        PLAN_JSON_PATH="${{ runner.temp }}/ironlayer-plan.json"
+
+        STDERR_FILE=$(mktemp)
+        ironlayer plan "${{ inputs.repo-path }}" \
           "${{ github.event.pull_request.base.sha }}" \
           "${{ github.event.pull_request.head.sha }}" \
-          --out plan.json 2>&1)
+          --out "$PLAN_JSON_PATH" \
+          --json 2>"$STDERR_FILE"
         EXIT_CODE=$?
         set -e
 
-        # Write plan JSON output for downstream steps.
+        echo "plan_json_path=$PLAN_JSON_PATH" >> "$GITHUB_OUTPUT"
         echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
         if [ $EXIT_CODE -ne 0 ]; then
           echo "plan_status=failed" >> "$GITHUB_OUTPUT"
-          echo "plan_summary=Plan generation failed." >> "$GITHUB_OUTPUT"
-        else
-          echo "plan_status=success" >> "$GITHUB_OUTPUT"
+          STDERR_CONTENT=$(cat "$STDERR_FILE")
+          # Escape for multiline GITHUB_OUTPUT
+          {
+            echo "error_message<<IRONLAYER_EOF"
+            echo "$STDERR_CONTENT"
+            echo "IRONLAYER_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "::error::IronLayer plan failed with exit code $EXIT_CODE"
+          cat "$STDERR_FILE"
+        elif [ -f "$PLAN_JSON_PATH" ]; then
+          python3 -c "
+        import json, os
 
-          # Extract summary fields from plan JSON.
-          if [ -f plan.json ]; then
-            TOTAL_STEPS=$(python3 -c "import json; d=json.load(open('plan.json')); print(d.get('summary',{}).get('total_steps',0))")
-            EST_COST=$(python3 -c "import json; d=json.load(open('plan.json')); print(f\"\${d.get('summary',{}).get('estimated_cost_usd',0):.2f}\")")
-            MODELS=$(python3 -c "import json; d=json.load(open('plan.json')); print(', '.join(d.get('summary',{}).get('models_changed',[])))")
-            echo "total_steps=$TOTAL_STEPS" >> "$GITHUB_OUTPUT"
-            echo "estimated_cost=$EST_COST" >> "$GITHUB_OUTPUT"
-            echo "models_changed=$MODELS" >> "$GITHUB_OUTPUT"
-          fi
+        plan = json.load(open('$PLAN_JSON_PATH'))
+        summary = plan.get('summary', {})
+        steps = plan.get('steps', [])
+        gh_out = os.environ['GITHUB_OUTPUT']
+
+        total = summary.get('total_steps', len(steps))
+        cost = summary.get('estimated_cost_usd', 0)
+        models = summary.get('models_changed', [])
+        plan_id = plan.get('plan_id', 'unknown')
+
+        with open(gh_out, 'a') as f:
+            f.write(f'plan_id={plan_id}\n')
+            f.write(f'total_steps={total}\n')
+            f.write(f'estimated_cost={cost:.2f}\n')
+            f.write(f'models_changed={chr(44).join(models)}\n')
+
+        if total == 0:
+            with open(gh_out, 'a') as f:
+                f.write('plan_status=empty\n')
+        else:
+            with open(gh_out, 'a') as f:
+                f.write('plan_status=success\n')
+        "
+        else
+          echo "plan_status=empty" >> "$GITHUB_OUTPUT"
+          echo "total_steps=0" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Build plan summary table
+        rm -f "$STDERR_FILE"
+
+    - name: Build PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
       id: comment
       shell: bash
       run: |
-        if [ "${{ steps.plan.outputs.plan_status }}" = "failed" ]; then
-          BODY="## IronLayer Plan
+        COMMENT_FILE="${{ runner.temp }}/ironlayer-comment.md"
+        PLAN_JSON_PATH="${{ steps.plan.outputs.plan_json_path }}"
+        PLAN_STATUS="${{ steps.plan.outputs.plan_status }}"
+        ERROR_MSG="${{ steps.plan.outputs.error_message }}"
+        BASE_SHA="${{ github.event.pull_request.base.sha }}"
+        HEAD_SHA="${{ github.event.pull_request.head.sha }}"
 
-        :x: **Plan generation failed.**
+        python3 "${{ github.action_path }}/format_comment.py" \
+          --status "$PLAN_STATUS" \
+          --plan-json "$PLAN_JSON_PATH" \
+          --base-sha "$BASE_SHA" \
+          --head-sha "$HEAD_SHA" \
+          --error "$ERROR_MSG" \
+          --output "$COMMENT_FILE"
 
-        Check the workflow logs for details.
+        echo "comment_file=$COMMENT_FILE" >> "$GITHUB_OUTPUT"
 
-        ---
-        *Generated by [IronLayer](https://ironlayer.app) via GitHub Actions*"
-        else
-          TOTAL="${{ steps.plan.outputs.total_steps }}"
-          COST="${{ steps.plan.outputs.estimated_cost }}"
-          MODELS="${{ steps.plan.outputs.models_changed }}"
-
-          # Build a Markdown table with step details if plan.json exists.
-          STEP_TABLE=""
-          if [ -f plan.json ]; then
-            STEP_TABLE=$(python3 -c "
-        import json, sys
-        try:
-            plan = json.load(open('plan.json'))
-            steps = plan.get('steps', [])
-            if not steps:
-                print('No steps in plan.')
-                sys.exit(0)
-            lines = ['| # | Model | Run Type | Estimated Cost |', '|---|---|---|---|']
-            for i, s in enumerate(steps, 1):
-                model = s.get('model', 'unknown')
-                run_type = s.get('run_type', 'unknown')
-                cost = f\"\${s.get('estimated_cost_usd', 0):.2f}\"
-                lines.append(f'| {i} | \`{model}\` | {run_type} | {cost} |')
-            print('\n'.join(lines))
-        except Exception as e:
-            print(f'Error building table: {e}', file=sys.stderr)
-            print('Could not parse plan details.')
-        ")
-          fi
-
-          BODY="## IronLayer Plan
-
-        | Metric | Value |
-        |---|---|
-        | **Total Steps** | ${TOTAL} |
-        | **Estimated Cost** | ${COST} |
-        | **Models Changed** | ${MODELS} |
-
-        <details>
-        <summary>Step Details</summary>
-
-        ${STEP_TABLE}
-
-        </details>
-
-        ---
-        *Generated by [IronLayer](https://ironlayer.app) via GitHub Actions*"
-        fi
-
-        # Write to a file for the comment step.
-        echo "$BODY" > /tmp/ironlayer-comment.md
-
-    - name: Post PR comment
-      if: github.event_name == 'pull_request'
+    - name: Post or update PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh pr comment "${{ github.event.pull_request.number }}" \
-          --repo "${{ github.repository }}" \
-          --body-file /tmp/ironlayer-comment.md
+        COMMENT_FILE="${{ steps.comment.outputs.comment_file }}"
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        REPO="${{ github.repository }}"
+        MARKER="<!-- ironlayer-plan-comment -->"
+
+        # Check if we already have an IronLayer comment on this PR
+        EXISTING_COMMENT_ID=$(gh api \
+          "repos/$REPO/issues/$PR_NUMBER/comments" \
+          --paginate \
+          --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+          | head -1)
+
+        # Prepend the marker to the comment body
+        BODY="${MARKER}
+        $(cat "$COMMENT_FILE")"
+
+        if [ -n "$EXISTING_COMMENT_ID" ]; then
+          # Update existing comment
+          gh api \
+            "repos/$REPO/issues/comments/$EXISTING_COMMENT_ID" \
+            -X PATCH \
+            --field body="$BODY" \
+            --silent
+          echo "Updated existing comment $EXISTING_COMMENT_ID"
+        else
+          # Create new comment
+          gh api \
+            "repos/$REPO/issues/$PR_NUMBER/comments" \
+            -X POST \
+            --field body="$BODY" \
+            --silent
+          echo "Created new comment"
+        fi
+
+    - name: Upload plan artifact
+      if: inputs.upload-artifact == 'true' && steps.plan.outputs.plan_status == 'success'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ironlayer-plan
+        path: ${{ steps.plan.outputs.plan_json_path }}
+        retention-days: 30

@@ -1,0 +1,42 @@
+# Example: IronLayer Plan on Pull Requests
+#
+# Copy this file to .github/workflows/ironlayer-plan.yml in your repository.
+# It will automatically generate an execution plan on every PR and post a
+# formatted comment showing which models changed, the execution steps, and
+# estimated cost.
+#
+# Requirements:
+#   - Your repository contains IronLayer SQL models (created via `ironlayer init`)
+#   - The default GITHUB_TOKEN is sufficient (no extra secrets needed)
+#
+# Optional: Connect to IronLayer Cloud for AI-powered cost estimates and risk
+# analysis by adding IRONLAYER_API_TOKEN as a repository secret.
+
+name: IronLayer Plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "*.sql"
+      - ".ironlayer/**"
+
+permissions:
+  contents: read
+  pull-requests: write  # Required to post PR comments
+
+jobs:
+  plan:
+    name: Generate Plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git diff
+
+      - uses: ironlayer/ironlayer/.github/actions/ironlayer-plan@main
+        with:
+          repo-path: "."
+          # Optional: connect to IronLayer Cloud for AI-powered analysis
+          # api-token: ${{ secrets.IRONLAYER_API_TOKEN }}
