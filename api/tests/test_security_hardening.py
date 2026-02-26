@@ -557,7 +557,7 @@ class TestLLMKeyRedaction:
 
     def test_full_key_redacted_from_message(self) -> None:
         """The full API key value must be replaced with [REDACTED]."""
-        key = "sk-ant-FAKE-test-key-000000"
+        key = "sk-ant-api03-abcdef1234567890"
         message = f"AuthenticationError: Invalid API key: {key}"
         result = _redact_key(message, key)
         assert key not in result
@@ -565,7 +565,7 @@ class TestLLMKeyRedaction:
 
     def test_partial_key_suffix_also_redacted(self) -> None:
         """Some error messages include the last 8 chars of the key."""
-        key = "sk-ant-FAKE-test-key-000000"
+        key = "sk-ant-api03-abcdef1234567890"
         suffix = key[-8:]
         message = f"Invalid key ending in ...{suffix}"
         result = _redact_key(message, key)
@@ -596,7 +596,7 @@ class TestLLMKeyRedaction:
 
     def test_key_in_json_error_redacted(self) -> None:
         """Key embedded in a JSON-like error string gets redacted."""
-        key = "sk-ant-FAKE-test-key-000001"
+        key = "sk-ant-api03-xyzxyzxyz12345678"
         error_dict = {"error": {"message": f"Invalid API Key {key}", "type": "authentication_error"}}
         message = json.dumps(error_dict)
         result = _redact_key(message, key)

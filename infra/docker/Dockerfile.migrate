@@ -10,7 +10,7 @@
 # driver — no psycopg2 install required.
 #
 # Usage (Container App Job):
-#   az containerapp job start --name your-app-migrate ...
+#   az containerapp job start --name ironlayer-production-migrate ...
 # ---------------------------------------------------------------------------
 
 ARG BASE_IMAGE=ironlayer-api:latest

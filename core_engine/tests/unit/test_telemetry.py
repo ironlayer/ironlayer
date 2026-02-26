@@ -218,9 +218,9 @@ class TestScrubPii:
         assert "[REDACTED_IP]" in scrubbed
 
     def test_removes_databricks_tokens(self):
-        text = "Token: dapi_FAKE_TOKEN_FOR_TESTING_00001"
+        text = "Token: dapi_FAKE_TOKEN_FOR_TESTING"
         scrubbed = scrub_pii(text)
-        assert "dapi_FAKE_TOKEN_FOR_TESTING_00001" not in scrubbed
+        assert "dapi_FAKE_TOKEN_FOR_TESTING" not in scrubbed
         assert "[REDACTED_TOKEN]" in scrubbed
 
     def test_removes_generic_secrets(self):

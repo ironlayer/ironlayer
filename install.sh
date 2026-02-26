@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # IronLayer installer — https://ironlayer.app
-# Usage: curl -fsSL https://ironlayer.app/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/ironlayer/ironlayer/main/install.sh | bash
 #
 # This script installs the IronLayer CLI and verifies the installation.
 # It requires Python 3.11+, pip, and git.

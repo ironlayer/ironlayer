@@ -33,7 +33,7 @@ variable "azure_location" {
 variable "resource_group_name" {
   description = "Name of the Azure resource group (must already exist)"
   type        = string
-  default     = "ironlayer-dev"
+  default     = "ironlayer-production"
 }
 
 variable "tags" {

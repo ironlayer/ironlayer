@@ -511,7 +511,7 @@ class TestStripeSeatSync:
         # Override settings to enable billing.
         settings = _make_settings()
         settings.billing_enabled = True
-        settings.stripe_secret_key = "sk_test_PLACEHOLDER"
+        settings.stripe_secret_key = "sk_test_xxx"
         app.dependency_overrides[get_settings] = lambda: settings
 
         transport = ASGITransport(app=app)

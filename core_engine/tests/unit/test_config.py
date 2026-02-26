@@ -94,10 +94,10 @@ class TestSettingsEnvOverrides:
         assert settings.databricks_host == "https://my-workspace.databricks.com"
 
     def test_env_var_databricks_token(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("PLATFORM_DATABRICKS_TOKEN", "dapi_FAKE_TEST_01")
+        monkeypatch.setenv("PLATFORM_DATABRICKS_TOKEN", "dapi_FAKE_TOKEN_FOR_TESTING")
         settings = Settings()
         assert isinstance(settings.databricks_token, SecretStr)
-        assert settings.databricks_token.get_secret_value() == "dapi_FAKE_TEST_01"
+        assert settings.databricks_token.get_secret_value() == "dapi_FAKE_TOKEN_FOR_TESTING"
 
 
 # ---------------------------------------------------------------------------

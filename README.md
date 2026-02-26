@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ironlayer/ironlayer/.github/actions/ironlayer-plan@main
+      - uses: aronriley24/IronLayer/.github/actions/ironlayer-plan@main
         with:
           repo-path: "."
           # Optional: connect to IronLayer Cloud for AI-powered analysis
