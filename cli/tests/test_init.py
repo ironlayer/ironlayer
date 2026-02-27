@@ -1,4 +1,4 @@
-"""Tests for the ``platform init`` command."""
+"""Tests for the ``ironlayer init`` command."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ runner = CliRunner()
 
 
 def _init_in_dir(tmp_path: Path, *extra_args: str) -> object:
-    """Run ``platform init`` in a temporary directory with --non-interactive."""
+    """Run ``ironlayer init`` in a temporary directory with --non-interactive."""
     return runner.invoke(
         app,
         ["init", str(tmp_path), "--non-interactive", *extra_args],
@@ -34,7 +34,7 @@ def _init_in_dir(tmp_path: Path, *extra_args: str) -> object:
 
 
 class TestScaffoldGeneration:
-    """Verify that ``platform init`` creates the expected project structure."""
+    """Verify that ``ironlayer init`` creates the expected project structure."""
 
     def test_creates_config_yaml(self, tmp_path: Path) -> None:
         result = _init_in_dir(tmp_path)

@@ -69,23 +69,26 @@ ironlayer login
 
 ## Developer Quickstart
 
-For local development with the full stack:
+For local development:
 
 ```bash
-# Install locally in editable mode
-pip install -e core_engine/ -e api/ -e cli/
+# Install all workspace packages in development mode
+uv sync --all-packages
 
-# Start local dev server (SQLite + DuckDB, no Docker required)
-docker compose up -d
-
-# Log in to a running instance
-ironlayer login
+# Start local dev server (SQLite + DuckDB, no external dependencies)
+ironlayer dev
 
 # Generate an execution plan from a git diff
 ironlayer plan . HEAD~1 HEAD
 
 # Execute the plan
-ironlayer apply plan.json --auto-approve
+ironlayer apply plan.json --repo . --auto-approve
+```
+
+For the full platform stack (API + AI engine + frontend + PostgreSQL):
+
+```bash
+docker compose up -d
 ```
 
 See [docs/quickstart.md](docs/quickstart.md) for the full guide.

@@ -41,18 +41,21 @@ _TIER_DEFAULTS: dict[str, dict[str, int | None]] = {
         "ai_quota_monthly": 500,
         "api_quota_monthly": 10_000,
         "max_seats": 1,
+        "max_models": 5,
     },
     "team": {
         "plan_quota_monthly": 1_000,
         "ai_quota_monthly": 5_000,
         "api_quota_monthly": 100_000,
         "max_seats": 10,
+        "max_models": None,
     },
     "enterprise": {
         "plan_quota_monthly": None,
         "ai_quota_monthly": None,
         "api_quota_monthly": None,
         "max_seats": None,
+        "max_models": None,
     },
 }
 
@@ -224,6 +227,60 @@ class QuotaService:
         return True, None
 
     # ------------------------------------------------------------------
+    # Model-count enforcement
+    # ------------------------------------------------------------------
+
+    async def check_model_quota(self, model_count: int) -> tuple[bool, str | None]:
+        """Check whether this tenant can register *model_count* models.
+
+        Parameters
+        ----------
+        model_count:
+            Total number of models the tenant is attempting to use.
+
+        Returns
+        -------
+        tuple[bool, str | None]
+            ``(True, None)`` if within limits, or
+            ``(False, reason)`` with a human-readable error message.
+        """
+        limit = await self._get_effective_model_limit()
+        if limit is None:
+            return True, None
+
+        if model_count > limit:
+            msg = (
+                f"Model limit reached ({model_count}/{limit}). "
+                "Upgrade your plan for unlimited models."
+            )
+            logger.warning(
+                "Model quota exceeded: tenant=%s models=%d/%d",
+                self._tenant_id,
+                model_count,
+                limit,
+            )
+            return False, msg
+        return True, None
+
+    async def _get_effective_model_limit(self) -> int | None:
+        """Resolve the effective model limit for this tenant.
+
+        Resolution order (first non-None wins):
+        1. Explicit ``tenant_config.max_models`` override.
+        2. Tier default from ``_TIER_DEFAULTS``.
+        3. ``None`` — unlimited.
+        """
+        config = await self._config_repo.get()
+        if config is not None:
+            explicit = getattr(config, "max_models", None)
+            if explicit is not None:
+                return int(explicit)
+
+        tier = await self._get_plan_tier()
+        defaults = _TIER_DEFAULTS.get(tier, _TIER_DEFAULTS["community"])
+        return defaults.get("max_models")
+
+    # ------------------------------------------------------------------
     # Seat-based enforcement
     # ------------------------------------------------------------------
 
@@ -374,4 +431,10 @@ class QuotaService:
             "percentage": round((seats_used / seat_limit) * 100, 1) if seat_limit else None,
         }
 
-        return {"quotas": quotas, "llm_budget": llm_budget, "seats": seats}
+        # Model limit information.
+        model_limit = await self._get_effective_model_limit()
+        models = {
+            "limit": model_limit,
+        }
+
+        return {"quotas": quotas, "llm_budget": llm_budget, "seats": seats, "models": models}

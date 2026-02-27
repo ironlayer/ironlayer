@@ -1,14 +1,16 @@
-"""``platform dev`` -- local development server.
+"""``ironlayer dev`` -- local development server.
 
-Starts the full IronLayer stack locally with zero external dependencies:
+Starts the IronLayer API server locally with zero external dependencies:
 
   * SQLite for metadata storage (no PostgreSQL required)
   * DuckDB for SQL execution (no Databricks required)
   * Embedded FastAPI API server via uvicorn
-  * Optional AI engine on a separate port
-  * Optional frontend dev server (if ``frontend/`` exists)
 
-The developer gets plan/apply/UI working against example models with
+The AI engine and frontend dev server are **not** auto-started.
+Pass ``--no-ai`` to suppress the AI engine URL display, or start
+the AI engine separately via ``uvicorn ai_engine.main:app --port 8001``.
+
+The developer gets plan/apply working against example models with
 a single command and no Docker.
 """
 
@@ -72,7 +74,7 @@ def dev_command(
     if not ironlayer_config.exists() and not env_file.exists():
         console.print(
             "[red]No IronLayer project found in the current directory.[/red]\n"
-            "[dim]Run [bold]platform init[/bold] first to scaffold a project.[/dim]"
+            "[dim]Run [bold]ironlayer init[/bold] first to scaffold a project.[/dim]"
         )
         raise typer.Exit(code=3)
 
