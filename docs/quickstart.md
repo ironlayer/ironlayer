@@ -5,21 +5,28 @@ Get IronLayer running locally in under 5 minutes. No Docker, no PostgreSQL, no D
 ## Prerequisites
 
 - Python 3.11 or later
-- pip (or uv)
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Git
 
 ## 1. Install IronLayer
+
+### From PyPI (users)
+
+```bash
+pip install ironlayer
+# or
+uv pip install ironlayer
+```
+
+### From source (contributors)
 
 ```bash
 # Clone the repository
 git clone https://github.com/ironlayer/ironlayer.git
 cd ironlayer
 
-# Install all packages in development mode
-pip install -e core_engine/
-pip install -e ai_engine/
-pip install -e api/
-pip install -e cli/
+# Install all workspace packages in development mode
+uv sync --all-packages
 ```
 
 Verify the installation:
@@ -121,7 +128,7 @@ ironlayer plan . HEAD~1 HEAD
 ironlayer show plan.json
 
 # Execute the plan locally
-ironlayer apply plan.json --auto-approve
+ironlayer apply plan.json --repo . --auto-approve
 ```
 
 ## 7. Try the Demo Project

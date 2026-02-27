@@ -135,11 +135,12 @@ With `--json`, outputs the raw plan JSON to stdout.
 Execute a previously generated plan.
 
 ```bash
-ironlayer apply PLAN_PATH [OPTIONS]
+ironlayer apply PLAN_PATH --repo REPO [OPTIONS]
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `--repo PATH` | (required) | Path to the git repository containing SQL model definitions |
 | `--approve-by TEXT` | None | Name of the approver (required in non-dev environments) |
 | `--auto-approve` | False | Skip manual approval (only allowed in dev) |
 | `--override-cluster TEXT` | None | Override the cluster/warehouse for execution |
@@ -159,7 +160,7 @@ ironlayer apply PLAN_PATH [OPTIONS]
 Run a targeted backfill for a single model over a date range.
 
 ```bash
-ironlayer backfill --model MODEL --start YYYY-MM-DD --end YYYY-MM-DD [OPTIONS]
+ironlayer backfill --model MODEL --start YYYY-MM-DD --end YYYY-MM-DD --repo REPO [OPTIONS]
 ```
 
 | Option | Description |
@@ -167,6 +168,7 @@ ironlayer backfill --model MODEL --start YYYY-MM-DD --end YYYY-MM-DD [OPTIONS]
 | `--model, -m TEXT` | Canonical model name to backfill (required) |
 | `--start TEXT` | Start date, inclusive (required) |
 | `--end TEXT` | End date, inclusive (required) |
+| `--repo PATH` | Path to the git repository (required) |
 | `--cluster TEXT` | Override cluster/warehouse |
 
 ---
@@ -192,14 +194,17 @@ Displays a table with: name, kind, materialization, time column, owner, and tags
 Display upstream and downstream lineage for a model.
 
 ```bash
-ironlayer lineage REPO --model MODEL
+ironlayer lineage REPO --model MODEL [--column COL] [--depth N]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--model, -m TEXT` | Canonical model name to trace lineage for (required) |
+| `--column, -c TEXT` | Column name for column-level lineage tracing (optional) |
+| `--depth INT` | Maximum traversal depth for cross-model tracing (default: 50) |
 
-Outputs a tree showing all upstream dependencies and downstream dependents.
+Without `--column`, outputs a tree showing all upstream and downstream models.
+With `--column`, traces a specific column back through the DAG to its source tables and columns.
 
 ---
 
@@ -274,6 +279,8 @@ Supports both SQL MODEL headers and Python `@model` decorators.
 | `API_RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
 | `AI_ENGINE_URL` | `http://localhost:8001` | AI engine base URL |
 | `AI_LLM_ENABLED` | `true` | Enable/disable LLM integration |
+| `IRONLAYER_API_URL` | None | CLI: API base URL (stored from `login`) |
+| `IRONLAYER_API_TOKEN` | None | CLI: Auth token (overrides stored credentials) |
 
 ## Exit Codes
 
