@@ -13,9 +13,13 @@ Get IronLayer running locally in under 5 minutes. No Docker, no PostgreSQL, no D
 ### From PyPI (users)
 
 ```bash
-pip install ironlayer
-# or
 uv pip install ironlayer
+```
+
+Or with pip:
+
+```bash
+pip install ironlayer
 ```
 
 ### From source (contributors)
