@@ -300,6 +300,7 @@ def plan(
 
         previous_versions: dict[str, str] = {}
         current_versions: dict[str, str] = {}
+        base_sql_map: dict[str, str] = {}
         for m in models:
             current_versions[m.name] = m.content_hash
 
@@ -307,6 +308,7 @@ def plan(
             m_def = model_map[m_name]
             try:
                 old_sql = get_file_at_commit(repo, m_def.file_path, base)
+                base_sql_map[m_name] = old_sql
                 previous_versions[m_name] = compute_canonical_hash(old_sql)
             except Exception:
                 # File did not exist at base -- it is a new model.
@@ -320,6 +322,21 @@ def plan(
 
         # 6. Compute structural diff.
         diff_result = compute_structural_diff(previous_versions, current_versions)
+
+        # 6b. Compute AST diffs for modified models (column-level impact).
+        from core_engine.diff.ast_diff import compute_ast_diff
+        from core_engine.models.diff import ASTDiffDetail
+
+        ast_diffs: dict[str, ASTDiffDetail] = {}
+        for m_name in sorted(diff_result.modified_models):
+            if m_name in model_map and m_name in base_sql_map:
+                try:
+                    ast_diffs[m_name] = compute_ast_diff(
+                        base_sql_map[m_name],
+                        model_map[m_name].clean_sql,
+                    )
+                except Exception:
+                    pass  # Skip — step will still be included without diff detail.
 
         # 7. Resolve as-of date.
         ref_date = _parse_date(as_of_date, "as-of-date") if as_of_date else date.today()
@@ -341,6 +358,8 @@ def plan(
             base=base,
             target=target,
             as_of_date=ref_date,
+            base_sql=base_sql_map,
+            ast_diffs=ast_diffs,
         )
 
         # 10. Serialize and write.

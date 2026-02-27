@@ -59,6 +59,35 @@ class RunType(str, Enum):
     INCREMENTAL = "INCREMENTAL"
 
 
+class StepDiffDetail(BaseModel):
+    """Column-level AST diff detail attached to a plan step.
+
+    This is a simplified projection of :class:`~core_engine.models.diff.ASTDiffDetail`
+    designed for plan JSON output.  It omits raw SQL expression fragments
+    (which are too verbose for PR comments) and focuses on the column-level
+    impact that developers need for review.
+
+    Only populated for *directly changed* models (not downstream dependents).
+    """
+
+    change_type: str = Field(
+        ...,
+        description="Change classification: ADDED, MODIFIED, COSMETIC_ONLY, or NO_CHANGE.",
+    )
+    columns_added: list[str] = Field(
+        default_factory=list,
+        description="Column names added in the target version.",
+    )
+    columns_removed: list[str] = Field(
+        default_factory=list,
+        description="Column names removed from the base version.",
+    )
+    columns_modified: list[str] = Field(
+        default_factory=list,
+        description="Column names whose SELECT expressions were modified.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Plan step
 # ---------------------------------------------------------------------------
@@ -118,6 +147,13 @@ class PlanStep(BaseModel):
             "Schema contract violations detected for this step's model.  "
             "Each dict contains: column_name, violation_type, severity, "
             "expected, actual, message."
+        ),
+    )
+    diff_detail: StepDiffDetail | None = Field(
+        default=None,
+        description=(
+            "Column-level AST diff detail for directly changed models.  "
+            "``None`` for downstream dependents or when AST diff is unavailable."
         ),
     )
 

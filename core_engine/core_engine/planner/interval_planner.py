@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 
 from core_engine.contracts.schema_validator import ContractValidationResult
 from core_engine.graph.dag_builder import topological_sort
-from core_engine.models.diff import DiffResult
+from core_engine.models.diff import ASTDiffDetail, DiffResult
 from core_engine.models.model_definition import ModelDefinition, ModelKind
 from core_engine.models.plan import (
     DateRange,
@@ -37,6 +37,7 @@ from core_engine.models.plan import (
     PlanStep,
     PlanSummary,
     RunType,
+    StepDiffDetail,
 )
 from core_engine.telemetry.profiling import profile_operation
 
@@ -103,6 +104,7 @@ def generate_plan(
     as_of_date: date | None = None,
     base_sql: dict[str, str] | None = None,
     contract_results: ContractValidationResult | None = None,
+    ast_diffs: dict[str, ASTDiffDetail] | None = None,
 ) -> Plan:
     """Generate a deterministic execution plan.
 
@@ -141,6 +143,10 @@ def generate_plan(
         Optional schema contract validation result.  When provided,
         violations are embedded into the corresponding plan steps and
         summarised in the plan summary.
+    ast_diffs:
+        Mapping of ``model_name -> ASTDiffDetail`` for directly changed
+        models.  When provided, column-level diff detail is embedded into
+        the corresponding plan steps for PR comment rendering.
 
     Returns
     -------
@@ -235,6 +241,17 @@ def generate_plan(
                 for v in model_violations
             ]
 
+        # Attach AST diff detail for directly changed models.
+        step_diff: StepDiffDetail | None = None
+        if ast_diffs and model_name in ast_diffs:
+            detail = ast_diffs[model_name]
+            step_diff = StepDiffDetail(
+                change_type=detail.change_type.value,
+                columns_added=detail.added_columns,
+                columns_removed=detail.removed_columns,
+                columns_modified=detail.changed_columns,
+            )
+
         steps.append(
             PlanStep(
                 step_id=step_id_map[model_name],
@@ -247,6 +264,7 @@ def generate_plan(
                 estimated_compute_seconds=est_seconds,
                 estimated_cost_usd=est_usd,
                 contract_violations=step_violations,
+                diff_detail=step_diff,
             )
         )
 
