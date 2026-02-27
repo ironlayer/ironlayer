@@ -186,15 +186,6 @@ def trace_column_across_dag(
 
         sql = model_sql_map[model_name]
         if not sql.strip():
-            lineage_path.append(
-                ColumnLineageNode(
-                    column=column_name,
-                    source_table=model_name,
-                    source_column=column_name,
-                    transform_type="direct",
-                    transform_sql="",
-                )
-            )
             continue
 
         # Compute per-model lineage for this column.

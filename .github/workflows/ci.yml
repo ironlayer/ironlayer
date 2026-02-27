@@ -426,7 +426,7 @@ jobs:
           build-args: |
             BUILD_SHA=${{ github.sha }}
             BUILD_REF=${{ github.ref }}
-            VITE_API_URL=${{ vars.VITE_API_URL || '${{ vars.API_URL || 'https://api.ironlayer.app' }}' }}
+            VITE_API_URL=${{ vars.VITE_API_URL || '${{ vars.API_URL || '${{ vars.API_URL || 'https://api.ironlayer.app' }}' }}' }}
 
       - name: Rotate cache
         run: |
@@ -529,7 +529,7 @@ jobs:
 
       - name: Smoke test API health
         run: |
-          API_URL="${{ vars.API_URL || 'https://api.ironlayer.app' }}"
+          API_URL="${{ vars.API_URL || '${{ vars.API_URL || 'https://api.ironlayer.app' }}' }}"
           for i in 1 2 3 4 5; do
             STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${API_URL}/api/v1/health" || true)
             if [ "$STATUS" = "200" ]; then

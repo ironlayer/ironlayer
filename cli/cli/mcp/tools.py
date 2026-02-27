@@ -75,7 +75,7 @@ async def ironlayer_plan(
         dag=dag,
         base_ref=base_ref,
         target_ref=target_ref,
-        repo_path=str(repo_path),
+        repo_path=str(repo),
     )
 
     if not changes.changed_models:
@@ -198,7 +198,6 @@ async def ironlayer_column_lineage(
     *,
     column: str | None = None,
     schema: dict[str, dict[str, str]] | None = None,
-    max_depth: int | None = None,
 ) -> dict[str, Any]:
     """Trace column-level lineage for a model.
 
@@ -241,17 +240,14 @@ async def ironlayer_column_lineage(
         model_sql_map = {m.name: (m.clean_sql or m.raw_sql) for m in model_defs if m.clean_sql or m.raw_sql}
 
         try:
-            kwargs: dict[str, Any] = {
-                "dag": dag,
-                "target_model": model_name,
-                "target_column": column,
-                "model_sql_map": model_sql_map,
-                "dialect": Dialect.DATABRICKS,
-                "schema": schema,
-            }
-            if max_depth is not None:
-                kwargs["max_depth"] = max_depth
-            cross_lineage = trace_column_across_dag(**kwargs)
+            cross_lineage = trace_column_across_dag(
+                dag=dag,
+                target_model=model_name,
+                target_column=column,
+                model_sql_map=model_sql_map,
+                dialect=Dialect.DATABRICKS,
+                schema=schema,
+            )
         except SqlLineageError as exc:
             return {"error": f"Column lineage failed: {exc}"}
 
@@ -639,15 +635,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "type": "object",
                         "additionalProperties": {"type": "string"},
                     },
-                },
-                "max_depth": {
-                    "type": "integer",
-                    "description": (
-                        "Maximum number of model hops when tracing a column "
-                        "across the DAG. Only applies when 'column' is specified. "
-                        "Defaults to 10 if not provided."
-                    ),
-                    "minimum": 1,
                 },
             },
             "required": ["repo_path", "model_name"],

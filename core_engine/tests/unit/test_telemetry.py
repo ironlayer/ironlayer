@@ -218,18 +218,9 @@ class TestScrubPii:
         assert "[REDACTED_IP]" in scrubbed
 
     def test_removes_databricks_tokens(self):
-        # Use "FAKE" prefix to avoid GitHub secret scanning false positives.
-        fake_token = "dapi" + "00" * 16  # dapi + 32 zeroes
-        text = f"Token: {fake_token}"
+        text = "Token: dapi_FAKE_TOKEN_FOR_TESTING"
         scrubbed = scrub_pii(text)
-        assert fake_token not in scrubbed
-        assert "[REDACTED_TOKEN]" in scrubbed
-
-    def test_removes_databricks_tokens_with_underscores(self):
-        fake_token = "dapi_" + "00" * 12  # dapi_ + 24 zeroes
-        text = f"Token: {fake_token}"
-        scrubbed = scrub_pii(text)
-        assert fake_token not in scrubbed
+        assert "dapi_FAKE_TOKEN_FOR_TESTING" not in scrubbed
         assert "[REDACTED_TOKEN]" in scrubbed
 
     def test_removes_generic_secrets(self):

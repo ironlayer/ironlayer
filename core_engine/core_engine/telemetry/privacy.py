@@ -68,7 +68,7 @@ _PII_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ),
     (
         "databricks_token",
-        re.compile(r"\bdapi[a-f0-9\-_]{20,}\b", re.IGNORECASE),
+        re.compile(r"\bdapi[a-f0-9]{32}\b", re.IGNORECASE),
         "[REDACTED_TOKEN]",
     ),
     (
