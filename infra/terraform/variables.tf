@@ -254,6 +254,30 @@ variable "cors_origins" {
 }
 
 # -----------------------------------------------------------------------------
+# Billing (Stripe)
+# -----------------------------------------------------------------------------
+
+variable "billing_enabled" {
+  description = "Enable Stripe billing integration"
+  type        = bool
+  default     = false
+}
+
+variable "stripe_secret_key" {
+  description = "Stripe secret API key (required when billing_enabled is true)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "stripe_webhook_secret" {
+  description = "Stripe webhook endpoint signing secret (required when billing_enabled is true)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# -----------------------------------------------------------------------------
 # Observability
 # -----------------------------------------------------------------------------
 

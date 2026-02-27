@@ -64,16 +64,6 @@ class CheckoutRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class BillingPlanLimits(BaseModel):
-    """Numeric limits for a billing plan tier."""
-
-    seats: int | None = None
-    plan_runs_monthly: int | None = None
-    ai_calls_monthly: int | None = None
-    api_requests_monthly: int | None = None
-    max_models: int | None = None
-
-
 class BillingPlanTier(BaseModel):
     """A billing plan tier returned by ``GET /billing/plans``."""
 
@@ -81,7 +71,6 @@ class BillingPlanTier(BaseModel):
     label: str
     price_label: str
     features: list[str]
-    limits: BillingPlanLimits
     price_id: str | None = None
 
 
@@ -112,13 +101,6 @@ async def get_billing_plans(
                 "Manual runs",
                 "Community support",
             ],
-            limits=BillingPlanLimits(
-                seats=1,
-                plan_runs_monthly=100,
-                ai_calls_monthly=500,
-                api_requests_monthly=10_000,
-                max_models=5,
-            ),
             price_id=None,
         ),
         BillingPlanTier(
@@ -128,17 +110,11 @@ async def get_billing_plans(
             features=[
                 "Up to 10 seats included",
                 "Unlimited models",
+                "Scheduled runs",
                 "AI advisory",
                 "Team management",
                 "Email support",
             ],
-            limits=BillingPlanLimits(
-                seats=10,
-                plan_runs_monthly=1_000,
-                ai_calls_monthly=5_000,
-                api_requests_monthly=100_000,
-                max_models=None,
-            ),
             price_id=team_price_id or None,
         ),
         BillingPlanTier(
@@ -150,16 +126,10 @@ async def get_billing_plans(
                 "Everything in Team",
                 "SSO/OIDC",
                 "Audit log",
+                "Reconciliation",
                 "SLA",
                 "Dedicated support",
             ],
-            limits=BillingPlanLimits(
-                seats=None,
-                plan_runs_monthly=None,
-                ai_calls_monthly=None,
-                api_requests_monthly=None,
-                max_models=None,
-            ),
             price_id=settings.stripe_price_id_enterprise or None,
         ),
     ]

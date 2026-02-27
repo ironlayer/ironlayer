@@ -677,6 +677,7 @@ def backfill(
 
     # Build a synthetic single-step plan for the backfill.
     step_id = compute_deterministic_id(model, "backfill", start, end)
+    compute_deterministic_id("backfill", model, start, end)
 
     step = PlanStep(
         step_id=step_id,

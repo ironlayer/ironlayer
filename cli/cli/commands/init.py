@@ -1,4 +1,4 @@
-"""``ironlayer init`` -- interactive project bootstrap.
+"""``platform init`` -- interactive project bootstrap.
 
 Scaffolds a complete IronLayer project from scratch, including:
 

@@ -42,7 +42,7 @@ locals {
 
   # Effective secrets
   effective_jwt_secret = var.jwt_secret != "" ? var.jwt_secret : random_password.jwt_secret[0].result
-  database_url         = "postgresql://${var.db_username}:${random_password.db_password.result}@${azurerm_postgresql_flexible_server.this.fqdn}:${local.db_port}/${var.db_name}?sslmode=require"
+  database_url         = "postgresql+asyncpg://${var.db_username}:${random_password.db_password.result}@${azurerm_postgresql_flexible_server.this.fqdn}:${local.db_port}/${var.db_name}?ssl=require"
 }
 
 # =============================================================================
@@ -315,6 +315,30 @@ resource "azurerm_key_vault_secret" "llm_api_key" {
   depends_on = [azurerm_role_assignment.kv_terraform]
 }
 
+resource "azurerm_key_vault_secret" "stripe_secret_key" {
+  count = var.billing_enabled ? 1 : 0
+
+  name         = "stripe-secret-key"
+  value        = var.stripe_secret_key
+  key_vault_id = azurerm_key_vault.this.id
+
+  tags = local.common_tags
+
+  depends_on = [azurerm_role_assignment.kv_terraform]
+}
+
+resource "azurerm_key_vault_secret" "stripe_webhook_secret" {
+  count = var.billing_enabled ? 1 : 0
+
+  name         = "stripe-webhook-secret"
+  value        = var.stripe_webhook_secret
+  key_vault_id = azurerm_key_vault.this.id
+
+  tags = local.common_tags
+
+  depends_on = [azurerm_role_assignment.kv_terraform]
+}
+
 # =============================================================================
 # PostgreSQL Flexible Server
 # =============================================================================
@@ -512,8 +536,24 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "API_BILLING_ENABLED"
-        value = "false"
+        value = tostring(var.billing_enabled)
       }
+
+      dynamic "env" {
+        for_each = var.billing_enabled ? [1] : []
+        content {
+          name        = "STRIPE_SECRET_KEY"
+          secret_name = "stripe-secret-key"
+        }
+      }
+      dynamic "env" {
+        for_each = var.billing_enabled ? [1] : []
+        content {
+          name        = "STRIPE_WEBHOOK_SECRET"
+          secret_name = "stripe-webhook-secret"
+        }
+      }
+
       env {
         name  = "API_STRUCTURED_LOGGING"
         value = "true"
@@ -540,7 +580,7 @@ resource "azurerm_container_app" "api" {
 
       readiness_probe {
         transport = "HTTP"
-        path      = "/api/v1/health"
+        path      = "/ready"
         port      = 8000
 
         interval_seconds        = 10
@@ -550,7 +590,7 @@ resource "azurerm_container_app" "api" {
 
       startup_probe {
         transport = "HTTP"
-        path      = "/api/v1/health"
+        path      = "/ready"
         port      = 8000
 
         interval_seconds        = 5
@@ -581,6 +621,24 @@ resource "azurerm_container_app" "api" {
     name                = "jwt-secret"
     key_vault_secret_id = azurerm_key_vault_secret.jwt_secret.id
     identity            = azurerm_user_assigned_identity.apps.id
+  }
+
+  dynamic "secret" {
+    for_each = var.billing_enabled ? [1] : []
+    content {
+      name                = "stripe-secret-key"
+      key_vault_secret_id = azurerm_key_vault_secret.stripe_secret_key[0].id
+      identity            = azurerm_user_assigned_identity.apps.id
+    }
+  }
+
+  dynamic "secret" {
+    for_each = var.billing_enabled ? [1] : []
+    content {
+      name                = "stripe-webhook-secret"
+      key_vault_secret_id = azurerm_key_vault_secret.stripe_webhook_secret[0].id
+      identity            = azurerm_user_assigned_identity.apps.id
+    }
   }
 
   tags = merge(local.common_tags, {
@@ -643,6 +701,14 @@ resource "azurerm_container_app" "ai" {
       env {
         name        = "DATABASE_URL"
         secret_name = "database-url"
+      }
+
+      dynamic "env" {
+        for_each = var.llm_enabled ? [1] : []
+        content {
+          name        = "LLM_API_KEY"
+          secret_name = "llm-api-key"
+        }
       }
 
       liveness_probe {
