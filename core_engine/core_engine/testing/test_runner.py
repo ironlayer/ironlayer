@@ -138,10 +138,7 @@ class ModelTestRunner:
         elif test.test_type == ModelTestType.UNIQUE:
             safe_col = _validate_identifier(test.column or "")
             return (
-                f"SELECT {safe_col}, COUNT(*) AS cnt "
-                f"FROM {safe_model} "
-                f"GROUP BY {safe_col} "
-                f"HAVING COUNT(*) > 1 LIMIT 1"
+                f"SELECT {safe_col}, COUNT(*) AS cnt FROM {safe_model} GROUP BY {safe_col} HAVING COUNT(*) > 1 LIMIT 1"
             )
 
         elif test.test_type == ModelTestType.ROW_COUNT_MIN:
@@ -165,9 +162,7 @@ class ModelTestRunner:
             safe_values = [_validate_accepted_value(v) for v in sorted(test.values or [])]
             values_str = ", ".join(f"'{v}'" for v in safe_values)
             return (
-                f"SELECT * FROM {safe_model} "
-                f"WHERE {safe_col} NOT IN ({values_str}) "
-                f"AND {safe_col} IS NOT NULL LIMIT 1"
+                f"SELECT * FROM {safe_model} WHERE {safe_col} NOT IN ({values_str}) AND {safe_col} IS NOT NULL LIMIT 1"
             )
 
         elif test.test_type == ModelTestType.CUSTOM_SQL:
@@ -223,9 +218,7 @@ class ModelTestRunner:
                     model_name=model_name,
                     test_type=test.test_type.value,
                     passed=False,
-                    failure_message=(
-                        f"Test {test.test_type.value} failed: " f"{len(result)} row(s) violating assertion"
-                    ),
+                    failure_message=(f"Test {test.test_type.value} failed: {len(result)} row(s) violating assertion"),
                     duration_ms=duration,
                 )
             return TestResult(

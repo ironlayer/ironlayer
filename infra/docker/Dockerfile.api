@@ -1,21 +1,30 @@
 FROM python:3.11-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && \
-    rm -rf /var/lib/apt/lists/* && \
-    pip install poetry==1.7.1 && \
-    poetry config virtualenvs.create false
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
 
-COPY core_engine/pyproject.toml core_engine/poetry.lock* core_engine/README.md* /build/core_engine/
+# Copy workspace root config + lockfile (uv needs full workspace graph)
+COPY pyproject.toml uv.lock /build/
+COPY core_engine/pyproject.toml /build/core_engine/pyproject.toml
+COPY api/pyproject.toml /build/api/pyproject.toml
+COPY ai_engine/pyproject.toml /build/ai_engine/pyproject.toml
+COPY cli/pyproject.toml /build/cli/pyproject.toml
+
+# Copy source code needed for the build
 COPY core_engine/core_engine/ /build/core_engine/core_engine/
-COPY api/pyproject.toml api/poetry.lock* /build/api/
 COPY api/api/ /build/api/api/
 
-# Install dependencies only (--no-root) to avoid requiring README.md for
-# package metadata build.  Source code is copied directly in the runtime stage.
-RUN cd /build/core_engine && poetry install --only main --no-root --no-interaction && \
-    cd /build/api && poetry install --only main --no-root --no-interaction
+# Create stub packages for workspace members not needed at runtime
+RUN mkdir -p /build/ai_engine/ai_engine && touch /build/ai_engine/ai_engine/__init__.py && \
+    mkdir -p /build/cli/cli && touch /build/cli/cli/__init__.py
+
+# Install only production dependencies for core_engine and api
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --package ironlayer-core --package ironlayer-api --no-dev --frozen
 
 FROM python:3.11-slim AS runtime
 

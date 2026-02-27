@@ -826,7 +826,7 @@ class TestLineageFallback:
         # Create a .sql file at root.
         sql_file = tmp_path / "orders.sql"
         sql_file.write_text(
-            "-- name: orders\n-- kind: FULL_REFRESH\n-- materialization: TABLE\n\n" "SELECT * FROM raw_orders",
+            "-- name: orders\n-- kind: FULL_REFRESH\n-- materialization: TABLE\n\nSELECT * FROM raw_orders",
             encoding="utf-8",
         )
 

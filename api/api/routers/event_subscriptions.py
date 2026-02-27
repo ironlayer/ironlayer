@@ -55,7 +55,7 @@ class EventSubscriptionCreate(BaseModel):
     )
     event_types: list[str] | None = Field(
         default=None,
-        description=("List of event types to subscribe to.  " "If null or empty, subscribes to all events."),
+        description=("List of event types to subscribe to.  If null or empty, subscribes to all events."),
     )
     description: str | None = Field(
         default=None,

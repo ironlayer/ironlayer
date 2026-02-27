@@ -136,7 +136,7 @@ def load_models_from_sqlmesh_project(
     config_path = discover_sqlmesh_project(project_path)
     if config_path is None:
         raise SQLMeshLoadError(
-            f"No SQLMesh config file found in {project_path}. " "Expected config.yaml, config.yml, or config.py"
+            f"No SQLMesh config file found in {project_path}. Expected config.yaml, config.yml, or config.py"
         )
 
     # Parse config for model_defaults and model paths

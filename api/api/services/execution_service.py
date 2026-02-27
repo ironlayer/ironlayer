@@ -303,7 +303,7 @@ class ExecutionService:
             range_end=range_end,
         )
         if is_locked:
-            raise RuntimeError(f"Model {model_name} is locked for range " f"[{start_date}, {end_date}]")
+            raise RuntimeError(f"Model {model_name} is locked for range [{start_date}, {end_date}]")
 
         # Acquire lock.
         await self._lock_repo.acquire_lock(
@@ -541,11 +541,11 @@ class ExecutionService:
             raise ValueError(f"Backfill {backfill_id} not found")
 
         if checkpoint.status == "COMPLETED":
-            raise ValueError(f"Backfill {backfill_id} is already completed; " "nothing to resume")
+            raise ValueError(f"Backfill {backfill_id} is already completed; nothing to resume")
 
         if checkpoint.status not in ("FAILED", "RUNNING"):
             raise ValueError(
-                f"Backfill {backfill_id} has unexpected status " f"'{checkpoint.status}' and cannot be resumed"
+                f"Backfill {backfill_id} has unexpected status '{checkpoint.status}' and cannot be resumed"
             )
 
         # Determine resume point.
@@ -657,7 +657,7 @@ class ExecutionService:
                 locked_by=f"chunked_backfill:{backfill_id[:12]}",
             )
             if not locked:
-                error_msg = f"Lock acquisition failed for chunk " f"[{chunk_start_iso}, {chunk_end_iso}]"
+                error_msg = f"Lock acquisition failed for chunk [{chunk_start_iso}, {chunk_end_iso}]"
                 await self._audit_repo.record_chunk(
                     backfill_id=backfill_id,
                     model_name=model_name,
@@ -1028,7 +1028,7 @@ class ExecutionService:
                 model_sql = row
         except Exception:
             logger.debug(
-                "Could not fetch canonical SQL for model %s; " "proceeding with validation-only mode",
+                "Could not fetch canonical SQL for model %s; proceeding with validation-only mode",
                 model_name,
                 exc_info=True,
             )
@@ -1047,7 +1047,9 @@ class ExecutionService:
         tk = get_sql_toolkit()
         try:
             transpile_result = tk.transpiler.transpile(
-                model_sql, Dialect.DATABRICKS, Dialect.DUCKDB,
+                model_sql,
+                Dialect.DATABRICKS,
+                Dialect.DUCKDB,
             )
             duckdb_sql = transpile_result.output_sql
             if not duckdb_sql:

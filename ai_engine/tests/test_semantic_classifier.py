@@ -200,9 +200,7 @@ class TestPartitionShift:
                     "FROM orders"
                 ),
                 new_sql=(
-                    "SELECT id, amount, "
-                    "ROW_NUMBER() OVER (PARTITION BY region ORDER BY created_at) AS rn "
-                    "FROM orders"
+                    "SELECT id, amount, ROW_NUMBER() OVER (PARTITION BY region ORDER BY created_at) AS rn FROM orders"
                 ),
             )
         )

@@ -79,7 +79,7 @@ class CostModelTrainer:
         if targets.ndim != 1:
             raise ValueError(f"targets must be 1-D, got shape {targets.shape}")
         if features.shape[0] != targets.shape[0]:
-            raise ValueError(f"features and targets row count mismatch: " f"{features.shape[0]} vs {targets.shape[0]}")
+            raise ValueError(f"features and targets row count mismatch: {features.shape[0]} vs {targets.shape[0]}")
 
         model = LinearRegression()
         model.fit(features, targets)

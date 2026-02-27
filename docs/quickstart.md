@@ -5,7 +5,7 @@ Get IronLayer running locally in under 5 minutes. No Docker, no PostgreSQL, no D
 ## Prerequisites
 
 - Python 3.11 or later
-- pip (or Poetry)
+- pip (or uv)
 - Git
 
 ## 1. Install IronLayer

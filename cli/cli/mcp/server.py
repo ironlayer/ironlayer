@@ -29,8 +29,7 @@ def _ensure_mcp_installed() -> None:
         import mcp  # noqa: F401
     except ImportError:
         raise SystemExit(
-            "The 'mcp' extra is required for MCP server support.\n"
-            "Install it with: pip install ironlayer[mcp]"
+            "The 'mcp' extra is required for MCP server support.\nInstall it with: pip install ironlayer[mcp]"
         )
 
 
@@ -141,9 +140,7 @@ async def run_sse(host: str = "127.0.0.1", port: int = 3333) -> None:
     sse_transport = SseServerTransport("/messages/")
 
     async def handle_sse(request: Any) -> Any:
-        async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send
-        ) as streams:
+        async with sse_transport.connect_sse(request.scope, request.receive, request._send) as streams:
             await server.run(
                 streams[0],
                 streams[1],

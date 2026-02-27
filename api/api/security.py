@@ -328,8 +328,7 @@ class OIDCProvider:
             import jwt
         except ImportError:
             raise PermissionError(
-                "PyJWT with cryptography extras required for OIDC validation. "
-                "Install with: pip install 'PyJWT[crypto]'"
+                "PyJWT with cryptography extras required for OIDC validation. Install with: pip install 'PyJWT[crypto]'"
             )
 
         # Decode header without verification to extract kid only.
@@ -404,7 +403,7 @@ class OIDCProvider:
         tenant_id = payload.get("tenant_id") or payload.get("org_id") or payload.get("azp") or payload.get("client_id")
         if not tenant_id:
             raise PermissionError(
-                "OIDC token missing tenant identifier. " "Expected one of: tenant_id, org_id, azp, client_id"
+                "OIDC token missing tenant identifier. Expected one of: tenant_id, org_id, azp, client_id"
             )
 
         # Extract scopes
@@ -484,7 +483,7 @@ class AzureKeyVaultProvider:
 
         if len(path_parts) < 2 or path_parts[0] != "keys":
             raise ValueError(
-                f"Invalid Key Vault key path: {parsed.path}. " "Expected /keys/<name> or /keys/<name>/<version>"
+                f"Invalid Key Vault key path: {parsed.path}. Expected /keys/<name> or /keys/<name>/<version>"
             )
 
         key_name = path_parts[1]
@@ -502,7 +501,7 @@ class AzureKeyVaultProvider:
             from azure.keyvault.keys.crypto import CryptographyClient
         except ImportError as exc:
             raise ImportError(
-                "Azure Key Vault SDK required. Install with: " "pip install azure-keyvault-keys azure-identity"
+                "Azure Key Vault SDK required. Install with: pip install azure-keyvault-keys azure-identity"
             ) from exc
 
         credential = DefaultAzureCredential()
@@ -632,7 +631,7 @@ class TokenManager:
             return self._sign_kms_token(claims)
         elif self._config.auth_mode == AuthMode.OIDC_ONPREM:
             raise ValueError(
-                "OIDC on-prem mode does not generate tokens; " "tokens are issued by the customer's identity provider."
+                "OIDC on-prem mode does not generate tokens; tokens are issued by the customer's identity provider."
             )
         else:
             raise ValueError(f"Unsupported auth mode: {self._config.auth_mode}")
@@ -807,8 +806,7 @@ class TokenManager:
             akv = AzureKeyVaultProvider(self._config.kms_key_arn or "")
         except (ImportError, ValueError) as exc:
             raise PermissionError(
-                "Azure Key Vault unavailable: azure-keyvault-keys not installed. "
-                "Cannot sign tokens in Azure KMS mode."
+                "Azure Key Vault unavailable: azure-keyvault-keys not installed. Cannot sign tokens in Azure KMS mode."
             ) from exc
 
         # Generate a random AES-256 data key locally.
@@ -894,7 +892,7 @@ class TokenManager:
 
         except ImportError as exc:
             raise PermissionError(
-                "AWS KMS unavailable: boto3 or cryptography not installed. " "Cannot validate tokens in KMS mode."
+                "AWS KMS unavailable: boto3 or cryptography not installed. Cannot validate tokens in KMS mode."
             ) from exc
         except Exception as exc:
             raise PermissionError(f"AWS KMS token validation failed: {exc}") from exc

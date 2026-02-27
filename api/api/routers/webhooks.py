@@ -162,7 +162,7 @@ async def github_webhook(request: Request) -> dict[str, Any]:
                 plaintext_secret = vault.decrypt(secret_encrypted)
             except Exception:
                 logger.error(
-                    "Failed to decrypt webhook secret for config id=%s repo=%s; " "rejecting request.",
+                    "Failed to decrypt webhook secret for config id=%s repo=%s; rejecting request.",
                     config.id,
                     repo_url,
                 )
@@ -173,7 +173,7 @@ async def github_webhook(request: Request) -> dict[str, Any]:
 
             if not _verify_webhook_hmac(body, signature, plaintext_secret):
                 logger.warning(
-                    "Webhook HMAC verification failed for repo=%s branch=%s " "config_id=%s tenant=%s",
+                    "Webhook HMAC verification failed for repo=%s branch=%s config_id=%s tenant=%s",
                     repo_url,
                     branch,
                     config.id,

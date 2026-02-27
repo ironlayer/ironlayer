@@ -238,11 +238,7 @@ async def ironlayer_column_lineage(
     # If tracing a specific column across the DAG:
     if column:
         dag = build_dag(model_defs)
-        model_sql_map = {
-            m.name: (m.clean_sql or m.raw_sql)
-            for m in model_defs
-            if m.clean_sql or m.raw_sql
-        }
+        model_sql_map = {m.name: (m.clean_sql or m.raw_sql) for m in model_defs if m.clean_sql or m.raw_sql}
 
         try:
             kwargs: dict[str, Any] = {
@@ -339,12 +335,10 @@ async def ironlayer_diff(
             {
                 "kind": e.kind.value,
                 "source_sql": (
-                    e.source_sql[:200] + "..." if e.source_sql and len(e.source_sql) > 200
-                    else (e.source_sql or "")
+                    e.source_sql[:200] + "..." if e.source_sql and len(e.source_sql) > 200 else (e.source_sql or "")
                 ),
                 "target_sql": (
-                    e.target_sql[:200] + "..." if e.target_sql and len(e.target_sql) > 200
-                    else (e.target_sql or "")
+                    e.target_sql[:200] + "..." if e.target_sql and len(e.target_sql) > 200 else (e.target_sql or "")
                 ),
             }
             for e in diff_result.edits
@@ -413,9 +407,7 @@ async def ironlayer_validate(
 
         # If schema is provided, qualify columns and check for issues.
         if schema:
-            qualify_result = tk.qualifier.qualify_columns(
-                sql, schema, Dialect.DATABRICKS
-            )
+            qualify_result = tk.qualifier.qualify_columns(sql, schema, Dialect.DATABRICKS)
             for warning in qualify_result.warnings:
                 all_violations.append(
                     {
@@ -526,9 +518,7 @@ async def ironlayer_transpile(
     source = Dialect(source_dialect)
     target = Dialect(target_dialect)
 
-    result = tk.transpiler.transpile(
-        sql, source, target, pretty=pretty
-    )
+    result = tk.transpiler.transpile(sql, source, target, pretty=pretty)
 
     return {
         "output_sql": result.output_sql,
@@ -634,8 +624,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "column": {
                     "type": "string",
                     "description": (
-                        "Specific column to trace across the DAG. "
-                        "If omitted, returns lineage for all output columns."
+                        "Specific column to trace across the DAG. If omitted, returns lineage for all output columns."
                     ),
                 },
                 "schema": {
@@ -644,7 +633,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "Schema mapping for column resolution: "
                         "{table_name: {column_name: type_string}}. "
                         "Enables resolution of SELECT * and unqualified columns. "
-                        "Example: {\"orders\": {\"id\": \"INT\", \"amount\": \"DECIMAL\"}}"
+                        'Example: {"orders": {"id": "INT", "amount": "DECIMAL"}}'
                     ),
                     "additionalProperties": {
                         "type": "object",
@@ -710,10 +699,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "model_name": {
                     "type": "string",
-                    "description": (
-                        "Specific model to validate. "
-                        "If omitted, validates all models."
-                    ),
+                    "description": ("Specific model to validate. If omitted, validates all models."),
                 },
                 "schema": {
                     "type": "object",

@@ -67,7 +67,7 @@ class TestLoadCloudConfig:
         """TOML with multiple sections should be parsed correctly."""
         config_file = tmp_path / "config.toml"
         config_file.write_text(
-            '[cloud]\napi_url = "https://api.ironlayer.app"\napi_token = "abc"\n\n' "[settings]\nverbose = true\n",
+            '[cloud]\napi_url = "https://api.ironlayer.app"\napi_token = "abc"\n\n[settings]\nverbose = true\n',
             encoding="utf-8",
         )
         with patch("cli.cloud._CONFIG_FILE", config_file):

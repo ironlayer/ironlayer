@@ -1,39 +1,42 @@
-[tool.poetry]
+[project]
 name = "ai-engine"
 version = "0.1.0"
 description = "IronLayer AI Advisory Engine"
-authors = ["IronLayer Team"]
+requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
-packages = [{include = "ai_engine"}]
+authors = [{name = "IronLayer Team"}]
+dependencies = [
+    "fastapi>=0.109,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+    "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.1,<3.0",
+    "scikit-learn>=1.4,<2.0",
+    "numpy>=1.26,<2.0",
+    "httpx>=0.27,<1.0",
+    "sqlglot==25.34.1",  # Pinned: last MIT-licensed version before Fivetran acquisition risk
+    "duckdb>=1.0,<2.0",
+    "joblib>=1.3,<2.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-fastapi = ">=0.109,<1.0"
-uvicorn = {version = ">=0.27,<1.0", extras = ["standard"]}
-pydantic = ">=2.5,<3.0"
-pydantic-settings = ">=2.1,<3.0"
-scikit-learn = ">=1.4,<2.0"
-numpy = ">=1.26,<2.0"
-httpx = ">=0.27,<1.0"
-sqlglot = "==25.34.1"  # Pinned: last MIT-licensed version before Fivetran acquisition risk
-duckdb = ">=1.0,<2.0"
-joblib = ">=1.3,<2.0"
+[project.optional-dependencies]
+llm = ["anthropic>=0.18,<1.0"]
 
-[tool.poetry.dependencies.anthropic]
-version = ">=0.18,<1.0"
-optional = true
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.2",
+    "mypy>=1.8",
+]
 
-[tool.poetry.extras]
-llm = ["anthropic"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.group.dev.dependencies]
-pytest = ">=8.0"
-pytest-cov = ">=4.1"
-pytest-asyncio = ">=0.23"
-httpx = ">=0.27"
-ruff = ">=0.2"
-black = ">=24.0"
-mypy = ">=1.8"
+[tool.hatch.build.targets.wheel]
+packages = ["ai_engine"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -48,7 +51,3 @@ warn_return_any = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--cov=ai_engine --cov-report=term-missing"
-
-[build-system]
-requires = ["poetry-core>=1.8"]
-build-backend = "poetry.core.masonry.api"

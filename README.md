@@ -159,7 +159,7 @@ ironlayer/
 
 ## Tech Stack
 
-- **Python 3.11+** with Poetry package management
+- **Python 3.11+** with uv package management
 - **SQLAlchemy 2.0** async with Alembic migrations (15 versioned)
 - **FastAPI** + Pydantic v2
 - **SQLGlot** (Databricks dialect) for SQL parsing and canonicalization

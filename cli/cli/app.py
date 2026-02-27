@@ -442,7 +442,7 @@ def _resolve_model_sql(
     if not sql:
         available = ", ".join(sorted(sql_map.keys())[:10])
         suffix = "..." if len(sql_map) > 10 else ""
-        console.print(f"[red]Model '{model_name}' not found in repo. " f"Available models: {available}{suffix}[/red]")
+        console.print(f"[red]Model '{model_name}' not found in repo. Available models: {available}{suffix}[/red]")
         raise typer.Exit(code=3)
     return sql
 
@@ -691,7 +691,7 @@ def backfill(
         estimated_cost_usd=0.0,
     )
 
-    console.print(f"Backfilling [bold]{model}[/bold] " f"from [cyan]{start_date}[/cyan] to [cyan]{end_date}[/cyan]")
+    console.print(f"Backfilling [bold]{model}[/bold] from [cyan]{start_date}[/cyan] to [cyan]{end_date}[/cyan]")
 
     settings = load_settings(env=_env)
     with LocalExecutor(db_path=settings.local_db_path) as executor:
@@ -1356,7 +1356,7 @@ def login(
         console.print(f"[red]Login failed ({exc.response.status_code}): {detail}[/red]")
         raise typer.Exit(code=1) from exc
     except httpx.ConnectError as exc:
-        console.print(f"[red]Could not connect to {api_url}. " "Check the URL and ensure the API is running.[/red]")
+        console.print(f"[red]Could not connect to {api_url}. Check the URL and ensure the API is running.[/red]")
         raise typer.Exit(code=1) from exc
 
     access_token = data.get("access_token", "")
@@ -1816,7 +1816,7 @@ def migrate_from_sql(
             materialization = Materialization(mat_upper)
         except ValueError:
             valid = ", ".join(m.value for m in Materialization)
-            console.print(f"[red]Invalid materialization '{default_materialization}'. " f"Valid options: {valid}[/red]")
+            console.print(f"[red]Invalid materialization '{default_materialization}'. Valid options: {valid}[/red]")
             raise typer.Exit(code=3)
 
         # For simple TABLE/VIEW materializations, use FULL_REFRESH kind.
@@ -2061,7 +2061,7 @@ def migrate_from_sqlmesh(
             # Check for Python models that need manual conversion
             sql_body = model_def.clean_sql or model_def.raw_sql
             if sql_body and sql_body.startswith("-- Python model:"):
-                warnings.append(f"Model '{model_def.name}' is a Python model. " "Manual SQL conversion required.")
+                warnings.append(f"Model '{model_def.name}' is a Python model. Manual SQL conversion required.")
 
             # Determine output path for reporting.
             name_parts = model_def.name.split(".")
@@ -2189,12 +2189,8 @@ def mcp_serve(
             console.print("[dim]Starting IronLayer MCP server (stdio)...[/dim]")
         asyncio.run(run_stdio())
     elif transport == "sse":
-        console.print(
-            f"[bold]Starting IronLayer MCP server (SSE) on {host}:{port}[/bold]"
-        )
+        console.print(f"[bold]Starting IronLayer MCP server (SSE) on {host}:{port}[/bold]")
         asyncio.run(run_sse(host=host, port=port))
     else:
-        console.print(
-            f"[red]Unknown transport '{transport}'. Use 'stdio' or 'sse'.[/red]"
-        )
+        console.print(f"[red]Unknown transport '{transport}'. Use 'stdio' or 'sse'.[/red]")
         raise typer.Exit(code=1)

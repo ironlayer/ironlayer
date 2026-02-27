@@ -82,7 +82,7 @@ class TestMultiJoinRule:
         assert "predicate_pushdown" in types
 
     def test_single_join_no_suggestion(self):
-        sql = "SELECT a.id, b.name " "FROM orders a " "JOIN customers b ON a.customer_id = b.id"
+        sql = "SELECT a.id, b.name FROM orders a JOIN customers b ON a.customer_id = b.id"
         optimizer = SQLOptimizer()
         result = optimizer.optimize(_req(sql))
         types = [s.suggestion_type for s in result.suggestions]
@@ -122,7 +122,7 @@ class TestSubqueryRule:
     """Inline subqueries in FROM clause trigger cte_refactor suggestion."""
 
     def test_subquery_detected(self):
-        sql = "SELECT t.id, t.name " "FROM (SELECT id, name FROM customers WHERE active = 1) t"
+        sql = "SELECT t.id, t.name FROM (SELECT id, name FROM customers WHERE active = 1) t"
         optimizer = SQLOptimizer()
         result = optimizer.optimize(_req(sql))
         types = [s.suggestion_type for s in result.suggestions]
@@ -327,7 +327,7 @@ class TestEdgeCases:
 
     def test_cte_sql_parses(self):
         """CTE-based SQL should parse and be analysed without error."""
-        sql = "WITH active AS (SELECT id, name FROM customers WHERE active = 1) " "SELECT a.id, a.name FROM active a"
+        sql = "WITH active AS (SELECT id, name FROM customers WHERE active = 1) SELECT a.id, a.name FROM active a"
         optimizer = SQLOptimizer()
         result = optimizer.optimize(_req(sql))
         assert isinstance(result, OptimizeSQLResponse)
@@ -335,12 +335,7 @@ class TestEdgeCases:
     def test_multiple_rule_suggestions(self):
         """SQL that triggers multiple rules returns all applicable suggestions."""
         # SELECT * + multiple JOINs without WHERE
-        sql = (
-            "SELECT * "
-            "FROM orders a "
-            "JOIN customers b ON a.customer_id = b.id "
-            "JOIN payments c ON a.id = c.order_id"
-        )
+        sql = "SELECT * FROM orders a JOIN customers b ON a.customer_id = b.id JOIN payments c ON a.id = c.order_id"
         optimizer = SQLOptimizer()
         result = optimizer.optimize(_req(sql))
         types = [s.suggestion_type for s in result.suggestions]

@@ -76,8 +76,7 @@ def upgrade() -> None:
     # Enable RLS on the new table.
     op.execute("ALTER TABLE invoices ENABLE ROW LEVEL SECURITY")
     op.execute(
-        "CREATE POLICY tenant_isolation_invoices ON invoices "
-        "USING (tenant_id = current_setting('app.tenant_id', true))"
+        "CREATE POLICY tenant_isolation_invoices ON invoices USING (tenant_id = current_setting('app.tenant_id', true))"
     )
 
 

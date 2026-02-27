@@ -31,9 +31,7 @@ _MAX_DASHBOARD_LIST_LEN: int = 200
 def _check_sql_size(v: str, field_name: str) -> str:
     """Raise ``ValueError`` when a SQL string exceeds the limit."""
     if len(v.encode("utf-8")) > _MAX_SQL_BYTES:
-        raise ValueError(
-            f"{field_name} exceeds maximum size of {_MAX_SQL_BYTES} bytes " f"(~{_MAX_SQL_BYTES // 1024} KB)"
-        )
+        raise ValueError(f"{field_name} exceeds maximum size of {_MAX_SQL_BYTES} bytes (~{_MAX_SQL_BYTES // 1024} KB)")
     return v
 
 
@@ -57,9 +55,7 @@ def _check_dict_serialised_size(v: dict | None, field_name: str, max_bytes: int)
         return v
     size = len(json.dumps(v, separators=(",", ":")).encode("utf-8"))
     if size > max_bytes:
-        raise ValueError(
-            f"{field_name} exceeds maximum serialised size of {max_bytes} bytes " f"(~{max_bytes // 1024} KB)"
-        )
+        raise ValueError(f"{field_name} exceeds maximum serialised size of {max_bytes} bytes (~{max_bytes // 1024} KB)")
     return v
 
 
@@ -73,7 +69,7 @@ class SemanticClassifyRequest(BaseModel):
 
     old_sql: str = Field(
         ...,
-        description=("The SQL of the model *before* the change.  " "Pass an empty string for brand-new models."),
+        description=("The SQL of the model *before* the change.  Pass an empty string for brand-new models."),
     )
     new_sql: str = Field(
         ...,
@@ -81,9 +77,7 @@ class SemanticClassifyRequest(BaseModel):
     )
     schema_diff: dict | None = Field(
         default=None,
-        description=(
-            "Optional column-level diff produced by the schema comparator.  " "Keys: added, removed, modified."
-        ),
+        description=("Optional column-level diff produced by the schema comparator.  Keys: added, removed, modified."),
     )
     column_lineage: dict | None = Field(
         default=None,
@@ -215,7 +209,7 @@ class RiskScoreRequest(BaseModel):
     @classmethod
     def validate_dashboard_dependencies(cls, v: list[str]) -> list[str]:
         if len(v) > _MAX_DASHBOARD_LIST_LEN:
-            raise ValueError(f"dashboard_dependencies has {len(v)} entries; " f"maximum is {_MAX_DASHBOARD_LIST_LEN}")
+            raise ValueError(f"dashboard_dependencies has {len(v)} entries; maximum is {_MAX_DASHBOARD_LIST_LEN}")
         return v
 
     @field_validator("model_tags")
@@ -236,9 +230,7 @@ class FragilityScoreRequest(BaseModel):
     )
     failure_predictions: dict[str, float] = Field(
         ...,
-        description=(
-            "Mapping of model_name → failure_probability (0.0-1.0).  " "Models not in this map default to 0.0."
-        ),
+        description=("Mapping of model_name → failure_probability (0.0-1.0).  Models not in this map default to 0.0."),
     )
     tenant_id: str | None = Field(
         default=None,

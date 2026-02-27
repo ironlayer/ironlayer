@@ -219,7 +219,7 @@ class LocalExecutor:
             re.IGNORECASE,
         )
         if _dangerous_patterns.search(value):
-            raise ValueError(f"Parameter '{key}' contains potentially dangerous SQL content: " f"'{value[:80]}'")
+            raise ValueError(f"Parameter '{key}' contains potentially dangerous SQL content: '{value[:80]}'")
         return value
 
     def _substitute_parameters(
@@ -261,7 +261,9 @@ class LocalExecutor:
         tk = get_sql_toolkit()
         try:
             result = tk.transpiler.transpile(
-                sql, Dialect.DATABRICKS, Dialect.DUCKDB,
+                sql,
+                Dialect.DATABRICKS,
+                Dialect.DUCKDB,
             )
             if result.output_sql:
                 return result.output_sql
@@ -302,6 +304,6 @@ class LocalExecutor:
             return f"CREATE OR REPLACE TABLE {quoted_name} AS {sql}"
 
         # Incremental: ensure the table exists first, then insert.
-        create_stub = f"CREATE TABLE IF NOT EXISTS {quoted_name} AS " f"SELECT * FROM ({sql}) WHERE 1=0"
+        create_stub = f"CREATE TABLE IF NOT EXISTS {quoted_name} AS SELECT * FROM ({sql}) WHERE 1=0"
         insert_stmt = f"INSERT INTO {quoted_name} {sql}"
         return f"{create_stub};\n{insert_stmt}"

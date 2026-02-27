@@ -589,4 +589,4 @@ class TestPermissionHierarchy:
         for i in range(1, len(ordered)):
             lower = ROLE_PERMISSIONS[ordered[i - 1]]
             higher = ROLE_PERMISSIONS[ordered[i]]
-            assert lower < higher, f"{ordered[i].name} should be a strict superset of " f"{ordered[i - 1].name}"
+            assert lower < higher, f"{ordered[i].name} should be a strict superset of {ordered[i - 1].name}"

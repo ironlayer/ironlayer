@@ -42,7 +42,7 @@ class RiskScorer:
         if request.downstream_depth > 0:
             depth_score = min(request.downstream_depth * 1.5, 6.0)
             risk += depth_score
-            factors.append(f"Downstream depth: {request.downstream_depth} model(s) affected " f"(+{depth_score:.1f})")
+            factors.append(f"Downstream depth: {request.downstream_depth} model(s) affected (+{depth_score:.1f})")
 
         # 2. SLA tags
         if request.sla_tags:

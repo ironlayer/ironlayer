@@ -52,7 +52,7 @@ def get_prompt(key: str) -> PromptTemplate:
     try:
         return PROMPT_REGISTRY[key]
     except KeyError:
-        raise KeyError(f"Unknown prompt key '{key}'. " f"Registered keys: {sorted(PROMPT_REGISTRY)}")
+        raise KeyError(f"Unknown prompt key '{key}'. Registered keys: {sorted(PROMPT_REGISTRY)}")
 
 
 # ---------------------------------------------------------------------------

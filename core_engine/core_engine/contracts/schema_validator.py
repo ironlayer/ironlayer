@@ -278,7 +278,7 @@ def validate_schema_contract(
                     severity=ViolationSeverity.INFO,
                     expected="(not in contract)",
                     actual=actual_col,
-                    message=(f"Column '{actual_col}' exists in output but is not " f"declared in the schema contract."),
+                    message=(f"Column '{actual_col}' exists in output but is not declared in the schema contract."),
                 )
             )
 

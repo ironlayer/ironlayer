@@ -200,11 +200,9 @@ class ModelDefinition(BaseModel):
     def validate_kind_requirements(self) -> ModelDefinition:
         """Ensure that fields required by specific model kinds are present."""
         if self.kind == ModelKind.INCREMENTAL_BY_TIME_RANGE and not self.time_column:
-            raise ValueError(
-                f"Model '{self.name}' has kind INCREMENTAL_BY_TIME_RANGE " f"but no time_column specified."
-            )
+            raise ValueError(f"Model '{self.name}' has kind INCREMENTAL_BY_TIME_RANGE but no time_column specified.")
         if self.kind == ModelKind.MERGE_BY_KEY and not self.unique_key:
-            raise ValueError(f"Model '{self.name}' has kind MERGE_BY_KEY " f"but no unique_key specified.")
+            raise ValueError(f"Model '{self.name}' has kind MERGE_BY_KEY but no unique_key specified.")
         return self
 
     # -- Convenience methods --

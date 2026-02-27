@@ -54,7 +54,7 @@ def save_cloud_config(api_url: str, api_token: str) -> None:
     """
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    content = "[cloud]\n" f'api_url = "{api_url}"\n' f'api_token = "{api_token}"\n'
+    content = f'[cloud]\napi_url = "{api_url}"\napi_token = "{api_token}"\n'
     _CONFIG_FILE.write_text(content, encoding="utf-8")
 
     # Restrict permissions to owner only (0o600).

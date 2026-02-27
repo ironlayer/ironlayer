@@ -44,7 +44,6 @@ class TestPlanQuotaEnforcement:
             patch("api.routers.plans.PlanService") as MockPlanService,
             patch("api.routers.plans.AuditService") as MockAudit,
         ):
-
             quota_instance = MockQuota.return_value
             quota_instance.check_plan_quota = AsyncMock(return_value=(True, None))
 
@@ -127,7 +126,7 @@ class TestAugmentQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_augment_plan_llm_budget_exceeded(self, client: AsyncClient) -> None:
         """When AI quota passes but LLM budget is exceeded, endpoint returns 402."""
-        budget_exceeded_msg = "Daily LLM budget exceeded ($10.00/$10.00). " "Increase your budget in tenant settings."
+        budget_exceeded_msg = "Daily LLM budget exceeded ($10.00/$10.00). Increase your budget in tenant settings."
 
         with patch("api.services.quota_service.QuotaService") as MockQuota:
             quota_instance = MockQuota.return_value

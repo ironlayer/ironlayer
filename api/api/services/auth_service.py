@@ -73,7 +73,7 @@ class AuthService:
             if auth_mode == AuthMode.DEVELOPMENT:
                 jwt_secret_value = f"dev-{_secrets.token_hex(32)}"
             else:
-                raise RuntimeError(f"JWT_SECRET environment variable must be set when " f"AUTH_MODE={auth_mode.value}.")
+                raise RuntimeError(f"JWT_SECRET environment variable must be set when AUTH_MODE={auth_mode.value}.")
 
         return TokenManager(
             TokenConfig(

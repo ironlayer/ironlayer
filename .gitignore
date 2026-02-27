@@ -74,6 +74,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# uv
+.python-version
+
 # Misc
 *.bak
 *.tmp

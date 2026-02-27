@@ -135,7 +135,7 @@ class TestDAGBuildPerformance:
         result = BenchmarkProfiler.profile_dag_build(models, topology="realistic")
 
         assert result.duration_ms < max_ms, (
-            f"DAG build for {n} models took {result.duration_ms:.1f}ms " f"(budget: {max_ms}ms)"
+            f"DAG build for {n} models took {result.duration_ms:.1f}ms (budget: {max_ms}ms)"
         )
         assert result.model_count == n
 
@@ -163,7 +163,7 @@ class TestTopologicalSortPerformance:
         result = BenchmarkProfiler.profile_topological_sort(models, topology="realistic")
 
         assert result.duration_ms < max_ms, (
-            f"Topo sort for {n} models took {result.duration_ms:.1f}ms " f"(budget: {max_ms}ms)"
+            f"Topo sort for {n} models took {result.duration_ms:.1f}ms (budget: {max_ms}ms)"
         )
 
     def test_topo_sort_at_5000_under_5_seconds(self) -> None:
@@ -189,7 +189,7 @@ class TestPlanGenerationPerformance:
         result = BenchmarkProfiler.profile_plan_generation(models, topology="realistic")
 
         assert result.duration_ms < max_ms, (
-            f"Plan gen for {n} models took {result.duration_ms:.1f}ms " f"(budget: {max_ms}ms)"
+            f"Plan gen for {n} models took {result.duration_ms:.1f}ms (budget: {max_ms}ms)"
         )
 
 

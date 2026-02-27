@@ -474,9 +474,9 @@ class TestPlannerScenarios:
         for group_models in groups.values():
             for i, m1 in enumerate(group_models):
                 for m2 in group_models[i + 1 :]:
-                    assert not dag.has_edge(m1, m2) and not dag.has_edge(
-                        m2, m1
-                    ), f"Models {m1} and {m2} in same parallel group but have dependency"
+                    assert not dag.has_edge(m1, m2) and not dag.has_edge(m2, m1), (
+                        f"Models {m1} and {m2} in same parallel group but have dependency"
+                    )
 
 
 class TestSerializerRoundTrip:

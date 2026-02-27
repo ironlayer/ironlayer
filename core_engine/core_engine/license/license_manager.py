@@ -137,7 +137,7 @@ class LicenseManager:
             expires_at = license_file.expires_at
 
         if now > expires_at:
-            raise LicenseExpiredError(f"License '{license_file.license_id}' expired at " f"{expires_at.isoformat()}")
+            raise LicenseExpiredError(f"License '{license_file.license_id}' expired at {expires_at.isoformat()}")
 
         self._license = license_file
         self._effective_tier = license_file.tier
@@ -175,7 +175,7 @@ class LicenseManager:
             expires_at = expires_at.replace(tzinfo=UTC)
 
         if now > expires_at:
-            raise LicenseExpiredError(f"License '{license_file.license_id}' expired at " f"{expires_at.isoformat()}")
+            raise LicenseExpiredError(f"License '{license_file.license_id}' expired at {expires_at.isoformat()}")
 
         self._license = license_file
         self._effective_tier = license_file.tier
@@ -259,8 +259,7 @@ class LicenseManager:
         """
         if not self.check_entitlement(feature):
             raise LicenseLimitExceededError(
-                f"Feature '{feature.value}' requires a higher license tier. "
-                f"Current tier: {self._effective_tier.value}"
+                f"Feature '{feature.value}' requires a higher license tier. Current tier: {self._effective_tier.value}"
             )
 
     def check_model_limit(self, current_model_count: int) -> bool:

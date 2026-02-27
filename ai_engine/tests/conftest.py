@@ -73,12 +73,12 @@ def changed_aggregation_sql() -> str:
 
 @pytest.fixture()
 def window_partition_sql() -> str:
-    return "SELECT id, amount, " "ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at) AS rn " "FROM orders"
+    return "SELECT id, amount, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at) AS rn FROM orders"
 
 
 @pytest.fixture()
 def changed_window_partition_sql() -> str:
-    return "SELECT id, amount, " "ROW_NUMBER() OVER (PARTITION BY region ORDER BY created_at) AS rn " "FROM orders"
+    return "SELECT id, amount, ROW_NUMBER() OVER (PARTITION BY region ORDER BY created_at) AS rn FROM orders"
 
 
 @pytest.fixture()
@@ -93,7 +93,7 @@ def multi_join_no_where_sql() -> str:
 
 @pytest.fixture()
 def cte_sql() -> str:
-    return "WITH active AS (SELECT id, name FROM customers WHERE active = 1) " "SELECT a.id, a.name FROM active a"
+    return "WITH active AS (SELECT id, name FROM customers WHERE active = 1) SELECT a.id, a.name FROM active a"
 
 
 # ------------------------------------------------------------------ #

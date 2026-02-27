@@ -33,10 +33,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _SIMPLE_SELECT = "SELECT {columns} FROM {source}"
-_JOIN_SELECT = "SELECT {columns} FROM {source_a} a " "JOIN {source_b} b ON a.id = b.id"
-_CTE_SELECT = "WITH base AS (\n" "  SELECT {columns} FROM {source}\n" ")\n" "SELECT {columns} FROM base"
-_WINDOW_SELECT = "SELECT {columns}, " "ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_at) AS rn " "FROM {source}"
-_AGG_SELECT = "SELECT id, SUM(amount) AS total_amount, COUNT(*) AS cnt " "FROM {source} GROUP BY id"
+_JOIN_SELECT = "SELECT {columns} FROM {source_a} a JOIN {source_b} b ON a.id = b.id"
+_CTE_SELECT = "WITH base AS (\n  SELECT {columns} FROM {source}\n)\nSELECT {columns} FROM base"
+_WINDOW_SELECT = "SELECT {columns}, ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_at) AS rn FROM {source}"
+_AGG_SELECT = "SELECT id, SUM(amount) AS total_amount, COUNT(*) AS cnt FROM {source} GROUP BY id"
 
 _DEFAULT_COLUMNS = "id, name, created_at, amount"
 _DEFAULT_OUTPUT_COLS = ["id", "name", "created_at", "amount"]

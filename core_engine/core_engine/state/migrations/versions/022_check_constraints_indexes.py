@@ -49,7 +49,7 @@ def upgrade() -> None:
     )
 
     op.execute(
-        "ALTER TABLE model_tests ADD CONSTRAINT ck_model_tests_severity " "CHECK (severity IN ('BLOCK','WARN','INFO'))"
+        "ALTER TABLE model_tests ADD CONSTRAINT ck_model_tests_severity CHECK (severity IN ('BLOCK','WARN','INFO'))"
     )
 
     op.execute(
@@ -57,9 +57,7 @@ def upgrade() -> None:
         "CHECK (health_status IN ('active','at_risk','churning'))"
     )
 
-    op.execute(
-        "ALTER TABLE invoices ADD CONSTRAINT ck_invoices_status " "CHECK (status IN ('generated','paid','void'))"
-    )
+    op.execute("ALTER TABLE invoices ADD CONSTRAINT ck_invoices_status CHECK (status IN ('generated','paid','void'))")
 
     # ------------------------------------------------------------------
     # Supplementary indexes
@@ -108,7 +106,7 @@ def downgrade() -> None:
     op.execute("ALTER TABLE invoices DROP CONSTRAINT IF EXISTS ck_invoices_status")
     op.execute("ALTER TABLE customer_health DROP CONSTRAINT IF EXISTS ck_customer_health_health_status")
     op.execute("ALTER TABLE model_tests DROP CONSTRAINT IF EXISTS ck_model_tests_severity")
-    op.execute("ALTER TABLE schema_drift_checks " "DROP CONSTRAINT IF EXISTS ck_schema_drift_checks_drift_type")
+    op.execute("ALTER TABLE schema_drift_checks DROP CONSTRAINT IF EXISTS ck_schema_drift_checks_drift_type")
     op.execute("ALTER TABLE backfill_audit DROP CONSTRAINT IF EXISTS ck_backfill_audit_status")
-    op.execute("ALTER TABLE backfill_checkpoints " "DROP CONSTRAINT IF EXISTS ck_backfill_checkpoints_status")
+    op.execute("ALTER TABLE backfill_checkpoints DROP CONSTRAINT IF EXISTS ck_backfill_checkpoints_status")
     op.execute("ALTER TABLE runs DROP CONSTRAINT IF EXISTS ck_runs_status")

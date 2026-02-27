@@ -246,9 +246,9 @@ class TestComputeChunks:
             next_start, _ = chunks[i + 1]
             from datetime import timedelta
 
-            assert next_start == end + timedelta(
-                days=1
-            ), f"Gap between chunk {i} ending {end} and chunk {i+1} starting {next_start}"
+            assert next_start == end + timedelta(days=1), (
+                f"Gap between chunk {i} ending {end} and chunk {i + 1} starting {next_start}"
+            )
 
 
 # ---------------------------------------------------------------------------

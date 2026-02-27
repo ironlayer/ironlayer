@@ -318,7 +318,7 @@ def init_command(
     env_content = _render_template("env.j2", template_context)
     env_path = target_dir / ".env"
     if env_path.exists():
-        console.print("  [yellow]\u26a0[/yellow] .env already exists -- skipping " "(backup at .env.ironlayer.bak)")
+        console.print("  [yellow]\u26a0[/yellow] .env already exists -- skipping (backup at .env.ironlayer.bak)")
         shutil.copy2(env_path, target_dir / ".env.ironlayer.bak")
     else:
         env_path.write_text(env_content, encoding="utf-8")
@@ -366,7 +366,7 @@ def init_command(
             if _git_init(target_dir):
                 console.print("  [green]\u2713[/green] Initialised git repository")
             else:
-                console.print("  [yellow]\u26a0[/yellow] Could not initialise git repository " "(is git installed?)")
+                console.print("  [yellow]\u26a0[/yellow] Could not initialise git repository (is git installed?)")
 
     steps_completed += 1
 
@@ -375,11 +375,10 @@ def init_command(
         from core_engine.loader import load_models_from_directory
 
         loaded = load_models_from_directory(models_dir)
-        console.print(f"  [green]\u2713[/green] Verification passed: " f"{len(loaded)} model(s) loaded successfully")
+        console.print(f"  [green]\u2713[/green] Verification passed: {len(loaded)} model(s) loaded successfully")
     except Exception as exc:
         console.print(
-            f"  [yellow]\u26a0[/yellow] Verification warning: {exc}\n"
-            f"    [dim]Models may need manual adjustment.[/dim]"
+            f"  [yellow]\u26a0[/yellow] Verification warning: {exc}\n    [dim]Models may need manual adjustment.[/dim]"
         )
 
     # Final summary.

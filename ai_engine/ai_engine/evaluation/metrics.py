@@ -29,7 +29,7 @@ def confusion_matrix(
         Complete list of possible labels (defines matrix dimensions).
     """
     if len(predictions) != len(actuals):
-        raise ValueError(f"predictions ({len(predictions)}) and actuals ({len(actuals)}) " f"must have the same length")
+        raise ValueError(f"predictions ({len(predictions)}) and actuals ({len(actuals)}) must have the same length")
 
     matrix: dict[str, dict[str, int]] = {actual: {predicted: 0 for predicted in labels} for actual in labels}
 
@@ -115,7 +115,7 @@ def mean_absolute_error(
         Ground-truth numeric values.
     """
     if len(predicted) != len(actual):
-        raise ValueError(f"predicted ({len(predicted)}) and actual ({len(actual)}) " f"must have the same length")
+        raise ValueError(f"predicted ({len(predicted)}) and actual ({len(actual)}) must have the same length")
     if not predicted:
         return 0.0
 
@@ -178,7 +178,7 @@ def accuracy(
         Ground-truth values.
     """
     if len(predictions) != len(actuals):
-        raise ValueError(f"predictions ({len(predictions)}) and actuals ({len(actuals)}) " f"must have the same length")
+        raise ValueError(f"predictions ({len(predictions)}) and actuals ({len(actuals)}) must have the same length")
     if not predictions:
         return 0.0
 

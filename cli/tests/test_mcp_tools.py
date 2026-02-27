@@ -141,17 +141,13 @@ class TestIronlayerModels:
 
 class TestIronlayerLineage:
     def test_upstream_downstream(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_lineage(str(sample_repo), "staging.orders")
-        )
+        result = asyncio.run(ironlayer_lineage(str(sample_repo), "staging.orders"))
 
         assert result["model"] == "staging.orders"
         assert "raw.orders" in result["upstream"]
 
     def test_model_not_found(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_lineage(str(sample_repo), "nonexistent.model")
-        )
+        result = asyncio.run(ironlayer_lineage(str(sample_repo), "nonexistent.model"))
         assert "error" in result
 
 
@@ -162,9 +158,7 @@ class TestIronlayerLineage:
 
 class TestIronlayerColumnLineage:
     def test_all_columns(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_column_lineage(str(sample_repo), "staging.orders")
-        )
+        result = asyncio.run(ironlayer_column_lineage(str(sample_repo), "staging.orders"))
 
         # Should not have error.
         assert "error" not in result or result.get("columns")
@@ -172,11 +166,7 @@ class TestIronlayerColumnLineage:
             assert "id" in result["columns"] or len(result["columns"]) > 0
 
     def test_single_column_trace(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_column_lineage(
-                str(sample_repo), "staging.orders", column="id"
-            )
-        )
+        result = asyncio.run(ironlayer_column_lineage(str(sample_repo), "staging.orders", column="id"))
 
         if "error" not in result:
             assert result["column"] == "id"
@@ -191,19 +181,13 @@ class TestIronlayerColumnLineage:
                 "created_at": "TIMESTAMP",
             }
         }
-        result = asyncio.run(
-            ironlayer_column_lineage(
-                str(sample_repo), "staging.orders", schema=schema
-            )
-        )
+        result = asyncio.run(ironlayer_column_lineage(str(sample_repo), "staging.orders", schema=schema))
 
         # Schema should help resolve columns — result should be valid.
         assert isinstance(result, dict)
 
     def test_model_not_found(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_column_lineage(str(sample_repo), "nonexistent.model")
-        )
+        result = asyncio.run(ironlayer_column_lineage(str(sample_repo), "nonexistent.model"))
         assert "error" in result
 
 
@@ -307,9 +291,7 @@ class TestIronlayerValidate:
         assert isinstance(result["violations"], list)
 
     def test_validate_single_model(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_validate(str(sample_repo), model_name="raw.orders")
-        )
+        result = asyncio.run(ironlayer_validate(str(sample_repo), model_name="raw.orders"))
 
         assert result["models_checked"] == 1
 
@@ -322,15 +304,11 @@ class TestIronlayerValidate:
                 "created_at": "TIMESTAMP",
             }
         }
-        result = asyncio.run(
-            ironlayer_validate(str(sample_repo), schema=schema)
-        )
+        result = asyncio.run(ironlayer_validate(str(sample_repo), schema=schema))
 
         assert isinstance(result, dict)
         assert "models_checked" in result
 
     def test_model_not_found(self, sample_repo: Path):
-        result = asyncio.run(
-            ironlayer_validate(str(sample_repo), model_name="nonexistent")
-        )
+        result = asyncio.run(ironlayer_validate(str(sample_repo), model_name="nonexistent"))
         assert "error" in result

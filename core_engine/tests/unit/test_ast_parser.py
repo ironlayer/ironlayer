@@ -27,18 +27,18 @@ class TestParseSql:
         assert meta.has_window_functions is False
 
     def test_join(self):
-        sql = "SELECT o.id, c.name " "FROM orders o " "JOIN customers c ON o.customer_id = c.id"
+        sql = "SELECT o.id, c.name FROM orders o JOIN customers c ON o.customer_id = c.id"
         meta = parse_sql(sql)
         assert "orders" in meta.referenced_tables
         assert "customers" in meta.referenced_tables
 
     def test_subquery(self):
-        sql = "SELECT * FROM (" "  SELECT id FROM orders WHERE amount > 100" ") sub"
+        sql = "SELECT * FROM (  SELECT id FROM orders WHERE amount > 100) sub"
         meta = parse_sql(sql)
         assert "orders" in meta.referenced_tables
 
     def test_cte(self):
-        sql = "WITH recent AS (SELECT id FROM orders WHERE order_date > '2024-01-01') " "SELECT * FROM recent"
+        sql = "WITH recent AS (SELECT id FROM orders WHERE order_date > '2024-01-01') SELECT * FROM recent"
         meta = parse_sql(sql)
         assert "orders" in meta.referenced_tables
         # CTE name should NOT appear as a referenced table.
@@ -51,12 +51,12 @@ class TestParseSql:
         assert meta.has_aggregation is True
 
     def test_window_functions(self):
-        sql = "SELECT id, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) AS rn " "FROM orders"
+        sql = "SELECT id, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) AS rn FROM orders"
         meta = parse_sql(sql)
         assert meta.has_window_functions is True
 
     def test_multiple_ctes(self):
-        sql = "WITH a AS (SELECT 1 AS x), b AS (SELECT 2 AS y) " "SELECT * FROM a JOIN b ON 1=1"
+        sql = "WITH a AS (SELECT 1 AS x), b AS (SELECT 2 AS y) SELECT * FROM a JOIN b ON 1=1"
         meta = parse_sql(sql)
         assert sorted(meta.ctes) == ["a", "b"]
 
@@ -77,14 +77,14 @@ class TestExtractReferencedTables:
         assert "orders" in tables
 
     def test_multiple_tables(self):
-        sql = "SELECT * FROM orders o " "JOIN customers c ON o.cid = c.id " "JOIN products p ON o.pid = p.id"
+        sql = "SELECT * FROM orders o JOIN customers c ON o.cid = c.id JOIN products p ON o.pid = p.id"
         tables = extract_referenced_tables(sql)
         assert "orders" in tables
         assert "customers" in tables
         assert "products" in tables
 
     def test_cte_exclusion(self):
-        sql = "WITH cte AS (SELECT id FROM orders) " "SELECT * FROM cte"
+        sql = "WITH cte AS (SELECT id FROM orders) SELECT * FROM cte"
         tables = extract_referenced_tables(sql)
         assert "orders" in tables
         assert "cte" not in tables
@@ -138,7 +138,7 @@ class TestExtractCtes:
         assert ctes == ["my_cte"]
 
     def test_multiple_ctes(self):
-        sql = "WITH cte_b AS (SELECT 1), cte_a AS (SELECT 2) " "SELECT * FROM cte_a JOIN cte_b ON 1=1"
+        sql = "WITH cte_b AS (SELECT 1), cte_a AS (SELECT 2) SELECT * FROM cte_a JOIN cte_b ON 1=1"
         ctes = extract_ctes(sql)
         assert ctes == ["cte_a", "cte_b"]  # sorted
 

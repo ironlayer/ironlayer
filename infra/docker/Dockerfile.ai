@@ -1,14 +1,27 @@
 FROM python:3.11-slim AS builder
 
-RUN pip install poetry==1.7.1 && \
-    poetry config virtualenvs.create false
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
 
-COPY ai_engine/pyproject.toml ai_engine/poetry.lock* /build/ai_engine/
+# Copy workspace root config + lockfile (uv needs full workspace graph)
+COPY pyproject.toml uv.lock /build/
+COPY ai_engine/pyproject.toml /build/ai_engine/pyproject.toml
+COPY core_engine/pyproject.toml /build/core_engine/pyproject.toml
+COPY api/pyproject.toml /build/api/pyproject.toml
+COPY cli/pyproject.toml /build/cli/pyproject.toml
+
+# Copy source code needed for the build
 COPY ai_engine/ai_engine/ /build/ai_engine/ai_engine/
 
-RUN cd /build/ai_engine && poetry install --only main --no-root --no-interaction
+# Create stub packages for workspace members not needed at runtime
+RUN mkdir -p /build/core_engine/core_engine && touch /build/core_engine/core_engine/__init__.py && \
+    mkdir -p /build/api/api && touch /build/api/api/__init__.py && \
+    mkdir -p /build/cli/cli && touch /build/cli/cli/__init__.py
+
+# Install only production dependencies for ai_engine
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --package ai-engine --no-dev --frozen
 
 FROM python:3.11-slim AS runtime
 

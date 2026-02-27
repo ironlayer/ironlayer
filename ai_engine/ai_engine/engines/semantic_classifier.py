@@ -607,9 +607,7 @@ class SemanticClassifier:
             context_parts.append(f"Schema diff: {request.schema_diff}")
         if request.column_lineage:
             context_parts.append(f"Column lineage: {request.column_lineage}")
-        context_parts.append(
-            f"Rule-based result: type={rule_result.change_type}, " f"confidence={rule_result.confidence}"
-        )
+        context_parts.append(f"Rule-based result: type={rule_result.change_type}, confidence={rule_result.confidence}")
 
         # Extract per-tenant API key if provided.
         tenant_api_key: str | None = None

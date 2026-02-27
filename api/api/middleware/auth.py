@@ -136,7 +136,7 @@ def init_revocation_checker(session_factory: Any) -> None:
             stale = _revocation_cache.get(jti)
             if stale is not None:
                 logger.warning(
-                    "Revocation DB check failed for jti=%s; using cached result " "(is_revoked=%s)",
+                    "Revocation DB check failed for jti=%s; using cached result (is_revoked=%s)",
                     jti,
                     stale,
                 )

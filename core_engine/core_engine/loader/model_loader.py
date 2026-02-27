@@ -110,7 +110,7 @@ def _parse_contract_columns(value: str) -> list[ColumnContract]:
         parts = item.split(":")
         if len(parts) < 2:
             raise HeaderParseError(
-                f"Invalid contract_columns entry '{item}': expected " f"'name:TYPE' or 'name:TYPE:NOT_NULL'."
+                f"Invalid contract_columns entry '{item}': expected 'name:TYPE' or 'name:TYPE:NOT_NULL'."
             )
 
         col_name = parts[0].strip()
@@ -237,9 +237,7 @@ def _parse_test_declarations(value: str) -> list[ModelTestDefinition]:
                 severity = TestSeverity(severity_str)
             except ValueError:
                 valid = ", ".join(s.value for s in TestSeverity)
-                raise HeaderParseError(
-                    f"Invalid test severity '{severity_str}' in '{decl}'. " f"Valid options: {valid}."
-                )
+                raise HeaderParseError(f"Invalid test severity '{severity_str}' in '{decl}'. Valid options: {valid}.")
 
         # Extract test_type and arg from ``test_type(arg)``.
         paren_idx = base_decl.find("(")
@@ -251,7 +249,7 @@ def _parse_test_declarations(value: str) -> list[ModelTestDefinition]:
 
         if test_name not in _TEST_TYPE_LOOKUP:
             valid = ", ".join(sorted(_TEST_TYPE_LOOKUP))
-            raise HeaderParseError(f"Unknown test type '{test_name}' in '{decl}'. " f"Valid types: {valid}.")
+            raise HeaderParseError(f"Unknown test type '{test_name}' in '{decl}'. Valid types: {valid}.")
 
         test_type = _TEST_TYPE_LOOKUP[test_name]
 
@@ -271,9 +269,7 @@ def _parse_test_declarations(value: str) -> list[ModelTestDefinition]:
 
         elif test_type == ModelTestType.ACCEPTED_VALUES:
             if ":" not in arg:
-                raise HeaderParseError(
-                    f"Test 'accepted_values' requires 'column:val1|val2|...' syntax, " f"got '{arg}'."
-                )
+                raise HeaderParseError(f"Test 'accepted_values' requires 'column:val1|val2|...' syntax, got '{arg}'.")
             col, vals_str = arg.split(":", 1)
             col = col.strip()
             if not col:
@@ -498,7 +494,7 @@ def parse_model_file(
             contract_mode = SchemaContractMode(header["contract_mode"].upper())
         except ValueError:
             valid = ", ".join(m.value for m in SchemaContractMode)
-            raise HeaderParseError(f"Invalid contract_mode '{header['contract_mode']}'. " f"Valid options: {valid}.")
+            raise HeaderParseError(f"Invalid contract_mode '{header['contract_mode']}'. Valid options: {valid}.")
 
     return ModelDefinition(
         name=header["name"],
@@ -557,7 +553,7 @@ def load_models_from_directory(models_dir: Path) -> list[ModelDefinition]:
         If *models_dir* does not exist or is not a directory.
     """
     if not models_dir.is_dir():
-        raise ModelLoadError(f"Models directory does not exist or is not a directory: " f"'{models_dir}'")
+        raise ModelLoadError(f"Models directory does not exist or is not a directory: '{models_dir}'")
 
     sql_files = sorted(models_dir.rglob("*.sql"))
     if not sql_files:

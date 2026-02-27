@@ -168,9 +168,7 @@ class TestLoadModelsFromSQLMeshProject:
         project = self._create_project(
             tmp_path,
             model_files={
-                "orders.sql": (
-                    "MODEL (\n" "  name staging.orders,\n" "  kind FULL\n" ");\n\n" "SELECT * FROM raw.orders\n"
-                ),
+                "orders.sql": ("MODEL (\n  name staging.orders,\n  kind FULL\n);\n\nSELECT * FROM raw.orders\n"),
             },
         )
         models = load_models_from_sqlmesh_project(project)

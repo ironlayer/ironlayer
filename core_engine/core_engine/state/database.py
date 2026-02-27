@@ -58,7 +58,6 @@ def get_engine(
         A configured async engine ready for session creation.
     """
     if database_url.startswith("sqlite"):
-
         from core_engine.state.sqlite_adapter import get_local_engine
 
         # Extract path from URL: sqlite+aiosqlite:///path/to/db
@@ -117,7 +116,7 @@ async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
 
     # Strict validation – reject anything that doesn't match the allowlist.
     if not _TENANT_ID_RE.match(tenant_id):
-        raise ValueError(f"Invalid tenant_id: must match {_TENANT_ID_RE.pattern!r}, " f"got {tenant_id!r}")
+        raise ValueError(f"Invalid tenant_id: must match {_TENANT_ID_RE.pattern!r}, got {tenant_id!r}")
 
     # Use set_config() with a bound parameter so the value is never interpolated
     # into the SQL string.  The third argument (true) scopes the setting to the

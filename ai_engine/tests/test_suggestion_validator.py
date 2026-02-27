@@ -321,7 +321,7 @@ class TestEdgeCases:
     def test_cte_validates_successfully(self):
         validator = SuggestionValidator()
         original = "SELECT id FROM orders"
-        rewritten = "WITH filtered AS (SELECT id FROM orders WHERE active = 1) " "SELECT id FROM filtered"
+        rewritten = "WITH filtered AS (SELECT id FROM orders WHERE active = 1) SELECT id FROM filtered"
         result = validator.validate(
             original_sql=original,
             rewritten_sql=rewritten,
@@ -345,9 +345,7 @@ class TestEdgeCases:
         validator = SuggestionValidator()
         original = "SELECT id, amount FROM orders"
         rewritten = (
-            "SELECT id, amount, "
-            "ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY amount DESC) AS rn "
-            "FROM orders"
+            "SELECT id, amount, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY amount DESC) AS rn FROM orders"
         )
         result = validator.validate(
             original_sql=original,

@@ -67,7 +67,7 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """
     if _session_factory is None:
         raise RuntimeError(
-            "Database engine has not been initialised. " "Ensure init_engine() is called during application startup."
+            "Database engine has not been initialised. Ensure init_engine() is called during application startup."
         )
     return _session_factory
 
@@ -101,7 +101,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     if _session_factory is None:
         raise RuntimeError(
-            "Database engine has not been initialised. " "Ensure init_engine() is called during application startup."
+            "Database engine has not been initialised. Ensure init_engine() is called during application startup."
         )
     session = _session_factory()
     try:
@@ -125,7 +125,7 @@ async def get_tenant_session(request: Request) -> AsyncGenerator[AsyncSession, N
     """
     if _session_factory is None:
         raise RuntimeError(
-            "Database engine has not been initialised. " "Ensure init_engine() is called during application startup."
+            "Database engine has not been initialised. Ensure init_engine() is called during application startup."
         )
     tenant_id = getattr(request.state, "tenant_id", None)
     if tenant_id is None:
@@ -177,7 +177,7 @@ async def get_admin_session() -> AsyncGenerator[AsyncSession, None]:
     """
     if _session_factory is None:
         raise RuntimeError(
-            "Database engine has not been initialised. " "Ensure init_engine() is called during application startup."
+            "Database engine has not been initialised. Ensure init_engine() is called during application startup."
         )
     session = _session_factory()
     try:
@@ -224,7 +224,7 @@ def get_ai_client() -> AIServiceClient:
     """Return the cached :class:`AIServiceClient` singleton."""
     if _ai_client is None:
         raise RuntimeError(
-            "AI client has not been initialised. " "Ensure init_ai_client() is called during application startup."
+            "AI client has not been initialised. Ensure init_ai_client() is called during application startup."
         )
     return _ai_client
 
@@ -271,8 +271,7 @@ def get_metering_collector() -> MeteringCollector:
     """Return the cached :class:`MeteringCollector` singleton."""
     if _metering_collector is None:
         raise RuntimeError(
-            "MeteringCollector has not been initialised. "
-            "Ensure init_metering() is called during application startup."
+            "MeteringCollector has not been initialised. Ensure init_metering() is called during application startup."
         )
     return _metering_collector
 

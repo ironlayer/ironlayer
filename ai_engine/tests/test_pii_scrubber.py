@@ -68,9 +68,7 @@ class TestSQLLiteralScrubbing:
         assert "<LITERAL>" in result
 
     def test_sql_structure_preserved(self):
-        sql = (
-            "SELECT customer_id, SUM(amount) AS total " "FROM orders " "WHERE status = 'active' " "GROUP BY customer_id"
-        )
+        sql = "SELECT customer_id, SUM(amount) AS total FROM orders WHERE status = 'active' GROUP BY customer_id"
         result = scrub_sql_for_llm(sql)
         assert "SELECT" in result
         assert "customer_id" in result

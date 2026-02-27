@@ -229,7 +229,7 @@ def get_user_role(request: Request) -> Role:
         logger.warning("Unrecognised role claim '%s'; denying access", raw_role)
         raise HTTPException(
             status_code=403,
-            detail=f"Unrecognised role '{raw_role}'. " f"Valid roles: {sorted(_ROLE_LOOKUP)}",
+            detail=f"Unrecognised role '{raw_role}'. Valid roles: {sorted(_ROLE_LOOKUP)}",
         )
 
 
@@ -262,9 +262,7 @@ def require_permission(permission: Permission) -> Callable[..., Role]:
             )
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    f"Permission denied: role '{role.name.lower()}' " f"does not have '{permission.value}' permission"
-                ),
+                detail=(f"Permission denied: role '{role.name.lower()}' does not have '{permission.value}' permission"),
             )
         return role
 
@@ -307,7 +305,7 @@ def require_role(min_role: Role) -> Callable[..., Role]:
             )
             raise HTTPException(
                 status_code=403,
-                detail=(f"Insufficient role: '{role.name.lower()}' " f"requires at least '{min_role.name.lower()}'"),
+                detail=(f"Insufficient role: '{role.name.lower()}' requires at least '{min_role.name.lower()}'"),
             )
         return role
 

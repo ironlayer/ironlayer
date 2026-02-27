@@ -70,9 +70,7 @@ def compute_model_column_lineage(
     from core_engine.sql_toolkit import get_sql_toolkit
 
     toolkit = get_sql_toolkit()
-    result = toolkit.lineage_analyzer.trace_column_lineage(
-        sql, dialect, schema=schema
-    )
+    result = toolkit.lineage_analyzer.trace_column_lineage(sql, dialect, schema=schema)
     # Replace the empty model_name with the actual model name.
     return ColumnLineageResult(
         model_name=model_name,
@@ -201,9 +199,7 @@ def trace_column_across_dag(
 
         # Compute per-model lineage for this column.
         try:
-            nodes = toolkit.lineage_analyzer.trace_single_column(
-                column_name, sql, dialect, schema=schema
-            )
+            nodes = toolkit.lineage_analyzer.trace_single_column(column_name, sql, dialect, schema=schema)
         except (SqlLineageError, SqlToolkitError, ValueError):
             logger.debug(
                 "Could not trace column '%s' in model '%s', marking as terminal",
@@ -237,11 +233,7 @@ def trace_column_across_dag(
 
             # If the source table is an upstream IronLayer model,
             # continue tracing into that model.
-            if (
-                node.source_table
-                and node.source_table in all_model_names
-                and node.source_table in model_sql_map
-            ):
+            if node.source_table and node.source_table in all_model_names and node.source_table in model_sql_map:
                 # Use source_column if available; fall back to the
                 # current column_name for the next hop.
                 next_column = node.source_column or column_name
@@ -300,9 +292,7 @@ def compute_all_column_lineage(
             continue
 
         try:
-            result = compute_model_column_lineage(
-                model_name, sql, dialect, schema=schema
-            )
+            result = compute_model_column_lineage(model_name, sql, dialect, schema=schema)
             results[model_name] = result
         except (SqlLineageError, SqlToolkitError, ValueError) as exc:
             logger.debug(

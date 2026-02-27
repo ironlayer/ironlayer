@@ -25,12 +25,12 @@ class TestSafeQueries:
         assert violations == []
 
     def test_select_with_join(self):
-        sql = "SELECT o.id, c.name " "FROM orders o " "JOIN customers c ON o.customer_id = c.id"
+        sql = "SELECT o.id, c.name FROM orders o JOIN customers c ON o.customer_id = c.id"
         violations = check_sql_safety(sql)
         assert violations == []
 
     def test_select_with_subquery(self):
-        sql = "SELECT * FROM (" "  SELECT id, amount FROM orders WHERE amount > 100" ") sub WHERE sub.id > 10"
+        sql = "SELECT * FROM (  SELECT id, amount FROM orders WHERE amount > 100) sub WHERE sub.id > 10"
         violations = check_sql_safety(sql)
         assert violations == []
 

@@ -66,7 +66,7 @@ class GoldDataset:
             id="cosmetic_002",
             category="cosmetic",
             old_sql=("SELECT id, name, created_at FROM catalog.schema.users"),
-            new_sql=("-- Updated formatting 2024-01\n" "SELECT id, name, created_at FROM catalog.schema.users"),
+            new_sql=("-- Updated formatting 2024-01\nSELECT id, name, created_at FROM catalog.schema.users"),
             expected_change_type="cosmetic",
             expected_confidence_min=0.9,
             expected_full_rebuild=False,
@@ -75,8 +75,7 @@ class GoldDataset:
             id="cosmetic_003",
             category="cosmetic",
             old_sql=(
-                "SELECT a.id,a.name,b.total FROM catalog.schema.users a "
-                "JOIN catalog.schema.orders b ON a.id=b.user_id"
+                "SELECT a.id,a.name,b.total FROM catalog.schema.users a JOIN catalog.schema.orders b ON a.id=b.user_id"
             ),
             new_sql=(
                 "SELECT a.id, a.name, b.total FROM catalog.schema.users a "
@@ -146,9 +145,9 @@ class GoldDataset:
             id="breaking_003",
             category="breaking",
             old_sql=(
-                "SELECT order_id, customer_id, total_amount " "FROM catalog.schema.orders WHERE status = 'completed'"
+                "SELECT order_id, customer_id, total_amount FROM catalog.schema.orders WHERE status = 'completed'"
             ),
-            new_sql=("SELECT order_id, customer_id, total_amount " "FROM catalog.schema.orders"),
+            new_sql=("SELECT order_id, customer_id, total_amount FROM catalog.schema.orders"),
             expected_change_type="breaking",
             expected_confidence_min=0.7,
             expected_full_rebuild=True,
@@ -179,10 +178,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="breaking_005",
             category="breaking",
-            old_sql=(
-                "SELECT user_id, email, CAST(balance AS DECIMAL(10,2)) AS balance " "FROM catalog.schema.accounts"
-            ),
-            new_sql=("SELECT user_id, email, CAST(balance AS INT) AS balance " "FROM catalog.schema.accounts"),
+            old_sql=("SELECT user_id, email, CAST(balance AS DECIMAL(10,2)) AS balance FROM catalog.schema.accounts"),
+            new_sql=("SELECT user_id, email, CAST(balance AS INT) AS balance FROM catalog.schema.accounts"),
             schema_diff={"modified": [{"column": "balance", "old_type": "DECIMAL", "new_type": "INT"}]},
             expected_change_type="breaking",
             expected_confidence_min=0.8,
@@ -191,8 +188,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="breaking_006",
             category="breaking",
-            old_sql=("SELECT id, name, region FROM catalog.schema.stores " "WHERE region IN ('US', 'EU', 'APAC')"),
-            new_sql=("SELECT id, name FROM catalog.schema.stores " "WHERE region IN ('US', 'EU', 'APAC')"),
+            old_sql=("SELECT id, name, region FROM catalog.schema.stores WHERE region IN ('US', 'EU', 'APAC')"),
+            new_sql=("SELECT id, name FROM catalog.schema.stores WHERE region IN ('US', 'EU', 'APAC')"),
             schema_diff={"removed": ["region"]},
             expected_change_type="breaking",
             expected_confidence_min=0.8,
@@ -207,7 +204,7 @@ class GoldDataset:
                 "INNER JOIN catalog.schema.categories c ON p.category_id = c.id "
                 "WHERE p.active = true"
             ),
-            new_sql=("SELECT p.product_id, p.name " "FROM catalog.schema.products p " "WHERE p.active = true"),
+            new_sql=("SELECT p.product_id, p.name FROM catalog.schema.products p WHERE p.active = true"),
             schema_diff={"removed": ["category_name"]},
             expected_change_type="breaking",
             expected_confidence_min=0.8,
@@ -217,11 +214,9 @@ class GoldDataset:
             id="breaking_008",
             category="breaking",
             old_sql=(
-                "SELECT order_id, customer_id, order_date "
-                "FROM catalog.schema.orders "
-                "WHERE order_date >= '2024-01-01'"
+                "SELECT order_id, customer_id, order_date FROM catalog.schema.orders WHERE order_date >= '2024-01-01'"
             ),
-            new_sql=("SELECT order_id, order_date " "FROM catalog.schema.orders " "WHERE order_date >= '2024-01-01'"),
+            new_sql=("SELECT order_id, order_date FROM catalog.schema.orders WHERE order_date >= '2024-01-01'"),
             schema_diff={"removed": ["customer_id"]},
             expected_change_type="breaking",
             expected_confidence_min=0.8,
@@ -230,7 +225,7 @@ class GoldDataset:
         GoldDatasetEntry(
             id="breaking_009",
             category="breaking",
-            old_sql=("SELECT id, ts, value FROM catalog.schema.metrics " "WHERE ts >= CURRENT_DATE - INTERVAL 30 DAY"),
+            old_sql=("SELECT id, ts, value FROM catalog.schema.metrics WHERE ts >= CURRENT_DATE - INTERVAL 30 DAY"),
             new_sql=(
                 "SELECT id, ts, value, quality_flag FROM catalog.schema.metrics_v2 "
                 "WHERE ts >= CURRENT_DATE - INTERVAL 30 DAY"
@@ -264,8 +259,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="non_breaking_001",
             category="non_breaking",
-            old_sql=("SELECT order_id, customer_id, total_amount " "FROM catalog.schema.orders"),
-            new_sql=("SELECT order_id, customer_id, total_amount, created_at " "FROM catalog.schema.orders"),
+            old_sql=("SELECT order_id, customer_id, total_amount FROM catalog.schema.orders"),
+            new_sql=("SELECT order_id, customer_id, total_amount, created_at FROM catalog.schema.orders"),
             schema_diff={"added": ["created_at"]},
             expected_change_type="non_breaking",
             expected_confidence_min=0.7,
@@ -275,7 +270,7 @@ class GoldDataset:
             id="non_breaking_002",
             category="non_breaking",
             old_sql=("SELECT id, name, email FROM catalog.schema.users"),
-            new_sql=("SELECT id, name, email FROM catalog.schema.users " "WHERE active = true"),
+            new_sql=("SELECT id, name, email FROM catalog.schema.users WHERE active = true"),
             expected_change_type="non_breaking",
             expected_confidence_min=0.7,
             expected_full_rebuild=False,
@@ -284,7 +279,7 @@ class GoldDataset:
             id="non_breaking_003",
             category="non_breaking",
             old_sql=("SELECT product_id, name, price FROM catalog.schema.products"),
-            new_sql=("SELECT product_id, name, price FROM catalog.schema.products " "ORDER BY name ASC"),
+            new_sql=("SELECT product_id, name, price FROM catalog.schema.products ORDER BY name ASC"),
             expected_change_type="non_breaking",
             expected_confidence_min=0.7,
             expected_full_rebuild=False,
@@ -318,7 +313,7 @@ class GoldDataset:
             id="non_breaking_006",
             category="non_breaking",
             old_sql=("SELECT order_id, total FROM catalog.schema.orders"),
-            new_sql=("SELECT order_id, total FROM catalog.schema.orders " "WHERE total > 0"),
+            new_sql=("SELECT order_id, total FROM catalog.schema.orders WHERE total > 0"),
             expected_change_type="non_breaking",
             expected_confidence_min=0.7,
             expected_full_rebuild=False,
@@ -327,9 +322,7 @@ class GoldDataset:
             id="non_breaking_007",
             category="non_breaking",
             old_sql=("SELECT id, ts, value FROM catalog.schema.metrics"),
-            new_sql=(
-                "SELECT id, ts, value, " "LAG(value) OVER (ORDER BY ts) AS prev_value " "FROM catalog.schema.metrics"
-            ),
+            new_sql=("SELECT id, ts, value, LAG(value) OVER (ORDER BY ts) AS prev_value FROM catalog.schema.metrics"),
             schema_diff={"added": ["prev_value"]},
             expected_change_type="non_breaking",
             expected_confidence_min=0.6,
@@ -339,7 +332,7 @@ class GoldDataset:
             id="non_breaking_008",
             category="non_breaking",
             old_sql=("SELECT id, category, amount FROM catalog.schema.expenses"),
-            new_sql=("SELECT id, category, amount, CURRENT_TIMESTAMP AS etl_loaded_at " "FROM catalog.schema.expenses"),
+            new_sql=("SELECT id, category, amount, CURRENT_TIMESTAMP AS etl_loaded_at FROM catalog.schema.expenses"),
             schema_diff={"added": ["etl_loaded_at"]},
             expected_change_type="non_breaking",
             expected_confidence_min=0.7,
@@ -351,9 +344,9 @@ class GoldDataset:
         GoldDatasetEntry(
             id="rename_001",
             category="rename_only",
-            old_sql=("SELECT order_id AS oid, customer_id AS cid " "FROM catalog.schema.orders"),
+            old_sql=("SELECT order_id AS oid, customer_id AS cid FROM catalog.schema.orders"),
             new_sql=(
-                "SELECT order_id AS order_identifier, customer_id AS customer_identifier " "FROM catalog.schema.orders"
+                "SELECT order_id AS order_identifier, customer_id AS customer_identifier FROM catalog.schema.orders"
             ),
             expected_change_type="rename_only",
             expected_confidence_min=0.7,
@@ -362,8 +355,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="rename_002",
             category="rename_only",
-            old_sql=("WITH cte AS (SELECT id, name FROM catalog.schema.users) " "SELECT id, name FROM cte"),
-            new_sql=("WITH user_data AS (SELECT id, name FROM catalog.schema.users) " "SELECT id, name FROM user_data"),
+            old_sql=("WITH cte AS (SELECT id, name FROM catalog.schema.users) SELECT id, name FROM cte"),
+            new_sql=("WITH user_data AS (SELECT id, name FROM catalog.schema.users) SELECT id, name FROM user_data"),
             expected_change_type="rename_only",
             expected_confidence_min=0.7,
             expected_full_rebuild=False,
@@ -380,10 +373,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="rename_004",
             category="rename_only",
-            old_sql=("SELECT t.id AS txn_id, t.amt AS txn_amount " "FROM catalog.schema.transactions t"),
-            new_sql=(
-                "SELECT t.id AS transaction_id, t.amt AS transaction_amount " "FROM catalog.schema.transactions t"
-            ),
+            old_sql=("SELECT t.id AS txn_id, t.amt AS txn_amount FROM catalog.schema.transactions t"),
+            new_sql=("SELECT t.id AS transaction_id, t.amt AS transaction_amount FROM catalog.schema.transactions t"),
             expected_change_type="rename_only",
             expected_confidence_min=0.7,
             expected_full_rebuild=False,
@@ -392,8 +383,7 @@ class GoldDataset:
             id="rename_005",
             category="rename_only",
             old_sql=(
-                "SELECT o.id, o.total FROM catalog.schema.orders o "
-                "JOIN catalog.schema.customers c ON o.cust_id = c.id"
+                "SELECT o.id, o.total FROM catalog.schema.orders o JOIN catalog.schema.customers c ON o.cust_id = c.id"
             ),
             new_sql=(
                 "SELECT orders.id, orders.total FROM catalog.schema.orders orders "
@@ -410,10 +400,10 @@ class GoldDataset:
             id="metric_001",
             category="metric_semantic",
             old_sql=(
-                "SELECT customer_id, SUM(total_amount) AS revenue " "FROM catalog.schema.orders GROUP BY customer_id"
+                "SELECT customer_id, SUM(total_amount) AS revenue FROM catalog.schema.orders GROUP BY customer_id"
             ),
             new_sql=(
-                "SELECT customer_id, AVG(total_amount) AS revenue " "FROM catalog.schema.orders GROUP BY customer_id"
+                "SELECT customer_id, AVG(total_amount) AS revenue FROM catalog.schema.orders GROUP BY customer_id"
             ),
             expected_change_type="metric_semantic",
             expected_confidence_min=0.8,
@@ -422,10 +412,9 @@ class GoldDataset:
         GoldDatasetEntry(
             id="metric_002",
             category="metric_semantic",
-            old_sql=("SELECT region, COUNT(*) AS order_count " "FROM catalog.schema.orders GROUP BY region"),
+            old_sql=("SELECT region, COUNT(*) AS order_count FROM catalog.schema.orders GROUP BY region"),
             new_sql=(
-                "SELECT region, COUNT(DISTINCT customer_id) AS order_count "
-                "FROM catalog.schema.orders GROUP BY region"
+                "SELECT region, COUNT(DISTINCT customer_id) AS order_count FROM catalog.schema.orders GROUP BY region"
             ),
             expected_change_type="metric_semantic",
             expected_confidence_min=0.8,
@@ -435,7 +424,7 @@ class GoldDataset:
             id="metric_003",
             category="metric_semantic",
             old_sql=(
-                "SELECT product_id, SUM(quantity) AS total_qty " "FROM catalog.schema.order_items GROUP BY product_id"
+                "SELECT product_id, SUM(quantity) AS total_qty FROM catalog.schema.order_items GROUP BY product_id"
             ),
             new_sql=(
                 "SELECT product_id, SUM(quantity) AS total_qty "
@@ -483,8 +472,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="metric_006",
             category="metric_semantic",
-            old_sql=("SELECT category, MAX(price) AS top_price " "FROM catalog.schema.products GROUP BY category"),
-            new_sql=("SELECT category, MIN(price) AS top_price " "FROM catalog.schema.products GROUP BY category"),
+            old_sql=("SELECT category, MAX(price) AS top_price FROM catalog.schema.products GROUP BY category"),
+            new_sql=("SELECT category, MIN(price) AS top_price FROM catalog.schema.products GROUP BY category"),
             expected_change_type="metric_semantic",
             expected_confidence_min=0.8,
             expected_full_rebuild=True,
@@ -492,7 +481,7 @@ class GoldDataset:
         GoldDatasetEntry(
             id="metric_007",
             category="metric_semantic",
-            old_sql=("SELECT store_id, SUM(sales) AS total_sales " "FROM catalog.schema.daily_sales GROUP BY store_id"),
+            old_sql=("SELECT store_id, SUM(sales) AS total_sales FROM catalog.schema.daily_sales GROUP BY store_id"),
             new_sql=(
                 "SELECT store_id, region, SUM(sales) AS total_sales "
                 "FROM catalog.schema.daily_sales GROUP BY store_id, region"
@@ -524,9 +513,9 @@ class GoldDataset:
         GoldDatasetEntry(
             id="partition_001",
             category="partition_shift",
-            old_sql=("SELECT order_id, order_date, total " "FROM catalog.schema.orders"),
+            old_sql=("SELECT order_id, order_date, total FROM catalog.schema.orders"),
             new_sql=(
-                "SELECT order_id, date_trunc('month', order_date) AS order_month, total " "FROM catalog.schema.orders"
+                "SELECT order_id, date_trunc('month', order_date) AS order_month, total FROM catalog.schema.orders"
             ),
             expected_change_type="partition_shift",
             expected_confidence_min=0.6,
@@ -535,7 +524,7 @@ class GoldDataset:
         GoldDatasetEntry(
             id="partition_002",
             category="partition_shift",
-            old_sql=("SELECT id, created_date, amount " "FROM catalog.schema.payments"),
+            old_sql=("SELECT id, created_date, amount FROM catalog.schema.payments"),
             new_sql=(
                 "SELECT id, YEAR(created_date) AS pay_year, MONTH(created_date) AS pay_month, amount "
                 "FROM catalog.schema.payments"
@@ -547,8 +536,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="partition_003",
             category="partition_shift",
-            old_sql=("SELECT event_id, event_ts, event_type " "FROM catalog.schema.events"),
-            new_sql=("SELECT event_id, DATE(event_ts) AS event_date, event_type " "FROM catalog.schema.events"),
+            old_sql=("SELECT event_id, event_ts, event_type FROM catalog.schema.events"),
+            new_sql=("SELECT event_id, DATE(event_ts) AS event_date, event_type FROM catalog.schema.events"),
             expected_change_type="partition_shift",
             expected_confidence_min=0.6,
             expected_full_rebuild=True,
@@ -556,10 +545,8 @@ class GoldDataset:
         GoldDatasetEntry(
             id="partition_004",
             category="partition_shift",
-            old_sql=("SELECT id, ts, region, value " "FROM catalog.schema.sensor_data"),
-            new_sql=(
-                "SELECT id, date_trunc('hour', ts) AS hour_bucket, region, value " "FROM catalog.schema.sensor_data"
-            ),
+            old_sql=("SELECT id, ts, region, value FROM catalog.schema.sensor_data"),
+            new_sql=("SELECT id, date_trunc('hour', ts) AS hour_bucket, region, value FROM catalog.schema.sensor_data"),
             expected_change_type="partition_shift",
             expected_confidence_min=0.6,
             expected_full_rebuild=True,
@@ -567,7 +554,7 @@ class GoldDataset:
         GoldDatasetEntry(
             id="partition_005",
             category="partition_shift",
-            old_sql=("SELECT log_id, log_date, severity, message " "FROM catalog.schema.app_logs"),
+            old_sql=("SELECT log_id, log_date, severity, message FROM catalog.schema.app_logs"),
             new_sql=(
                 "SELECT log_id, date_trunc('week', log_date) AS log_week, severity, message "
                 "FROM catalog.schema.app_logs"
@@ -678,9 +665,9 @@ class GoldDataset:
         GoldDatasetEntry(
             id="edge_007",
             category="edge_case",
-            old_sql=("SELECT id, amount, category FROM catalog.schema.expenses " "WHERE category = 'travel'"),
+            old_sql=("SELECT id, amount, category FROM catalog.schema.expenses WHERE category = 'travel'"),
             new_sql=(
-                "SELECT id, amount, category FROM catalog.schema.expenses " "WHERE category = 'travel' AND amount > 50"
+                "SELECT id, amount, category FROM catalog.schema.expenses WHERE category = 'travel' AND amount > 50"
             ),
             expected_change_type="non_breaking",
             expected_confidence_min=0.6,
@@ -710,7 +697,7 @@ class GoldDataset:
         GoldDatasetEntry(
             id="edge_009",
             category="edge_case",
-            old_sql=("SELECT user_id, action, ts FROM catalog.schema.activity_log " "WHERE ts >= '2024-01-01'"),
+            old_sql=("SELECT user_id, action, ts FROM catalog.schema.activity_log WHERE ts >= '2024-01-01'"),
             new_sql=(
                 "SELECT user_id, action, ts, "
                 "  LAG(ts) OVER (PARTITION BY user_id ORDER BY ts) AS prev_ts, "

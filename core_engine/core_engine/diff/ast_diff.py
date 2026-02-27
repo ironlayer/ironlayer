@@ -77,7 +77,9 @@ def compute_ast_diff(old_sql: str, new_sql: str) -> ASTDiffDetail:
     # Semantic changes detected — compute column-level detail.
     try:
         column_changes = tk.differ.extract_column_changes(
-            old_sql, new_sql, Dialect.DATABRICKS,
+            old_sql,
+            new_sql,
+            Dialect.DATABRICKS,
         )
     except Exception:  # noqa: BLE001
         column_changes = {}
@@ -139,7 +141,9 @@ def extract_changed_columns(old_sql: str, new_sql: str) -> list[str]:
     tk = get_sql_toolkit()
     try:
         changes = tk.differ.extract_column_changes(
-            old_sql, new_sql, Dialect.DATABRICKS,
+            old_sql,
+            new_sql,
+            Dialect.DATABRICKS,
         )
     except Exception:  # noqa: BLE001
         return []

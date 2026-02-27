@@ -163,9 +163,7 @@ def _normalize_v2(
 
     # Step 1: Qualify columns using schema information.
     try:
-        qualify_result = tk.qualifier.qualify_columns(
-            v1_result, schema, Dialect.DATABRICKS
-        )
+        qualify_result = tk.qualifier.qualify_columns(v1_result, schema, Dialect.DATABRICKS)
         qualified_sql = qualify_result.qualified_sql
     except Exception:
         logger.debug("V2 qualification failed, using V1 output", exc_info=True)

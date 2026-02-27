@@ -300,9 +300,7 @@ class SqlGlotParser:
                 )
         except ParseError as exc:
             if raise_on_error:
-                raise SqlParseError(
-                    f"Failed to parse SQL: {exc}"
-                ) from exc
+                raise SqlParseError(f"Failed to parse SQL: {exc}") from exc
             # Return empty result with warning.
             return ParseResult(
                 statements=(),
@@ -326,9 +324,7 @@ class SqlGlotParser:
         try:
             asts = sqlglot.parse(sql, read=_dialect_value(dialect))
         except Exception as exc:
-            raise SqlParseError(
-                f"Failed to parse multi-statement SQL: {exc}"
-            ) from exc
+            raise SqlParseError(f"Failed to parse multi-statement SQL: {exc}") from exc
 
         nodes: list[SqlNode] = []
         warnings: list[str] = []
@@ -367,9 +363,7 @@ class SqlGlotRenderer:
             raise ValueError("SqlNode has no raw expression attached")
 
         if not isinstance(raw, exp.Expression):
-            raise TypeError(
-                f"Expected sqlglot Expression, got {type(raw).__name__}"
-            )
+            raise TypeError(f"Expected sqlglot Expression, got {type(raw).__name__}")
 
         return raw.sql(
             dialect=_dialect_value(dialect),
@@ -421,9 +415,7 @@ class SqlGlotScopeAnalyzer:
                 error_level=ErrorLevel.RAISE,
             )
         except ParseError as exc:
-            raise SqlParseError(
-                f"Failed to parse SQL for table extraction: {exc}"
-            ) from exc
+            raise SqlParseError(f"Failed to parse SQL for table extraction: {exc}") from exc
 
         cte_names = _collect_cte_names(ast)
         tables: set[TableRef] = set()
@@ -447,9 +439,7 @@ class SqlGlotScopeAnalyzer:
                             tables.add(ref)
 
         # Sort for determinism.
-        sorted_tables = tuple(
-            sorted(tables, key=lambda t: t.fully_qualified)
-        )
+        sorted_tables = tuple(sorted(tables, key=lambda t: t.fully_qualified))
         sorted_ctes = tuple(sorted(cte_names))
 
         return ScopeResult(
@@ -470,9 +460,7 @@ class SqlGlotScopeAnalyzer:
                 error_level=ErrorLevel.RAISE,
             )
         except ParseError as exc:
-            raise SqlParseError(
-                f"Failed to parse SQL for column extraction: {exc}"
-            ) from exc
+            raise SqlParseError(f"Failed to parse SQL for column extraction: {exc}") from exc
 
         # --- Output columns (from top-level SELECT) ---
         output_columns = self._extract_output_columns(ast, dialect)
@@ -678,9 +666,7 @@ class SqlGlotNormalizer:
         try:
             parsed = sqlglot.parse_one(cleaned, read=_dialect_value(dialect))
         except ParseError as exc:
-            raise SqlNormalizationError(
-                f"Failed to canonicalize SQL: {cleaned[:200]}"
-            ) from exc
+            raise SqlNormalizationError(f"Failed to canonicalize SQL: {cleaned[:200]}") from exc
         applied_rules.append("parse_and_regenerate")
 
         # Rule 3: Reorder CTEs alphabetically when safe.
@@ -695,15 +681,11 @@ class SqlGlotNormalizer:
                 normalize=True,
             )
             if not result:
-                raise SqlNormalizationError(
-                    f"Failed to canonicalize SQL: {cleaned[:200]}"
-                )
+                raise SqlNormalizationError(f"Failed to canonicalize SQL: {cleaned[:200]}")
         except SqlNormalizationError:
             raise
         except Exception as exc:
-            raise SqlNormalizationError(
-                f"Failed to canonicalize SQL: {cleaned[:200]}"
-            ) from exc
+            raise SqlNormalizationError(f"Failed to canonicalize SQL: {cleaned[:200]}") from exc
 
         applied_rules.append("normalize_keywords")
 
@@ -750,11 +732,7 @@ class SqlGlotNormalizer:
         # Safe to reorder alphabetically.
         sorted_ctes = sorted(
             ctes,
-            key=lambda c: (
-                c.find(exp.TableAlias).alias_or_name.lower()
-                if c.find(exp.TableAlias)
-                else ""
-            ),
+            key=lambda c: c.find(exp.TableAlias).alias_or_name.lower() if c.find(exp.TableAlias) else "",
         )
 
         # Check if already in order.
@@ -891,12 +869,8 @@ class SqlGlotDiffer:
         """
         dialect_str = _dialect_value(dialect)
         try:
-            norm_old = sqlglot.transpile(
-                old_sql, read=dialect_str, write=dialect_str, pretty=False
-            )[0]
-            norm_new = sqlglot.transpile(
-                new_sql, read=dialect_str, write=dialect_str, pretty=False
-            )[0]
+            norm_old = sqlglot.transpile(old_sql, read=dialect_str, write=dialect_str, pretty=False)[0]
+            norm_new = sqlglot.transpile(new_sql, read=dialect_str, write=dialect_str, pretty=False)[0]
         except Exception:
             return False
 
@@ -972,11 +946,13 @@ class SqlGlotDiffer:
                     except Exception:
                         source_sql = repr(node)
 
-            edits.append(DiffEdit(
-                kind=kind,
-                source_sql=source_sql,
-                target_sql=target_sql,
-            ))
+            edits.append(
+                DiffEdit(
+                    kind=kind,
+                    source_sql=source_sql,
+                    target_sql=target_sql,
+                )
+            )
 
         # Sort for determinism.
         edits.sort(key=lambda e: (e.kind.value, e.source_sql, e.target_sql))
@@ -1078,11 +1054,7 @@ class SqlGlotSafetyGuard:
                 kind = (descendant.args.get("kind") or "").upper()
                 violation_type = _DROP_KIND_MAP.get(kind)
                 if violation_type is not None:
-                    target = (
-                        descendant.this.sql(dialect=dialect_str)
-                        if descendant.this
-                        else "unknown"
-                    )
+                    target = descendant.this.sql(dialect=dialect_str) if descendant.this else "unknown"
                     violations.append(
                         SafetyViolation(
                             violation_type=violation_type,
@@ -1095,10 +1067,7 @@ class SqlGlotSafetyGuard:
             # --- TRUNCATE TABLE ---
             if isinstance(descendant, exp.TruncateTable):
                 tables = descendant.args.get("expressions") or []
-                target = (
-                    ", ".join(t.sql(dialect=dialect_str) for t in tables)
-                    or "unknown"
-                )
+                target = ", ".join(t.sql(dialect=dialect_str) for t in tables) or "unknown"
                 violations.append(
                     SafetyViolation(
                         violation_type="TRUNCATE",
@@ -1112,19 +1081,12 @@ class SqlGlotSafetyGuard:
             if isinstance(descendant, exp.Delete):
                 where = descendant.args.get("where")
                 if where is None:
-                    target = (
-                        descendant.this.sql(dialect=dialect_str)
-                        if descendant.this
-                        else "unknown"
-                    )
+                    target = descendant.this.sql(dialect=dialect_str) if descendant.this else "unknown"
                     violations.append(
                         SafetyViolation(
                             violation_type="DELETE_WITHOUT_WHERE",
                             target=target,
-                            detail=(
-                                f"DELETE without WHERE clause on `{target}` "
-                                "would remove all rows"
-                            ),
+                            detail=(f"DELETE without WHERE clause on `{target}` would remove all rows"),
                             severity="error",
                         )
                     )
@@ -1171,29 +1133,20 @@ class SqlGlotSafetyGuard:
                 overwrite = descendant.args.get("overwrite")
                 partition = descendant.args.get("partition")
                 if overwrite and not partition:
-                    target = (
-                        descendant.this.sql(dialect=dialect_str)
-                        if descendant.this
-                        else "unknown"
-                    )
+                    target = descendant.this.sql(dialect=dialect_str) if descendant.this else "unknown"
                     violations.append(
                         SafetyViolation(
                             violation_type="INSERT_OVERWRITE_ALL",
                             target=target,
                             detail=(
-                                f"INSERT OVERWRITE without PARTITION clause on "
-                                f"`{target}` replaces the entire table"
+                                f"INSERT OVERWRITE without PARTITION clause on `{target}` replaces the entire table"
                             ),
                             severity="warning",
                         )
                     )
                 elif not allow_insert and not overwrite:
                     # Regular INSERT blocked when allow_insert=False.
-                    target = (
-                        descendant.this.sql(dialect=dialect_str)
-                        if descendant.this
-                        else "unknown"
-                    )
+                    target = descendant.this.sql(dialect=dialect_str) if descendant.this else "unknown"
                     violations.append(
                         SafetyViolation(
                             violation_type="INSERT",
@@ -1262,11 +1215,7 @@ class SqlGlotSafetyGuard:
                         )
                     )
                 elif not allow_create and kind in {"TABLE", "VIEW", "SCHEMA", "DATABASE"}:
-                    target = (
-                        descendant.this.sql(dialect=dialect_str)
-                        if descendant.this
-                        else "unknown"
-                    )
+                    target = descendant.this.sql(dialect=dialect_str) if descendant.this else "unknown"
                     violations.append(
                         SafetyViolation(
                             violation_type=f"CREATE_{kind}",
@@ -1360,9 +1309,7 @@ class SqlGlotRewriter:
         dialect: Dialect = Dialect.DATABRICKS,
     ) -> str:
         """Safely quote an identifier for the given dialect."""
-        return exp.to_identifier(name, quoted=True).sql(
-            dialect=_dialect_value(dialect)
-        )
+        return exp.to_identifier(name, quoted=True).sql(dialect=_dialect_value(dialect))
 
     @staticmethod
     def _apply_rules(table: exp.Table, rules: list[RewriteRule]) -> bool:
@@ -1392,18 +1339,12 @@ class SqlGlotRewriter:
 
             # Schema-qualified only: schema.table
             elif current_schema and not current_catalog:
-                if (
-                    rule.source_schema
-                    and current_schema.lower() == rule.source_schema.lower()
-                ):
+                if rule.source_schema and current_schema.lower() == rule.source_schema.lower():
                     matched = True
 
             # Catalog-qualified only (rare): catalog..table
             elif current_catalog and not current_schema:
-                if (
-                    rule.source_catalog
-                    and current_catalog.lower() == rule.source_catalog.lower()
-                ):
+                if rule.source_catalog and current_catalog.lower() == rule.source_catalog.lower():
                     matched = True
 
             # Unqualified table: apply target unconditionally.
@@ -1528,9 +1469,7 @@ class SqlGlotLineageAnalyzer:
 
         for col_name in output_columns:
             try:
-                nodes = self.trace_single_column(
-                    col_name, effective_sql, dialect, schema=schema
-                )
+                nodes = self.trace_single_column(col_name, effective_sql, dialect, schema=schema)
                 column_lineage[col_name] = nodes
             except (SqlLineageError, Exception):
                 # Conservative: mark as unresolved rather than crash.
@@ -1576,9 +1515,7 @@ class SqlGlotLineageAnalyzer:
                 dialect=dialect_str,
             )
         except Exception as exc:
-            raise SqlLineageError(
-                f"sqlglot.lineage failed for column '{column}': {exc}"
-            ) from exc
+            raise SqlLineageError(f"sqlglot.lineage failed for column '{column}': {exc}") from exc
 
         # Walk the lineage tree and collect all leaf (source) nodes.
         nodes: list[ColumnLineageNode] = []
@@ -1592,9 +1529,7 @@ class SqlGlotLineageAnalyzer:
                     source_table=None,
                     source_column=None,
                     transform_type="literal",
-                    transform_sql=lineage_node.expression.sql(dialect=dialect_str)
-                    if lineage_node.expression
-                    else "",
+                    transform_sql=lineage_node.expression.sql(dialect=dialect_str) if lineage_node.expression else "",
                 )
             )
 
@@ -1810,9 +1745,7 @@ class SqlGlotQualifier:
             )
 
         # Count unqualified columns before.
-        pre_unqualified = sum(
-            1 for col in ast.find_all(exp.Column) if not col.table
-        )
+        pre_unqualified = sum(1 for col in ast.find_all(exp.Column) if not col.table)
 
         try:
             mapping = MappingSchema(schema, dialect=dialect_str)
@@ -1830,9 +1763,7 @@ class SqlGlotQualifier:
             qualified_ast = ast
 
         # Count unqualified columns after.
-        post_unqualified = sum(
-            1 for col in qualified_ast.find_all(exp.Column) if not col.table
-        )
+        post_unqualified = sum(1 for col in qualified_ast.find_all(exp.Column) if not col.table)
         columns_qualified = max(0, pre_unqualified - post_unqualified)
 
         qualified_sql = qualified_ast.sql(dialect=dialect_str)

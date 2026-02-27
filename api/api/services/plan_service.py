@@ -167,7 +167,7 @@ class PlanService:
             contract_results = validate_schema_contracts_batch(models_with_contracts)
             if contract_results.violations:
                 logger.info(
-                    "Schema contract validation: %d violation(s) across %d model(s) " "(%d breaking)",
+                    "Schema contract validation: %d violation(s) across %d model(s) (%d breaking)",
                     len(contract_results.violations),
                     contract_results.models_checked,
                     contract_results.breaking_count,
@@ -392,14 +392,14 @@ class PlanService:
         for candidate in candidates:
             if candidate.is_dir():
                 return candidate
-        raise ValueError(f"Cannot locate a models directory in {repo}. " f"Looked in: {[str(c) for c in candidates]}")
+        raise ValueError(f"Cannot locate a models directory in {repo}. Looked in: {[str(c) for c in candidates]}")
 
     @staticmethod
     def _git_changed_files(repo: Path, base_sha: str, target_sha: str) -> list[str]:
         """Return a list of file paths changed between two git commits."""
         for label, sha in [("base_sha", base_sha), ("target_sha", target_sha)]:
             if not _GIT_SHA_PATTERN.fullmatch(sha):
-                raise ValueError(f"Invalid git SHA for {label}: must be 4-40 hex characters, " f"got '{sha[:80]}'")
+                raise ValueError(f"Invalid git SHA for {label}: must be 4-40 hex characters, got '{sha[:80]}'")
 
         result = subprocess.run(
             ["git", "diff", "--name-only", base_sha, target_sha],

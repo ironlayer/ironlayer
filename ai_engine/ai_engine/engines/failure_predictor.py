@@ -117,11 +117,11 @@ class FailurePredictor:
             score += signal * 2.5
             if failure_rate > 0.05:
                 factors.append(
-                    f"Historical failure rate: {failure_rate:.1%} " f"({history.failed_runs}/{history.total_runs} runs)"
+                    f"Historical failure rate: {failure_rate:.1%} ({history.failed_runs}/{history.total_runs} runs)"
                 )
             if failure_rate > 0.15:
                 actions.append(
-                    "Investigate recurring failure patterns — " "consider reviewing error logs for systematic issues"
+                    "Investigate recurring failure patterns — consider reviewing error logs for systematic issues"
                 )
 
         # --- Signal 2: Recent failure acceleration (weight: 2.0) ---
@@ -132,17 +132,17 @@ class FailurePredictor:
                 acceleration = min((recent_rate - historical_rate) / 0.2, 1.0)
                 score += acceleration * 2.0
                 factors.append(
-                    f"Recent failure rate ({recent_rate:.1%}) exceeds " f"historical average ({historical_rate:.1%})"
+                    f"Recent failure rate ({recent_rate:.1%}) exceeds historical average ({historical_rate:.1%})"
                 )
-                actions.append("Recent failure rate is accelerating — " "prioritise investigation of recent changes")
+                actions.append("Recent failure rate is accelerating — prioritise investigation of recent changes")
 
         # --- Signal 3: Consecutive failures (weight: 1.5) ---
         if history.consecutive_failures > 0:
             signal = min(history.consecutive_failures / 3.0, 1.0)
             score += signal * 1.5
-            factors.append(f"Consecutive failures: {history.consecutive_failures} " f"(most recent runs all failed)")
+            factors.append(f"Consecutive failures: {history.consecutive_failures} (most recent runs all failed)")
             if history.consecutive_failures >= 3:
-                actions.append("Model has failed 3+ times in a row — " "manual intervention strongly recommended")
+                actions.append("Model has failed 3+ times in a row — manual intervention strongly recommended")
 
         # --- Signal 4: Runtime trend (weight: 1.0) ---
         if history.runtime_trend > 0.2 and history.avg_runtime_seconds > 0:
@@ -155,7 +155,7 @@ class FailurePredictor:
             )
             if history.runtime_trend > 0.5:
                 actions.append(
-                    "Runtime has grown significantly — " "consider reviewing data volume growth or query optimisation"
+                    "Runtime has grown significantly — consider reviewing data volume growth or query optimisation"
                 )
 
         # --- Signal 5: Shuffle growth (weight: 0.8) ---
@@ -165,7 +165,7 @@ class FailurePredictor:
             factors.append(f"Shuffle volume trend: +{history.shuffle_trend:.0%} growth")
             if history.shuffle_trend > 1.0:
                 actions.append(
-                    "Data shuffle volume has more than doubled — " "review partition strategy and cluster sizing"
+                    "Data shuffle volume has more than doubled — review partition strategy and cluster sizing"
                 )
 
         # --- Signal 6: Staleness (weight: 0.7) ---
@@ -174,7 +174,7 @@ class FailurePredictor:
             score += signal * 0.7
             days = history.hours_since_last_success / 24
             factors.append(f"No successful run in {days:.0f} days")
-            actions.append("Model hasn't succeeded recently — " "verify upstream data availability and configuration")
+            actions.append("Model hasn't succeeded recently — verify upstream data availability and configuration")
 
         # --- Signal 7: Known-bad error type (weight: 0.5) ---
         _transient_errors = {"timeout", "throttled", "network", "connection"}
@@ -297,12 +297,10 @@ def compute_cost_trend(
 
     factors: list[str] = []
     if change_pct > 0.05:
-        factors.append(
-            f"Average cost increased {change_pct:.0%}: " f"${historical_avg:.4f} → ${recent_avg:.4f} per run"
-        )
+        factors.append(f"Average cost increased {change_pct:.0%}: ${historical_avg:.4f} → ${recent_avg:.4f} per run")
     elif change_pct < -0.05:
         factors.append(
-            f"Average cost decreased {abs(change_pct):.0%}: " f"${historical_avg:.4f} → ${recent_avg:.4f} per run"
+            f"Average cost decreased {abs(change_pct):.0%}: ${historical_avg:.4f} → ${recent_avg:.4f} per run"
         )
     else:
         factors.append(f"Cost is stable at ~${recent_avg:.4f} per run")
@@ -312,7 +310,7 @@ def compute_cost_trend(
     alert = change_pct > alert_threshold_pct
 
     if alert:
-        factors.append(f"ALERT: Cost growth ({change_pct:.0%}) exceeds " f"threshold ({alert_threshold_pct:.0%})")
+        factors.append(f"ALERT: Cost growth ({change_pct:.0%}) exceeds threshold ({alert_threshold_pct:.0%})")
 
     return CostTrend(
         model_name=model_name,

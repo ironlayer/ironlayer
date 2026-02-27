@@ -38,7 +38,7 @@ class TestNormalizeSql:
         assert normalize_sql(sql_a) == normalize_sql(sql_b)
 
     def test_comment_stripping(self):
-        sql_with_comments = "-- This is a comment\n" "SELECT id /* inline comment */ FROM users"
+        sql_with_comments = "-- This is a comment\nSELECT id /* inline comment */ FROM users"
         sql_without_comments = "SELECT id FROM users"
         norm_a = normalize_sql(sql_with_comments)
         norm_b = normalize_sql(sql_without_comments)

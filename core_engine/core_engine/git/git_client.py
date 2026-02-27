@@ -107,7 +107,7 @@ def _run_git(
         )
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
-        raise GitClientError(f"git command failed: {' '.join(cmd)}\n" f"Exit code {exc.returncode}: {stderr}") from exc
+        raise GitClientError(f"git command failed: {' '.join(cmd)}\nExit code {exc.returncode}: {stderr}") from exc
     except subprocess.TimeoutExpired as exc:
         raise GitClientError(f"git command timed out after {_SUBPROCESS_TIMEOUT}s: {' '.join(cmd)}") from exc
     except FileNotFoundError as exc:

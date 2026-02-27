@@ -153,9 +153,7 @@ class TestV2Normalization:
         sql = "SELECT id, name FROM users WHERE age > 18"
         schema = {"users": {"id": "INT", "name": "STRING", "age": "INT"}}
 
-        v2_result = normalize_sql(
-            sql, version=CanonicalizerVersion.V2, schema=schema
-        )
+        v2_result = normalize_sql(sql, version=CanonicalizerVersion.V2, schema=schema)
 
         assert v2_result  # non-empty
         # V2 should produce valid SQL.
@@ -187,9 +185,7 @@ class TestV2Normalization:
         sql = "SELECT id FROM users"
 
         v1_result = normalize_sql(sql, version=CanonicalizerVersion.V1)
-        v2_no_schema = normalize_sql(
-            sql, version=CanonicalizerVersion.V2, schema=None
-        )
+        v2_no_schema = normalize_sql(sql, version=CanonicalizerVersion.V2, schema=None)
 
         # Without schema, V2 should produce the same output as V1.
         assert v2_no_schema == v1_result
@@ -203,12 +199,8 @@ class TestV2Normalization:
         sql = "SELECT id, name FROM users"
         schema = {"users": {"id": "INT", "name": "STRING"}}
 
-        hash1 = compute_canonical_hash(
-            sql, version=CanonicalizerVersion.V2, schema=schema
-        )
-        hash2 = compute_canonical_hash(
-            sql, version=CanonicalizerVersion.V2, schema=schema
-        )
+        hash1 = compute_canonical_hash(sql, version=CanonicalizerVersion.V2, schema=schema)
+        hash2 = compute_canonical_hash(sql, version=CanonicalizerVersion.V2, schema=schema)
 
         assert hash1 == hash2
         assert len(hash1) == 64
@@ -231,9 +223,7 @@ class TestRedshiftDialect:
     def test_redshift_to_databricks_transpile(self, toolkit):
         """Redshift → Databricks transpilation should convert functions."""
         sql = "SELECT GETDATE(), NVL(x, 0) FROM t"
-        result = toolkit.transpiler.transpile(
-            sql, Dialect.REDSHIFT, Dialect.DATABRICKS
-        )
+        result = toolkit.transpiler.transpile(sql, Dialect.REDSHIFT, Dialect.DATABRICKS)
 
         assert result.output_sql
         assert result.source_dialect == Dialect.REDSHIFT
@@ -242,8 +232,6 @@ class TestRedshiftDialect:
     def test_databricks_to_redshift_transpile(self, toolkit):
         """Databricks → Redshift transpilation should also work."""
         sql = "SELECT CURRENT_TIMESTAMP(), COALESCE(x, 0) FROM t"
-        result = toolkit.transpiler.transpile(
-            sql, Dialect.DATABRICKS, Dialect.REDSHIFT
-        )
+        result = toolkit.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.REDSHIFT)
 
         assert result.output_sql

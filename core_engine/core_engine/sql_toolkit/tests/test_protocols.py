@@ -143,9 +143,7 @@ class TestScopeAnalysisContract:
     """Scope analyzer protocol: extract_tables() and extract_columns()."""
 
     def test_simple_table_extraction(self, tk):
-        scope = tk.scope_analyzer.extract_tables(
-            "SELECT * FROM orders", Dialect.DATABRICKS
-        )
+        scope = tk.scope_analyzer.extract_tables("SELECT * FROM orders", Dialect.DATABRICKS)
         assert len(scope.referenced_tables) == 1
         assert scope.referenced_tables[0].name == "orders"
 
@@ -182,11 +180,7 @@ class TestScopeAnalysisContract:
         assert names == sorted(names)
 
     def test_multiple_ctes(self, tk):
-        sql = (
-            "WITH cte_a AS (SELECT * FROM raw_a), "
-            "cte_b AS (SELECT * FROM raw_b) "
-            "SELECT * FROM cte_a JOIN cte_b"
-        )
+        sql = "WITH cte_a AS (SELECT * FROM raw_a), cte_b AS (SELECT * FROM raw_b) SELECT * FROM cte_a JOIN cte_b"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         table_names = {t.name for t in scope.referenced_tables}
         assert "raw_a" in table_names
@@ -201,27 +195,19 @@ class TestScopeAnalysisContract:
         assert "full_name" in cols.output_columns
 
     def test_star_detection(self, tk):
-        cols = tk.scope_analyzer.extract_columns(
-            "SELECT * FROM t", Dialect.DATABRICKS
-        )
+        cols = tk.scope_analyzer.extract_columns("SELECT * FROM t", Dialect.DATABRICKS)
         assert cols.has_star is True
 
     def test_aggregation_detection(self, tk):
-        cols = tk.scope_analyzer.extract_columns(
-            "SELECT COUNT(id) FROM t", Dialect.DATABRICKS
-        )
+        cols = tk.scope_analyzer.extract_columns("SELECT COUNT(id) FROM t", Dialect.DATABRICKS)
         assert cols.has_aggregation is True
 
     def test_window_function_detection(self, tk):
-        cols = tk.scope_analyzer.extract_columns(
-            "SELECT SUM(x) OVER (PARTITION BY y) FROM t", Dialect.DATABRICKS
-        )
+        cols = tk.scope_analyzer.extract_columns("SELECT SUM(x) OVER (PARTITION BY y) FROM t", Dialect.DATABRICKS)
         assert cols.has_window_functions is True
 
     def test_no_aggregation_no_window(self, tk):
-        cols = tk.scope_analyzer.extract_columns(
-            "SELECT a, b FROM t", Dialect.DATABRICKS
-        )
+        cols = tk.scope_analyzer.extract_columns("SELECT a, b FROM t", Dialect.DATABRICKS)
         assert cols.has_aggregation is False
         assert cols.has_window_functions is False
 
@@ -256,9 +242,7 @@ class TestTranspilationContract:
 
     def test_identity_transpile(self, tk):
         sql = "SELECT a FROM t WHERE x = 1"
-        result = tk.transpiler.transpile(
-            sql, Dialect.DATABRICKS, Dialect.DATABRICKS
-        )
+        result = tk.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.DATABRICKS)
         assert result.fallback_used is False
         assert result.output_sql
 
@@ -274,10 +258,7 @@ class TestTranspilationContract:
         assert len(result.warnings) > 0
 
     def test_transpile_with_join(self, tk):
-        sql = (
-            "SELECT a.id, b.name FROM orders a "
-            "INNER JOIN customers b ON a.cust_id = b.id"
-        )
+        sql = "SELECT a.id, b.name FROM orders a INNER JOIN customers b ON a.cust_id = b.id"
         result = tk.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.fallback_used is False
 
@@ -291,17 +272,13 @@ class TestTranspilationContract:
         assert "\n" in result.output_sql  # Pretty output has newlines
 
     def test_transpile_result_dialects(self, tk):
-        result = tk.transpiler.transpile(
-            "SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB
-        )
+        result = tk.transpiler.transpile("SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.source_dialect == Dialect.DATABRICKS
         assert result.target_dialect == Dialect.DUCKDB
 
     def test_transpile_empty_result_fallback(self, tk):
         # Edge case: transpile should handle gracefully.
-        result = tk.transpiler.transpile(
-            "SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB
-        )
+        result = tk.transpiler.transpile("SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.output_sql
 
 
@@ -314,9 +291,7 @@ class TestNormalisationContract:
     """Normalizer protocol: normalize()."""
 
     def test_whitespace_normalisation(self, tk):
-        norm = tk.normalizer.normalize(
-            "SELECT   a,   b   FROM   t", Dialect.DATABRICKS
-        )
+        norm = tk.normalizer.normalize("SELECT   a,   b   FROM   t", Dialect.DATABRICKS)
         # Normalised SQL should not have excess whitespace.
         assert "   " not in norm.normalized_sql
 
@@ -329,9 +304,7 @@ class TestNormalisationContract:
         assert "/*" not in norm.normalized_sql
 
     def test_keyword_uppercasing(self, tk):
-        norm = tk.normalizer.normalize(
-            "select a from t where x = 1", Dialect.DATABRICKS
-        )
+        norm = tk.normalizer.normalize("select a from t where x = 1", Dialect.DATABRICKS)
         # Keywords should be normalized (sqlglot uppercases them).
         assert "SELECT" in norm.normalized_sql
         assert "FROM" in norm.normalized_sql
@@ -508,36 +481,26 @@ class TestSafetyGuardContract:
         assert "DELETE_WITHOUT_WHERE" in types
 
     def test_delete_with_where_safe(self, tk):
-        result = tk.safety_guard.check(
-            "DELETE FROM users WHERE id = 5", Dialect.DATABRICKS
-        )
+        result = tk.safety_guard.check("DELETE FROM users WHERE id = 5", Dialect.DATABRICKS)
         assert result.is_safe is True
 
     def test_grant_detected(self, tk):
-        result = tk.safety_guard.check(
-            "GRANT SELECT ON t TO user1", Dialect.DATABRICKS
-        )
+        result = tk.safety_guard.check("GRANT SELECT ON t TO user1", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "GRANT" in types
 
     def test_insert_overwrite_no_partition(self, tk):
-        result = tk.safety_guard.check(
-            "INSERT OVERWRITE TABLE t SELECT * FROM src", Dialect.DATABRICKS
-        )
+        result = tk.safety_guard.check("INSERT OVERWRITE TABLE t SELECT * FROM src", Dialect.DATABRICKS)
         assert result.is_safe is False
 
     def test_multi_statement_catches_dangerous(self, tk):
-        result = tk.safety_guard.check(
-            "SELECT 1; DROP TABLE users", Dialect.DATABRICKS
-        )
+        result = tk.safety_guard.check("SELECT 1; DROP TABLE users", Dialect.DATABRICKS)
         assert result.is_safe is False
         assert result.checked_statements == 2
 
     def test_create_table_allowed_by_default(self, tk):
-        result = tk.safety_guard.check(
-            "CREATE TABLE t (id INT)", Dialect.DATABRICKS
-        )
+        result = tk.safety_guard.check("CREATE TABLE t (id INT)", Dialect.DATABRICKS)
         assert result.is_safe is True
 
     def test_create_table_blocked_when_disallowed(self, tk):
@@ -574,12 +537,14 @@ class TestRewritingContract:
     def test_simple_rewrite(self, tk):
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM main.public.orders",
-            [RewriteRule(
-                source_catalog="main",
-                source_schema="public",
-                target_catalog="dev",
-                target_schema="staging",
-            )],
+            [
+                RewriteRule(
+                    source_catalog="main",
+                    source_schema="public",
+                    target_catalog="dev",
+                    target_schema="staging",
+                )
+            ],
             Dialect.DATABRICKS,
         )
         assert "dev" in result.rewritten_sql
@@ -589,10 +554,12 @@ class TestRewritingContract:
     def test_unqualified_table_gets_target(self, tk):
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM orders",
-            [RewriteRule(
-                target_catalog="prod",
-                target_schema="analytics",
-            )],
+            [
+                RewriteRule(
+                    target_catalog="prod",
+                    target_schema="analytics",
+                )
+            ],
             Dialect.DATABRICKS,
         )
         assert "prod" in result.rewritten_sql
@@ -601,12 +568,14 @@ class TestRewritingContract:
     def test_no_match_unchanged(self, tk):
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM other_catalog.other_schema.t",
-            [RewriteRule(
-                source_catalog="main",
-                source_schema="public",
-                target_catalog="dev",
-                target_schema="staging",
-            )],
+            [
+                RewriteRule(
+                    source_catalog="main",
+                    source_schema="public",
+                    target_catalog="dev",
+                    target_schema="staging",
+                )
+            ],
             Dialect.DATABRICKS,
         )
         assert len(result.tables_unchanged) > 0
@@ -619,12 +588,14 @@ class TestRewritingContract:
     def test_multi_statement_rewrite(self, tk):
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM main.pub.t1; SELECT * FROM main.pub.t2",
-            [RewriteRule(
-                source_catalog="main",
-                source_schema="pub",
-                target_catalog="dev",
-                target_schema="stg",
-            )],
+            [
+                RewriteRule(
+                    source_catalog="main",
+                    source_schema="pub",
+                    target_catalog="dev",
+                    target_schema="stg",
+                )
+            ],
             Dialect.DATABRICKS,
         )
         assert result.rewritten_sql.count("dev") >= 2
@@ -693,18 +664,12 @@ class TestDeterminismInvariant:
 
     def test_parse_determinism(self, tk):
         sql = "SELECT a, b FROM orders WHERE region = 'US'"
-        results = [
-            tk.parser.parse_one(sql, Dialect.DATABRICKS).single.sql_text
-            for _ in range(50)
-        ]
+        results = [tk.parser.parse_one(sql, Dialect.DATABRICKS).single.sql_text for _ in range(50)]
         assert len(set(results)) == 1
 
     def test_normalisation_determinism(self, tk):
         sql = "select  a,  b  from  orders  where  x = 1"
-        results = [
-            tk.normalizer.normalize(sql, Dialect.DATABRICKS).normalized_sql
-            for _ in range(50)
-        ]
+        results = [tk.normalizer.normalize(sql, Dialect.DATABRICKS).normalized_sql for _ in range(50)]
         assert len(set(results)) == 1
 
     def test_diff_determinism(self, tk):
@@ -723,8 +688,7 @@ class TestDeterminismInvariant:
         sql = "SELECT * FROM z_table JOIN a_table ON z_table.id = a_table.id"
         results = [
             tuple(
-                t.fully_qualified
-                for t in tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS).referenced_tables
+                t.fully_qualified for t in tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS).referenced_tables
             )
             for _ in range(50)
         ]

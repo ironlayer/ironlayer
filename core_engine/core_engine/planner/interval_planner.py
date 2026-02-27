@@ -54,7 +54,7 @@ class PlannerConfig(BaseModel):
     default_lookback_days: int = Field(
         default=30,
         ge=1,
-        description=("Number of days to look back when no watermark exists for an " "incremental model."),
+        description=("Number of days to look back when no watermark exists for an incremental model."),
     )
     cost_per_compute_second: float = Field(
         default=0.0007,

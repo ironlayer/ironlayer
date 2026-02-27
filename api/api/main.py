@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Fail fast: refuse to start in production/staging without JWT_SECRET.
     if settings.platform_env in (PlatformEnv.STAGING, PlatformEnv.PRODUCTION) and not _os.environ.get("JWT_SECRET"):
         raise RuntimeError(
-            f"JWT_SECRET environment variable is required in " f"{settings.platform_env.value} mode. Refusing to start."
+            f"JWT_SECRET environment variable is required in {settings.platform_env.value} mode. Refusing to start."
         )
 
     # Database engine.

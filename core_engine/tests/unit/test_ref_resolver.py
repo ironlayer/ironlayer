@@ -98,7 +98,7 @@ class TestResolveRefs:
         assert result == "SELECT * FROM staging.raw_orders"
 
     def test_multiple_refs(self):
-        sql = "SELECT * FROM {{ ref('orders') }} " "JOIN {{ ref('customers') }} ON 1=1"
+        sql = "SELECT * FROM {{ ref('orders') }} JOIN {{ ref('customers') }} ON 1=1"
         registry = {
             "orders": "staging.raw_orders",
             "customers": "staging.raw_customers",
@@ -138,17 +138,17 @@ class TestResolveRefs:
 
 class TestExtractRefNames:
     def test_extracts_all_ref_names(self):
-        sql = "SELECT * FROM {{ ref('orders') }} " "JOIN {{ ref('customers') }} ON 1=1"
+        sql = "SELECT * FROM {{ ref('orders') }} JOIN {{ ref('customers') }} ON 1=1"
         names = extract_ref_names(sql)
         assert names == ["orders", "customers"]
 
     def test_deduplicates(self):
-        sql = "SELECT * FROM {{ ref('orders') }} " "UNION ALL SELECT * FROM {{ ref('orders') }}"
+        sql = "SELECT * FROM {{ ref('orders') }} UNION ALL SELECT * FROM {{ ref('orders') }}"
         names = extract_ref_names(sql)
         assert names == ["orders"]
 
     def test_preserves_first_occurrence_order(self):
-        sql = "SELECT * FROM {{ ref('b_model') }} " "JOIN {{ ref('a_model') }} ON 1=1"
+        sql = "SELECT * FROM {{ ref('b_model') }} JOIN {{ ref('a_model') }} ON 1=1"
         names = extract_ref_names(sql)
         assert names == ["b_model", "a_model"]
 
@@ -163,6 +163,6 @@ class TestExtractRefNames:
         assert names == ["my_model"]
 
     def test_mixed_quote_styles(self):
-        sql = "SELECT * FROM {{ ref('model_a') }} " 'JOIN {{ ref("model_b") }} ON 1=1'
+        sql = "SELECT * FROM {{ ref('model_a') }} JOIN {{ ref(\"model_b\") }} ON 1=1"
         names = extract_ref_names(sql)
         assert names == ["model_a", "model_b"]

@@ -129,7 +129,7 @@ class QuotaService:
 
         current = await self._quota_repo.get_monthly_event_count(event_type)
         if current >= limit:
-            msg = f"Monthly {event_type} quota exceeded ({current}/{limit}). " "Upgrade your plan for higher limits."
+            msg = f"Monthly {event_type} quota exceeded ({current}/{limit}). Upgrade your plan for higher limits."
             logger.warning(
                 "Quota exceeded: tenant=%s %s=%d/%d",
                 self._tenant_id,

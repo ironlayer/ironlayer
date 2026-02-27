@@ -93,7 +93,7 @@ def _map_dbt_materialization(
         raise DbtManifestError("Ephemeral models should be skipped before mapping materialisation.")
 
     raise DbtManifestError(
-        f"Unrecognised dbt materialisation: '{materialized}'. " f"Expected one of: table, view, incremental, ephemeral."
+        f"Unrecognised dbt materialisation: '{materialized}'. Expected one of: table, view, incremental, ephemeral."
     )
 
 
@@ -194,7 +194,7 @@ def _resolve_dbt_dependencies(
                 deps.append(parts[-1])
             else:
                 logger.debug(
-                    "Skipping unresolvable dependency '%s': not found in " "manifest nodes or sources.",
+                    "Skipping unresolvable dependency '%s': not found in manifest nodes or sources.",
                     uid,
                 )
 
@@ -525,7 +525,7 @@ def load_models_from_dbt_manifest(
         dbt_version = metadata.get("dbt_version", "unknown")
         schema_version = metadata.get("dbt_schema_version", "unknown")
         logger.info(
-            "Parsing dbt manifest (dbt_version=%s, schema_version=%s) " "with %d node(s).",
+            "Parsing dbt manifest (dbt_version=%s, schema_version=%s) with %d node(s).",
             dbt_version,
             schema_version,
             len(nodes),

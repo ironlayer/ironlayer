@@ -255,7 +255,7 @@ class TestHeaderIntegration:
         assert all(isinstance(t, ModelTestDefinition) for t in tests)
 
     def test_header_without_tests(self) -> None:
-        sql = "-- name: analytics.orders_daily\n" "-- kind: FULL_REFRESH\n" "\n" "SELECT * FROM raw.orders\n"
+        sql = "-- name: analytics.orders_daily\n-- kind: FULL_REFRESH\n\nSELECT * FROM raw.orders\n"
         header = parse_yaml_header(sql)
         assert "tests" not in header
 

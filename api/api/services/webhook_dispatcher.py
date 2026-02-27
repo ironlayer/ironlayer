@@ -73,7 +73,7 @@ def _validate_webhook_url(url: str, *, allow_http: bool = False) -> None:
         ip = ipaddress.ip_address(sockaddr[0])
         for network in _BLOCKED_NETWORKS:
             if ip in network:
-                raise ValueError(f"Webhook URL resolves to private/reserved IP {ip} " f"(network {network}): {url}")
+                raise ValueError(f"Webhook URL resolves to private/reserved IP {ip} (network {network}): {url}")
 
 
 _BACKOFF_BASE = 1.0  # seconds: 1, 2, 4

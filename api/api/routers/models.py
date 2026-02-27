@@ -300,10 +300,7 @@ async def get_column_lineage(
     _role: Role = Depends(require_permission(Permission.READ_MODELS)),
     column: str | None = Query(
         default=None,
-        description=(
-            "Specific column to trace.  If omitted, returns lineage for "
-            "all output columns of the model."
-        ),
+        description=("Specific column to trace.  If omitted, returns lineage for all output columns of the model."),
     ),
 ) -> dict[str, Any]:
     """Return column-level lineage for a model.
@@ -352,10 +349,7 @@ async def get_column_lineage(
     if not model_sql:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"No SQL available for model {model_name}. "
-                "Column lineage requires the model's SQL source."
-            ),
+            detail=(f"No SQL available for model {model_name}. Column lineage requires the model's SQL source."),
         )
 
     try:
@@ -376,10 +370,7 @@ async def get_column_lineage(
             available = sorted(lineage_result.column_lineage.keys())
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    f"Column '{column}' not found in model output. "
-                    f"Available columns: {', '.join(available[:20])}"
-                ),
+                detail=(f"Column '{column}' not found in model output. Available columns: {', '.join(available[:20])}"),
             )
 
         nodes = lineage_result.column_lineage[column]

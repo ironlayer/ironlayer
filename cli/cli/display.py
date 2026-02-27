@@ -323,7 +323,7 @@ def display_lineage(
 
     console.print(Panel(tree, title="Lineage", border_style="yellow"))
 
-    console.print(f"[bold]{len(upstream)}[/bold] upstream, " f"[bold]{len(downstream)}[/bold] downstream")
+    console.print(f"[bold]{len(upstream)}[/bold] upstream, [bold]{len(downstream)}[/bold] downstream")
 
 
 # ---------------------------------------------------------------------------
@@ -457,9 +457,7 @@ def display_column_lineage(
             transform_label = f"[{transform_style}]{node.transform_type}[/{transform_style}]"
 
             if node.source_table and node.source_column:
-                source_label = (
-                    f"[blue]{node.source_table}[/blue].[cyan]{node.source_column}[/cyan]"
-                )
+                source_label = f"[blue]{node.source_table}[/blue].[cyan]{node.source_column}[/cyan]"
             elif node.source_column:
                 source_label = f"[cyan]{node.source_column}[/cyan]"
             elif node.source_table:
@@ -480,9 +478,7 @@ def display_column_lineage(
     console.print(", ".join(parts))
 
     if column_lineage.unresolved_columns:
-        console.print(
-            f"[dim]Unresolved: {', '.join(column_lineage.unresolved_columns)}[/dim]"
-        )
+        console.print(f"[dim]Unresolved: {', '.join(column_lineage.unresolved_columns)}[/dim]")
 
 
 def display_cross_model_column_lineage(
@@ -502,16 +498,13 @@ def display_cross_model_column_lineage(
         The :class:`CrossModelColumnLineage` to display.
     """
     tree = Tree(
-        f"[bold yellow]{result.target_model}[/bold yellow]"
-        f".[bold white]{result.target_column}[/bold white]",
+        f"[bold yellow]{result.target_model}[/bold yellow].[bold white]{result.target_column}[/bold white]",
         guide_style="dim",
     )
 
     if not result.lineage_path:
         tree.add("[dim]no lineage path found[/dim]")
-        console.print(
-            Panel(tree, title="Cross-Model Column Lineage", border_style="yellow")
-        )
+        console.print(Panel(tree, title="Cross-Model Column Lineage", border_style="yellow"))
         return
 
     # Group lineage nodes by source table for cleaner display.
@@ -525,15 +518,9 @@ def display_cross_model_column_lineage(
 
         for node in nodes:
             transform_style = _TRANSFORM_STYLES.get(node.transform_type, "white")
-            col_label = (
-                f"[cyan]{node.source_column}[/cyan]"
-                if node.source_column
-                else "[dim]?[/dim]"
-            )
+            col_label = f"[cyan]{node.source_column}[/cyan]" if node.source_column else "[dim]?[/dim]"
             transform_label = f"[{transform_style}]{node.transform_type}[/{transform_style}]"
             table_branch.add(f"{col_label}  ({transform_label})")
 
-    console.print(
-        Panel(tree, title="Cross-Model Column Lineage", border_style="yellow")
-    )
+    console.print(Panel(tree, title="Cross-Model Column Lineage", border_style="yellow"))
     console.print(f"[bold]{len(result.lineage_path)}[/bold] lineage hop(s) traced")

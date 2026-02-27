@@ -123,7 +123,7 @@ class ReconciliationService:
                     discrepancy_type=discrepancy_type,
                 )
                 logger.warning(
-                    "Reconciliation discrepancy for run %s model %s: " "control-plane=%s warehouse=%s type=%s",
+                    "Reconciliation discrepancy for run %s model %s: control-plane=%s warehouse=%s type=%s",
                     run.run_id,
                     run.model_name,
                     expected,

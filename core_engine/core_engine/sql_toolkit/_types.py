@@ -211,9 +211,7 @@ class ParseResult:
     def single(self) -> SqlNode:
         """Return the single statement, or raise if zero / multiple."""
         if len(self.statements) != 1:
-            raise ValueError(
-                f"Expected exactly 1 statement, got {len(self.statements)}"
-            )
+            raise ValueError(f"Expected exactly 1 statement, got {len(self.statements)}")
         return self.statements[0]
 
 

@@ -159,7 +159,9 @@ def scrub_dict(data: dict[str, Any], *, deep: bool = True) -> dict[str, Any]:
                 (
                     scrub_dict(item, deep=True)
                     if isinstance(item, dict)
-                    else scrub_pii(item) if isinstance(item, str) else item
+                    else scrub_pii(item)
+                    if isinstance(item, str)
+                    else item
                 )
                 for item in value
             ]
@@ -187,9 +189,7 @@ def anonymize_identifier(identifier: str, salt: str = "") -> str:
         A 16-character hex digest (truncated for compactness).
     """
     if not salt:
-        logger.warning(
-            "anonymize_identifier called without a salt — hashes may be " "vulnerable to rainbow table attacks"
-        )
+        logger.warning("anonymize_identifier called without a salt — hashes may be vulnerable to rainbow table attacks")
     hasher = hashlib.sha256()
     hasher.update(salt.encode("utf-8"))
     hasher.update(identifier.encode("utf-8"))

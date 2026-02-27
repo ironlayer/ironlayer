@@ -327,7 +327,7 @@ class TestDAGConstruction:
         # Every edge (u -> v) must have u before v.
         for u, v in dag.edges:
             assert index[u] < index[v], (
-                f"Topological order violated: {u} (pos {index[u]}) " f"should come before {v} (pos {index[v]})"
+                f"Topological order violated: {u} (pos {index[u]}) should come before {v} (pos {index[v]})"
             )
 
     def test_no_cycles(self, loaded_models: list[ModelDefinition]) -> None:
@@ -1098,9 +1098,7 @@ WHERE event_id IS NOT NULL
 
         # Verify tables were created
         conn = duckdb_executor._get_connection()
-        tables = conn.execute(
-            "SELECT table_name FROM information_schema.tables " "WHERE table_schema = 'main'"
-        ).fetchall()
+        tables = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()
         table_names = {row[0] for row in tables}
         assert "staging_events_clean" in table_names
         assert "analytics_orders_daily" in table_names
@@ -1229,7 +1227,7 @@ GROUP BY user_id
         assert "new model added" in cohort_step.reason
 
         # Execute the step
-        sql = "SELECT 10 AS user_id, CAST('2025-01-15' AS DATE) AS cohort_date, " "42 AS first_week_events"
+        sql = "SELECT 10 AS user_id, CAST('2025-01-15' AS DATE) AS cohort_date, 42 AS first_week_events"
         record = duckdb_executor.execute_step(cohort_step, sql, parameters={})
         assert record.status == RunStatus.SUCCESS
 

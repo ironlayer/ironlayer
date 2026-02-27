@@ -17,64 +17,45 @@ concurrency:
 env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
-  POETRY_VERSION: "1.7.1"
+  UV_VERSION: "0.6"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Lint: ruff, black, mypy across all Python packages
+  # Lint: ruff (check + format), mypy across all Python packages
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-lint-${{ hashFiles('**/poetry.lock', '**/pyproject.toml') }}
-          restore-keys: ${{ runner.os }}-poetry-lint-
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../ai_engine && poetry install --no-interaction
-          cd ../api && poetry install --no-interaction
-          cd ../cli && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Lint with ruff
-        run: |
-          cd core_engine && poetry run ruff check core_engine/
-          cd ../ai_engine && poetry run ruff check ai_engine/
-          cd ../api && poetry run ruff check api/
-          cd ../cli && poetry run ruff check cli/
+        run: uv run ruff check core_engine/ ai_engine/ api/ cli/
 
-      - name: Check formatting with black
-        run: |
-          cd core_engine && poetry run black --check core_engine/ tests/
-          cd ../ai_engine && poetry run black --check ai_engine/ tests/
-          cd ../api && poetry run black --check api/ tests/
-          cd ../cli && poetry run black --check cli/ tests/
+      - name: Check formatting with ruff
+        run: uv run ruff format --check core_engine/ ai_engine/ api/ cli/
 
       - name: Run mypy (core_engine)
-        run: cd core_engine && poetry run mypy core_engine/
+        run: uv run --package ironlayer-core mypy core_engine/
 
       - name: Run mypy (ai_engine)
-        run: cd ai_engine && poetry run mypy ai_engine/
+        run: uv run --package ai-engine mypy ai_engine/
 
       - name: Run mypy (api)
-        run: cd api && poetry run mypy api/
+        run: uv run --package ironlayer-api mypy api/
 
       - name: Run mypy (cli)
-        run: cd cli && poetry run mypy cli/
+        run: uv run --package ironlayer mypy cli/
 
   # ---------------------------------------------------------------------------
   # Test: core engine (unit + integration with Postgres)
@@ -99,31 +80,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-core-${{ hashFiles('core_engine/pyproject.toml', 'core_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-core-
-
-      - name: Install core engine
-        run: cd core_engine && poetry install --no-interaction
+      - name: Install dependencies
+        run: uv sync --all-packages
 
       - name: Run unit tests
-        run: cd core_engine && poetry run pytest tests/unit/ -v --cov=core_engine --cov-report=term-missing --cov-fail-under=60
+        run: uv run --package ironlayer-core pytest core_engine/tests/unit/ -v --cov=core_engine --cov-report=term-missing --cov-fail-under=60
 
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+asyncpg://ironlayer:ironlayer_test@localhost:5432/ironlayer_test
-        run: cd core_engine && poetry run pytest tests/integration/ -v
+        run: uv run --package ironlayer-core pytest core_engine/tests/integration/ -v
 
   # ---------------------------------------------------------------------------
   # Test: AI engine
@@ -133,26 +107,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-ai-${{ hashFiles('ai_engine/pyproject.toml', 'ai_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-ai-
-
-      - name: Install AI engine
-        run: cd ai_engine && poetry install --no-interaction
+      - name: Install dependencies
+        run: uv sync --all-packages
 
       - name: Run tests
-        run: cd ai_engine && poetry run pytest tests/ -v --cov=ai_engine --cov-report=term-missing --cov-fail-under=60
+        run: uv run --package ai-engine pytest ai_engine/tests/ -v --cov=ai_engine --cov-report=term-missing --cov-fail-under=60
 
   # ---------------------------------------------------------------------------
   # Test: API
@@ -162,29 +129,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-api-${{ hashFiles('api/pyproject.toml', 'api/poetry.lock', 'core_engine/pyproject.toml', 'core_engine/poetry.lock', 'ai_engine/pyproject.toml', 'ai_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-api-
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../ai_engine && poetry install --no-interaction
-          cd ../api && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Run tests
-        run: cd api && poetry run pytest tests/ -v --cov=api --cov-report=term-missing --cov-fail-under=60
+        run: uv run --package ironlayer-api pytest api/tests/ -v --cov=api --cov-report=term-missing --cov-fail-under=60
 
   # ---------------------------------------------------------------------------
   # Test: CLI
@@ -194,28 +151,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-cli-${{ hashFiles('cli/pyproject.toml', 'cli/poetry.lock', 'core_engine/pyproject.toml', 'core_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-cli-
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../cli && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Run tests
-        run: cd cli && poetry run pytest tests/ -v --cov=cli --cov-report=term-missing --cov-fail-under=60
+        run: uv run --package ironlayer pytest cli/tests/ -v --cov=cli --cov-report=term-missing --cov-fail-under=60
 
   # ---------------------------------------------------------------------------
   # Test: Frontend (lint, typecheck, unit tests)
@@ -268,31 +216,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-determinism-${{ hashFiles('core_engine/pyproject.toml', 'core_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-determinism-
-
-      - name: Install core engine
-        run: cd core_engine && poetry install --no-interaction
+      - name: Install dependencies
+        run: uv sync --all-packages
 
       - name: Run planner determinism tests
         run: |
-          cd core_engine && poetry run pytest \
-            tests/unit/test_interval_planner.py::TestDeterminism \
-            tests/unit/test_plan_serializer.py::TestSerializePlan::test_deterministic_output \
-            tests/unit/test_plan_serializer.py::TestSerializePlan::test_keys_are_sorted \
-            tests/integration/test_planner_determinism.py \
+          uv run --package ironlayer-core pytest \
+            core_engine/tests/unit/test_interval_planner.py::TestDeterminism \
+            core_engine/tests/unit/test_plan_serializer.py::TestSerializePlan::test_deterministic_output \
+            core_engine/tests/unit/test_plan_serializer.py::TestSerializePlan::test_keys_are_sorted \
+            core_engine/tests/integration/test_planner_determinism.py \
             -v --tb=short
 
   # ---------------------------------------------------------------------------
@@ -319,31 +260,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-e2e-${{ hashFiles('core_engine/pyproject.toml', 'core_engine/poetry.lock', 'api/pyproject.toml', 'api/poetry.lock', 'ai_engine/pyproject.toml', 'ai_engine/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-e2e-
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../ai_engine && poetry install --no-interaction
-          cd ../api && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Run E2E tests
         env:
           DATABASE_URL: postgresql+asyncpg://ironlayer:ironlayer_e2e@localhost:5432/ironlayer_e2e
-        run: cd core_engine && poetry run pytest tests/e2e/ -v --tb=short
+        run: uv run --package ironlayer-core pytest core_engine/tests/e2e/ -v --tb=short
 
   # ---------------------------------------------------------------------------
   # Test: Root integration tests (failure recovery, cross-package)
@@ -353,30 +284,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
-
-      - name: Cache Poetry virtualenvs
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-integration-${{ hashFiles('core_engine/pyproject.toml', 'core_engine/poetry.lock', 'api/pyproject.toml', 'api/poetry.lock') }}
-          restore-keys: ${{ runner.os }}-poetry-integration-
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../ai_engine && poetry install --no-interaction
-          cd ../api && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Run integration tests
-        run: |
-          cd api && poetry run pytest ../tests/integration/ -v --tb=short
+        run: uv run --package ironlayer-api pytest tests/integration/ -v --tb=short
 
   # ---------------------------------------------------------------------------
   # Security scanning (pip-audit, Trivy, Bandit)
@@ -386,31 +306,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          version: ${{ env.UV_VERSION }}
 
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          cd core_engine && poetry install --no-interaction
-          cd ../ai_engine && poetry install --no-interaction
-          cd ../api && poetry install --no-interaction
+        run: uv sync --all-packages
 
       - name: Install pip-audit
-        run: pip install pip-audit
+        run: uv pip install pip-audit
 
       - name: Scan core_engine dependencies
-        run: cd core_engine && pip-audit --desc
-
-      - name: Scan api dependencies
-        run: cd api && pip-audit --desc
-
-      - name: Scan ai_engine dependencies
-        run: cd ai_engine && pip-audit --desc
+        run: uv run pip-audit --desc
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.28.0
@@ -423,10 +334,10 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Install bandit
-        run: pip install bandit[toml]
+        run: uv pip install bandit[toml]
 
       - name: Run bandit security scan
-        run: bandit -r core_engine/core_engine api/api ai_engine/ai_engine -c pyproject.toml -f json -o bandit-report.json --severity-level medium || true
+        run: uv run bandit -r core_engine/core_engine api/api ai_engine/ai_engine -c pyproject.toml -f json -o bandit-report.json --severity-level medium || true
 
       - name: Upload bandit report
         uses: actions/upload-artifact@v4
@@ -436,7 +347,7 @@ jobs:
           path: bandit-report.json
 
       - name: Check bandit (fail on high severity)
-        run: bandit -r core_engine/core_engine api/api ai_engine/ai_engine -c pyproject.toml --severity-level high
+        run: uv run bandit -r core_engine/core_engine api/api ai_engine/ai_engine -c pyproject.toml --severity-level high
 
   # ---------------------------------------------------------------------------
   # Build & push Docker images to Azure Container Registry
@@ -644,27 +555,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          version: ${{ env.UV_VERSION }}
 
-      - name: Install Poetry
-        run: pip install poetry==${{ env.POETRY_VERSION }}
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Build CLI wheel
-        run: cd cli && poetry build
+        run: cd cli && uv build
 
       - name: Install API dependencies
-        run: |
-          cd api && poetry install --only main --no-interaction
+        run: uv sync --all-packages
 
       - name: Export OpenAPI spec
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           cd api
-          poetry run python -c "
+          uv run --package ironlayer-api python -c "
           import json
           from api.main import app
           spec = app.openapi()

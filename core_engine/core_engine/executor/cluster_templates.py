@@ -83,7 +83,7 @@ def get_cluster_spec(
     """
     key = size.lower()
     if key not in _TEMPLATES:
-        raise ValueError(f"Unknown cluster size '{size}'. " f"Valid sizes: {sorted(_TEMPLATES.keys())}")
+        raise ValueError(f"Unknown cluster size '{size}'. Valid sizes: {sorted(_TEMPLATES.keys())}")
     spec = copy.deepcopy(_TEMPLATES[key])
     if overrides:
         spec.update(overrides)
@@ -105,7 +105,7 @@ def get_cost_rate(size: str) -> float:
     """
     key = size.lower()
     if key not in _COST_RATES:
-        raise ValueError(f"Unknown cluster size '{size}'. " f"Valid sizes: {sorted(_COST_RATES.keys())}")
+        raise ValueError(f"Unknown cluster size '{size}'. Valid sizes: {sorted(_COST_RATES.keys())}")
     return _COST_RATES[key]
 
 

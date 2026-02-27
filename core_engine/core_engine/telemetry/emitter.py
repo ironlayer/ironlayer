@@ -131,9 +131,7 @@ def _validate_telemetry_url(url: str) -> None:
         try:
             addr = ipaddress.ip_address(ip_str)
         except ValueError as exc:
-            raise ValueError(
-                f"Invalid IP address '{ip_str}' from DNS resolution of " f"telemetry endpoint: {exc}"
-            ) from exc
+            raise ValueError(f"Invalid IP address '{ip_str}' from DNS resolution of telemetry endpoint: {exc}") from exc
 
         if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
             raise ValueError(

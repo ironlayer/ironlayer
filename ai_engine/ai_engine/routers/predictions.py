@@ -102,14 +102,14 @@ class PredictCostTrendRequest(BaseModel):
     @classmethod
     def validate_recent_costs(cls, v: list[float]) -> list[float]:
         if len(v) > _MAX_COST_ENTRIES:
-            raise ValueError(f"recent_costs has {len(v)} entries; " f"maximum is {_MAX_COST_ENTRIES}")
+            raise ValueError(f"recent_costs has {len(v)} entries; maximum is {_MAX_COST_ENTRIES}")
         return v
 
     @field_validator("historical_costs")
     @classmethod
     def validate_historical_costs(cls, v: list[float]) -> list[float]:
         if len(v) > _MAX_COST_ENTRIES:
-            raise ValueError(f"historical_costs has {len(v)} entries; " f"maximum is {_MAX_COST_ENTRIES}")
+            raise ValueError(f"historical_costs has {len(v)} entries; maximum is {_MAX_COST_ENTRIES}")
         return v
 
 

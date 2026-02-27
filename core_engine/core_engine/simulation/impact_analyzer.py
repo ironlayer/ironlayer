@@ -413,7 +413,7 @@ class ImpactAnalyzer:
         breaking_count = len(direct) + len(transitive)
 
         parts: list[str] = [
-            f"Removing '{model_name}' would affect " f"{len(direct)} direct and {len(transitive)} transitive models."
+            f"Removing '{model_name}' would affect {len(direct)} direct and {len(transitive)} transitive models."
         ]
         if orphaned:
             parts.append(f"{len(orphaned)} model(s) would be orphaned: {', '.join(orphaned)}.")

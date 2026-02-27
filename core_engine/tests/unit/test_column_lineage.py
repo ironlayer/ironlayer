@@ -58,9 +58,7 @@ class TestDirectColumn:
 
     def test_single_column_trace(self, toolkit):
         sql = "SELECT id, name FROM users"
-        nodes = toolkit.lineage_analyzer.trace_single_column(
-            "id", sql, Dialect.DATABRICKS
-        )
+        nodes = toolkit.lineage_analyzer.trace_single_column("id", sql, Dialect.DATABRICKS)
         assert len(nodes) >= 1
         assert nodes[0].column == "id"
 
@@ -231,9 +229,7 @@ class TestSubquery:
 class TestTransformClassification:
     def test_direct_is_direct(self, toolkit):
         sql = "SELECT id FROM users"
-        nodes = toolkit.lineage_analyzer.trace_single_column(
-            "id", sql, Dialect.DATABRICKS
-        )
+        nodes = toolkit.lineage_analyzer.trace_single_column("id", sql, Dialect.DATABRICKS)
         # A plain column reference should be classified as direct.
         assert any(n.transform_type == "direct" for n in nodes)
 
@@ -254,18 +250,14 @@ class TestTransformClassification:
 class TestErrorHandling:
     def test_invalid_sql_raises(self, toolkit):
         with pytest.raises(SqlLineageError):
-            toolkit.lineage_analyzer.trace_column_lineage(
-                "NOT VALID SQL AT ALL ;;;", Dialect.DATABRICKS
-            )
+            toolkit.lineage_analyzer.trace_column_lineage("NOT VALID SQL AT ALL ;;;", Dialect.DATABRICKS)
 
     def test_nonexistent_column_returns_empty_or_error(self, toolkit):
         sql = "SELECT id FROM users"
         # Tracing a column that doesn't exist should either raise or
         # return empty — both are acceptable.
         try:
-            nodes = toolkit.lineage_analyzer.trace_single_column(
-                "nonexistent_column", sql, Dialect.DATABRICKS
-            )
+            nodes = toolkit.lineage_analyzer.trace_single_column("nonexistent_column", sql, Dialect.DATABRICKS)
             # If it doesn't raise, it should at least return something.
             assert isinstance(nodes, tuple)
         except (SqlLineageError, Exception):
@@ -289,9 +281,7 @@ class TestSchemaAssistedLineage:
         sql = "SELECT id, name FROM users"
         schema = {"users": {"id": "INT", "name": "STRING", "email": "STRING"}}
 
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS, schema=schema
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS, schema=schema)
 
         assert "id" in result.column_lineage
         assert "name" in result.column_lineage
@@ -300,9 +290,7 @@ class TestSchemaAssistedLineage:
         sql = "SELECT id FROM users"
         schema = {"users": {"id": "INT", "name": "STRING"}}
 
-        nodes = toolkit.lineage_analyzer.trace_single_column(
-            "id", sql, Dialect.DATABRICKS, schema=schema
-        )
+        nodes = toolkit.lineage_analyzer.trace_single_column("id", sql, Dialect.DATABRICKS, schema=schema)
         assert len(nodes) >= 1
 
 
@@ -321,9 +309,7 @@ class TestSelectStarExpansion:
         """Without schema, ``*`` cannot be expanded and should appear
         in the output as-is (or be marked unresolved)."""
         sql = "SELECT * FROM mystery_table"
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS)
 
         # ``*`` should NOT expand without schema info.
         assert isinstance(result, ColumnLineageResult)
@@ -337,9 +323,7 @@ class TestSelectStarExpansion:
         sql = "SELECT * FROM users"
         schema = {"users": {"id": "INT", "name": "STRING", "email": "STRING"}}
 
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS, schema=schema
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS, schema=schema)
 
         # All three schema columns should appear in the lineage.
         assert "id" in result.column_lineage
@@ -365,9 +349,7 @@ class TestSelectStarExpansion:
             "customers": {"id": "INT", "name": "STRING"},
         }
 
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS, schema=schema
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS, schema=schema)
 
         # Columns from both tables should be present.
         assert "amount" in result.column_lineage
@@ -394,9 +376,7 @@ class TestSelectStarExpansion:
         """
         schema = {"users": {"id": "INT", "name": "STRING", "status": "STRING"}}
 
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS, schema=schema
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS, schema=schema)
 
         # The CTE outputs id and name — ``SELECT * FROM active`` should
         # resolve to those two columns.
@@ -410,9 +390,7 @@ class TestSelectStarExpansion:
         sql = "SELECT *, amount * 1.1 AS adjusted FROM orders"
         schema = {"orders": {"id": "INT", "amount": "DECIMAL"}}
 
-        result = toolkit.lineage_analyzer.trace_column_lineage(
-            sql, Dialect.DATABRICKS, schema=schema
-        )
+        result = toolkit.lineage_analyzer.trace_column_lineage(sql, Dialect.DATABRICKS, schema=schema)
 
         # The explicit column ``adjusted`` should always be present.
         assert "adjusted" in result.column_lineage
@@ -433,9 +411,7 @@ class TestCrossModelLineage:
         from core_engine.graph.column_lineage import compute_model_column_lineage
 
         sql = "SELECT id, name FROM users"
-        result = compute_model_column_lineage(
-            "staging.users", sql, Dialect.DATABRICKS
-        )
+        result = compute_model_column_lineage("staging.users", sql, Dialect.DATABRICKS)
 
         assert result.model_name == "staging.users"
         assert "id" in result.column_lineage
@@ -454,9 +430,7 @@ class TestCrossModelLineage:
 
         model_sql_map = {
             "raw.orders": "SELECT id, amount, customer_id FROM source_table",
-            "staging.orders_clean": (
-                "SELECT id, amount FROM raw.orders WHERE amount > 0"
-            ),
+            "staging.orders_clean": ("SELECT id, amount FROM raw.orders WHERE amount > 0"),
         }
 
         result = trace_column_across_dag(

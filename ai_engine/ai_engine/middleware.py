@@ -191,7 +191,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     self._max_size,
                 )
                 return JSONResponse(
-                    {"detail": (f"Request body too large. " f"Maximum: {self._max_size} bytes")},
+                    {"detail": (f"Request body too large. Maximum: {self._max_size} bytes")},
                     status_code=413,
                 )
         return await call_next(request)

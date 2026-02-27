@@ -491,8 +491,7 @@ class InvoiceService:
         ]
         for item in data.get("line_items", []):
             lines.append(
-                f"{item['description']:<30} {item['quantity']:>6} "
-                f"${item['unit_price']:>9.2f} ${item['amount']:>9.2f}"
+                f"{item['description']:<30} {item['quantity']:>6} ${item['unit_price']:>9.2f} ${item['amount']:>9.2f}"
             )
         lines.extend(
             [

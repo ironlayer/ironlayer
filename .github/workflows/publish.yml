@@ -20,19 +20,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Install Poetry
-        run: |
-          pip install --upgrade pip
-          pip install poetry
+      - name: Set up Python
+        run: uv python install 3.11
 
       - name: Build core engine
         working-directory: core_engine
-        run: poetry build
+        run: uv build
 
       - name: Publish core engine to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -52,27 +48,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        run: uv python install 3.11
 
-      - name: Install Poetry
-        run: |
-          pip install --upgrade pip
-          pip install poetry
-
-      - name: Swap path dependency to version specifier for PyPI
+      - name: Pin ironlayer-core version for PyPI
         working-directory: cli
         run: |
-          # Replace the local path dependency with a PyPI version specifier.
-          # The pyproject.toml has: ironlayer-core = {path = "../core_engine", develop = true}
-          # We need:               ironlayer-core = ">=0.1.0"
-          sed -i 's|ironlayer-core = {path = "\.\./core_engine", develop = true}|ironlayer-core = ">=0.2.0"|' pyproject.toml
+          # In the workspace, ironlayer-core is bare (resolved via [tool.uv.sources]).
+          # For PyPI, we need a version constraint.
+          sed -i 's|"ironlayer-core",|"ironlayer-core>=0.2.0",|' pyproject.toml
 
       - name: Build CLI
         working-directory: cli
-        run: poetry build
+        run: uv build
 
       - name: Publish CLI to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,13 +1,11 @@
-[tool.poetry]
+[project]
 name = "ironlayer-core"
 version = "0.2.0"
 description = "IronLayer Core Engine — deterministic SQL transformation planning and execution"
-authors = ["IronLayer Team"]
+requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://ironlayer.app"
-repository = "https://github.com/ironlayer/ironlayer"
-documentation = "https://docs.ironlayer.app"
+authors = [{name = "IronLayer Team"}]
 keywords = ["sql", "databricks", "data-engineering", "transformations", "incremental"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,33 +17,44 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
-packages = [{include = "core_engine"}]
+dependencies = [
+    "sqlglot==25.34.1",  # Pinned: last MIT-licensed version before Fivetran acquisition risk
+    "networkx>=3.2,<4.0",
+    "sqlalchemy[asyncio]>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "psycopg[binary]>=3.1,<4.0",
+    "asyncpg>=0.29,<1.0",
+    "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.1,<3.0",
+    "duckdb>=1.1,<2.0",
+    "databricks-sdk>=0.30,<1.0",
+    "rich>=13.0,<14.0",
+    "cryptography>=46.0.5,<47.0",
+    "aiosqlite>=0.20,<1.0",
+    "pyyaml>=6.0,<7.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-sqlglot = "==25.34.1"  # Pinned: last MIT-licensed version before Fivetran acquisition risk
-networkx = ">=3.2,<4.0"
-sqlalchemy = {version = ">=2.0,<3.0", extras = ["asyncio"]}
-alembic = ">=1.13,<2.0"
-psycopg = {version = ">=3.1,<4.0", extras = ["binary"]}
-asyncpg = ">=0.29,<1.0"
-pydantic = ">=2.5,<3.0"
-pydantic-settings = ">=2.1,<3.0"
-duckdb = ">=1.1,<2.0"
-databricks-sdk = ">=0.30,<1.0"
-rich = ">=13.0,<14.0"
-cryptography = ">=46.0.5,<47.0"
-aiosqlite = ">=0.20,<1.0"
-pyyaml = ">=6.0,<7.0"
+[project.urls]
+Homepage = "https://ironlayer.app"
+Repository = "https://github.com/ironlayer/ironlayer"
+Documentation = "https://docs.ironlayer.app"
 
-[tool.poetry.group.dev.dependencies]
-pytest = ">=8.0"
-pytest-cov = ">=4.1"
-pytest-asyncio = ">=0.23"
-pytest-mock = ">=3.12"
-ruff = ">=0.2"
-black = ">=24.0"
-mypy = ">=1.8"
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.12",
+    "ruff>=0.2",
+    "mypy>=1.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core_engine"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -60,7 +69,3 @@ warn_return_any = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--cov=core_engine --cov-report=term-missing"
-
-[build-system]
-requires = ["poetry-core>=1.8"]
-build-backend = "poetry.core.masonry.api"

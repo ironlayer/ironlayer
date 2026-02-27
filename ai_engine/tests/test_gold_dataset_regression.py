@@ -66,9 +66,9 @@ class TestGoldDatasetIntegrity:
             assert entry.id, f"Entry missing id"
             assert entry.category, f"Entry {entry.id} missing category"
             assert entry.new_sql, f"Entry {entry.id} missing new_sql"
-            assert (
-                entry.expected_change_type in _CHANGE_TYPE_LABELS
-            ), f"Entry {entry.id} has invalid change_type: {entry.expected_change_type}"
+            assert entry.expected_change_type in _CHANGE_TYPE_LABELS, (
+                f"Entry {entry.id} has invalid change_type: {entry.expected_change_type}"
+            )
 
     def test_all_categories_represented(self) -> None:
         ds = GoldDataset()
@@ -107,9 +107,9 @@ class TestGoldDatasetIntegrity:
         }
         for category, min_count in minimums.items():
             entries = ds.get_by_category(category)
-            assert (
-                len(entries) >= min_count
-            ), f"Category '{category}' has {len(entries)} entries, expected >= {min_count}"
+            assert len(entries) >= min_count, (
+                f"Category '{category}' has {len(entries)} entries, expected >= {min_count}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -145,9 +145,9 @@ class TestClassifierRegression:
         the full 85% F1 target. This gate catches severe regressions.
         """
         report = self.harness.run_full_evaluation(self.dataset)
-        assert (
-            report.classifier_accuracy >= 0.60
-        ), f"Classifier accuracy {report.classifier_accuracy:.4f} < 0.60 threshold"
+        assert report.classifier_accuracy >= 0.60, (
+            f"Classifier accuracy {report.classifier_accuracy:.4f} < 0.60 threshold"
+        )
 
     def test_no_cost_predictor_crashes(self) -> None:
         """Cost predictor should not crash on any gold dataset entry."""

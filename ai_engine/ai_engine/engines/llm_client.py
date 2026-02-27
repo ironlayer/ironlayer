@@ -235,7 +235,7 @@ class LLMClient:
             return self._client
 
         raise LLMDisabledError(
-            "No LLM API key available. Provide a key in Settings or contact " "your platform administrator."
+            "No LLM API key available. Provide a key in Settings or contact your platform administrator."
         )
 
     def _call_llm(
