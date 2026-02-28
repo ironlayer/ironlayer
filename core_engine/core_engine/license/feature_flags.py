@@ -49,6 +49,7 @@ class Feature(str, Enum):
     AI_RESPONSE_CACHING = "ai_response_caching"
     AUDIT_LOG = "audit_log"
     RECONCILIATION = "reconciliation"
+    CHECK_ENGINE = "check_engine"
     LLM_BUDGET_GUARDRAILS = "llm_budget_guardrails"
     CREDENTIAL_ENCRYPTION = "credential_encryption"
     RATE_LIMITING = "rate_limiting"
@@ -77,6 +78,7 @@ _TEAM_FEATURES: frozenset[Feature] = _COMMUNITY_FEATURES | frozenset(
         Feature.STRUCTURED_TELEMETRY,
         Feature.API_ACCESS,
         Feature.TEAM_MANAGEMENT,
+        Feature.CHECK_ENGINE,
     }
 )
 

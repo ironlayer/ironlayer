@@ -56,12 +56,14 @@ mcp_app = typer.Typer(
 )
 app.add_typer(mcp_app, name="mcp")
 
-# Register the init and dev commands.
+# Register the init, dev, and check commands.
+from cli.commands.check import check_command  # noqa: E402
 from cli.commands.dev import dev_command  # noqa: E402
 from cli.commands.init import init_command  # noqa: E402
 
 app.command(name="init")(init_command)
 app.command(name="dev")(dev_command)
+app.command(name="check")(check_command)
 
 # Mutable global options populated by the Typer callback.
 _json_output: bool = False
