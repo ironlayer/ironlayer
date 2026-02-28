@@ -7,7 +7,11 @@
 //! The registry function [`build_checker_registry`] returns all available
 //! checkers for the current phase.
 
+pub mod naming;
+pub mod ref_resolver;
 pub mod sql_header;
+pub mod sql_safety;
+pub mod sql_syntax;
 
 use crate::config::CheckConfig;
 use crate::types::{CheckDiagnostic, DiscoveredModel};
@@ -49,8 +53,14 @@ pub trait Checker: Send + Sync {
 /// Build the checker registry containing all available checkers.
 ///
 /// Returns a vector of boxed checker trait objects, one per check category.
-/// Phase 1 includes only the SQL header checker (HDR001-HDR013).
+/// Phase 2 includes: SQL header, SQL syntax, SQL safety, ref resolver, and naming checkers.
 #[must_use]
 pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
-    vec![Box::new(sql_header::SqlHeaderChecker)]
+    vec![
+        Box::new(sql_header::SqlHeaderChecker),
+        Box::new(sql_syntax::SqlSyntaxChecker),
+        Box::new(sql_safety::SqlSafetyChecker),
+        Box::new(ref_resolver::RefResolverChecker),
+        Box::new(naming::NamingChecker),
+    ]
 }

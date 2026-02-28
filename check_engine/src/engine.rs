@@ -1,8 +1,8 @@
 //! Check engine orchestrator — the main entry point for running checks.
 //!
 //! Coordinates file discovery, caching, header parsing, ref extraction,
-//! per-file checks, cross-file checks, and result assembly. In Phase 1
-//! this runs sequentially; Phase 2 introduces rayon parallelism.
+//! per-file checks, cross-file checks, and result assembly. Per-file checks
+//! run in parallel via rayon; cross-file checks run sequentially after.
 //!
 //! Every per-file check dispatch is wrapped in `catch_unwind` so that a
 //! panic in one checker emits an `INTERNAL` diagnostic instead of crashing
@@ -13,6 +13,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Instant;
 
+use rayon::prelude::*;
 use regex::Regex;
 
 use crate::cache::CheckCache;
@@ -72,24 +73,28 @@ impl CheckEngine {
             .map(|f| discover_model(f))
             .collect();
 
-        // 5. Run per-file checks on uncached files (sequential in Phase 1)
-        let mut all_diags: Vec<CheckDiagnostic> = Vec::new();
+        // 5. Run per-file checks in parallel via rayon
         let max_diags = self.config.max_diagnostics;
 
-        for file in &uncached_files {
+        let per_file_results: Vec<(String, String, Vec<CheckDiagnostic>)> = uncached_files
+            .par_iter()
+            .map(|file| {
+                let model = models.iter().find(|m| m.file_path == file.rel_path);
+                let file_diags = self.run_per_file_checks(file, model, &project_type);
+                (file.rel_path.clone(), file.content_hash.clone(), file_diags)
+            })
+            .collect();
+
+        // Collect results and update cache sequentially (cache is not thread-safe)
+        let mut all_diags: Vec<CheckDiagnostic> = Vec::new();
+        for (rel_path, content_hash, file_diags) in per_file_results {
+            cache.update(&rel_path, &content_hash, &file_diags);
+            all_diags.extend(file_diags);
+
             // Early termination at max_diagnostics
             if max_diags > 0 && all_diags.len() >= max_diags {
                 break;
             }
-
-            let model = models.iter().find(|m| m.file_path == file.rel_path);
-
-            let file_diags = self.run_per_file_checks(file, model, &project_type);
-
-            // Update cache with this file's results
-            cache.update(&file.rel_path, &file.content_hash, &file_diags);
-
-            all_diags.extend(file_diags);
         }
 
         // 6. Run cross-file checks (sequential, needs full model list)
