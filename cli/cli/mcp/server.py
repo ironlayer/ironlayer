@@ -15,7 +15,6 @@ Usage::
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -50,7 +49,7 @@ def create_server() -> Any:
 
     server = Server("ironlayer")
 
-    @server.list_tools()
+    @server.list_tools()  # type: ignore[untyped-decorator]
     async def list_tools() -> list[Tool]:
         """Return the list of available IronLayer tools."""
         return [
@@ -62,7 +61,7 @@ def create_server() -> Any:
             for defn in TOOL_DEFINITIONS
         ]
 
-    @server.call_tool()
+    @server.call_tool()  # type: ignore[untyped-decorator]
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         """Dispatch a tool call to the appropriate handler."""
         handler = TOOL_DISPATCH.get(name)
@@ -130,11 +129,10 @@ async def run_sse(host: str = "127.0.0.1", port: int = 3333) -> None:
     """
     _ensure_mcp_installed()
 
+    import uvicorn
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.routing import Mount, Route
-
-    import uvicorn
 
     server = create_server()
     sse_transport = SseServerTransport("/messages/")

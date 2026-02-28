@@ -1,10 +1,6 @@
 """Unit tests for the IronLayer plan PR comment formatter."""
 from __future__ import annotations
 
-import json
-
-import pytest
-
 from format_comment import (
     _aggregate_column_counts,
     _build_impact_graph,
@@ -14,7 +10,6 @@ from format_comment import (
     format_failed,
     format_success,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

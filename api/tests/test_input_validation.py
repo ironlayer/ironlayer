@@ -21,8 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
 from api.config import APISettings
 from api.dependencies import (
     get_admin_session,
@@ -34,9 +32,10 @@ from api.dependencies import (
 )
 from api.main import create_app
 from api.services.ai_client import AIServiceClient
-from api.services.invoice_service import _validate_path_component, _resolve_safe_path
+from api.services.invoice_service import _resolve_safe_path, _validate_path_component
 from api.services.reporting_service import _sanitize_csv_value
 from core_engine.state.repository import _escape_like
+from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Helpers

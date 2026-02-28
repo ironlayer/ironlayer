@@ -19,6 +19,8 @@ Test categories:
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 
 from core_engine.sql_toolkit import (
@@ -29,11 +31,12 @@ from core_engine.sql_toolkit import (
     get_sql_toolkit,
     reset_toolkit,
 )
+from core_engine.sql_toolkit._protocols import SqlToolkit
 from core_engine.sql_toolkit._types import SqlNodeKind
 
 
 @pytest.fixture(autouse=True)
-def _reset_singleton():
+def _reset_singleton() -> Generator[None, None, None]:
     """Ensure each test gets a fresh toolkit (singleton safety)."""
     reset_toolkit()
     yield
@@ -41,7 +44,7 @@ def _reset_singleton():
 
 
 @pytest.fixture()
-def tk():
+def tk() -> SqlToolkit:
     """Return the default SQL toolkit."""
     return get_sql_toolkit()
 
@@ -54,40 +57,40 @@ def tk():
 class TestParsingContract:
     """Parsing protocol: parse_one() and parse_multi()."""
 
-    def test_simple_select(self, tk):
+    def test_simple_select(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_one("SELECT a, b FROM t", Dialect.DATABRICKS)
         assert len(result.statements) == 1
         assert result.single.kind == SqlNodeKind.SELECT
 
-    def test_select_with_cte(self, tk):
+    def test_select_with_cte(self, tk: SqlToolkit) -> None:
         sql = "WITH cte AS (SELECT 1 AS x) SELECT * FROM cte"
         result = tk.parser.parse_one(sql, Dialect.DATABRICKS)
         assert len(result.statements) == 1
 
-    def test_select_with_subquery(self, tk):
+    def test_select_with_subquery(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM (SELECT a FROM t) sub"
         result = tk.parser.parse_one(sql, Dialect.DATABRICKS)
         assert len(result.statements) == 1
 
-    def test_select_union(self, tk):
+    def test_select_union(self, tk: SqlToolkit) -> None:
         sql = "SELECT a FROM t1 UNION ALL SELECT a FROM t2"
         result = tk.parser.parse_one(sql, Dialect.DATABRICKS)
         assert len(result.statements) == 1
 
-    def test_multi_statement(self, tk):
+    def test_multi_statement(self, tk: SqlToolkit) -> None:
         sql = "SELECT 1; SELECT 2; SELECT 3"
         result = tk.parser.parse_multi(sql, Dialect.DATABRICKS)
         assert len(result.statements) == 3
 
-    def test_empty_sql_raises(self, tk):
+    def test_empty_sql_raises(self, tk: SqlToolkit) -> None:
         with pytest.raises(SqlParseError):
             tk.parser.parse_one("", Dialect.DATABRICKS)
 
-    def test_invalid_sql_raises(self, tk):
+    def test_invalid_sql_raises(self, tk: SqlToolkit) -> None:
         with pytest.raises(SqlParseError):
             tk.parser.parse_one("NOT VALID SQL ???", Dialect.DATABRICKS)
 
-    def test_invalid_sql_no_raise(self, tk):
+    def test_invalid_sql_no_raise(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_one(
             "NOT VALID SQL ???",
             Dialect.DATABRICKS,
@@ -96,26 +99,26 @@ class TestParsingContract:
         # Should either return warnings or empty statements — not crash.
         assert result is not None
 
-    def test_parse_result_dialect(self, tk):
+    def test_parse_result_dialect(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_one("SELECT 1", Dialect.DATABRICKS)
         assert result.dialect == Dialect.DATABRICKS
 
-    def test_parse_result_single_property(self, tk):
+    def test_parse_result_single_property(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_one("SELECT 1", Dialect.DATABRICKS)
         node = result.single
         assert node.kind == SqlNodeKind.SELECT
 
-    def test_multi_statement_single_raises(self, tk):
+    def test_multi_statement_single_raises(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_multi("SELECT 1; SELECT 2", Dialect.DATABRICKS)
         with pytest.raises(ValueError, match="Expected exactly 1"):
             _ = result.single
 
-    def test_three_part_name(self, tk):
+    def test_three_part_name(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM catalog.schema.table_name"
         result = tk.parser.parse_one(sql, Dialect.DATABRICKS)
         assert len(result.statements) == 1
 
-    def test_merge_into(self, tk):
+    def test_merge_into(self, tk: SqlToolkit) -> None:
         sql = (
             "MERGE INTO target USING source ON target.id = source.id "
             "WHEN MATCHED THEN UPDATE SET target.val = source.val"
@@ -124,12 +127,12 @@ class TestParsingContract:
         assert len(result.statements) == 1
         assert result.single.kind == SqlNodeKind.MERGE
 
-    def test_create_table(self, tk):
+    def test_create_table(self, tk: SqlToolkit) -> None:
         sql = "CREATE TABLE t (id INT, name STRING)"
         result = tk.parser.parse_one(sql, Dialect.DATABRICKS)
         assert result.single.kind == SqlNodeKind.CREATE
 
-    def test_duckdb_dialect(self, tk):
+    def test_duckdb_dialect(self, tk: SqlToolkit) -> None:
         result = tk.parser.parse_one("SELECT 1", Dialect.DUCKDB)
         assert result.dialect == Dialect.DUCKDB
 
@@ -142,30 +145,30 @@ class TestParsingContract:
 class TestScopeAnalysisContract:
     """Scope analyzer protocol: extract_tables() and extract_columns()."""
 
-    def test_simple_table_extraction(self, tk):
+    def test_simple_table_extraction(self, tk: SqlToolkit) -> None:
         scope = tk.scope_analyzer.extract_tables("SELECT * FROM orders", Dialect.DATABRICKS)
         assert len(scope.referenced_tables) == 1
         assert scope.referenced_tables[0].name == "orders"
 
-    def test_cte_excluded_from_tables(self, tk):
+    def test_cte_excluded_from_tables(self, tk: SqlToolkit) -> None:
         sql = "WITH cte AS (SELECT * FROM raw_data) SELECT * FROM cte"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         table_names = {t.name for t in scope.referenced_tables}
         assert "cte" not in table_names
         assert "raw_data" in table_names
 
-    def test_cte_names_returned(self, tk):
+    def test_cte_names_returned(self, tk: SqlToolkit) -> None:
         sql = "WITH my_cte AS (SELECT 1) SELECT * FROM my_cte"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         assert "my_cte" in scope.cte_names
 
-    def test_subquery_tables_included(self, tk):
+    def test_subquery_tables_included(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM (SELECT * FROM inner_table) sub"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         table_names = {t.name for t in scope.referenced_tables}
         assert "inner_table" in table_names
 
-    def test_three_part_name_parsed(self, tk):
+    def test_three_part_name_parsed(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM my_catalog.my_schema.my_table"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         ref = scope.referenced_tables[0]
@@ -173,13 +176,13 @@ class TestScopeAnalysisContract:
         assert ref.schema == "my_schema"
         assert ref.name == "my_table"
 
-    def test_tables_sorted_deterministically(self, tk):
+    def test_tables_sorted_deterministically(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM z_table JOIN a_table ON z_table.id = a_table.id"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         names = [t.name for t in scope.referenced_tables]
         assert names == sorted(names)
 
-    def test_multiple_ctes(self, tk):
+    def test_multiple_ctes(self, tk: SqlToolkit) -> None:
         sql = "WITH cte_a AS (SELECT * FROM raw_a), cte_b AS (SELECT * FROM raw_b) SELECT * FROM cte_a JOIN cte_b"
         scope = tk.scope_analyzer.extract_tables(sql, Dialect.DATABRICKS)
         table_names = {t.name for t in scope.referenced_tables}
@@ -188,25 +191,25 @@ class TestScopeAnalysisContract:
         assert "cte_a" not in table_names
         assert "cte_b" not in table_names
 
-    def test_output_columns(self, tk):
+    def test_output_columns(self, tk: SqlToolkit) -> None:
         sql = "SELECT id, name AS full_name, COUNT(*) AS cnt FROM users"
         cols = tk.scope_analyzer.extract_columns(sql, Dialect.DATABRICKS)
         assert "cnt" in cols.output_columns
         assert "full_name" in cols.output_columns
 
-    def test_star_detection(self, tk):
+    def test_star_detection(self, tk: SqlToolkit) -> None:
         cols = tk.scope_analyzer.extract_columns("SELECT * FROM t", Dialect.DATABRICKS)
         assert cols.has_star is True
 
-    def test_aggregation_detection(self, tk):
+    def test_aggregation_detection(self, tk: SqlToolkit) -> None:
         cols = tk.scope_analyzer.extract_columns("SELECT COUNT(id) FROM t", Dialect.DATABRICKS)
         assert cols.has_aggregation is True
 
-    def test_window_function_detection(self, tk):
+    def test_window_function_detection(self, tk: SqlToolkit) -> None:
         cols = tk.scope_analyzer.extract_columns("SELECT SUM(x) OVER (PARTITION BY y) FROM t", Dialect.DATABRICKS)
         assert cols.has_window_functions is True
 
-    def test_no_aggregation_no_window(self, tk):
+    def test_no_aggregation_no_window(self, tk: SqlToolkit) -> None:
         cols = tk.scope_analyzer.extract_columns("SELECT a, b FROM t", Dialect.DATABRICKS)
         assert cols.has_aggregation is False
         assert cols.has_window_functions is False
@@ -220,7 +223,7 @@ class TestScopeAnalysisContract:
 class TestTranspilationContract:
     """Transpiler protocol: transpile()."""
 
-    def test_databricks_to_duckdb_basic(self, tk):
+    def test_databricks_to_duckdb_basic(self, tk: SqlToolkit) -> None:
         result = tk.transpiler.transpile(
             "SELECT a, b FROM t",
             Dialect.DATABRICKS,
@@ -231,7 +234,7 @@ class TestTranspilationContract:
         assert result.source_dialect == Dialect.DATABRICKS
         assert result.target_dialect == Dialect.DUCKDB
 
-    def test_databricks_to_duckdb_date_trunc(self, tk):
+    def test_databricks_to_duckdb_date_trunc(self, tk: SqlToolkit) -> None:
         result = tk.transpiler.transpile(
             "SELECT DATE_TRUNC('month', order_date) FROM orders",
             Dialect.DATABRICKS,
@@ -240,13 +243,13 @@ class TestTranspilationContract:
         assert result.fallback_used is False
         assert result.output_sql  # Should produce valid DuckDB SQL
 
-    def test_identity_transpile(self, tk):
+    def test_identity_transpile(self, tk: SqlToolkit) -> None:
         sql = "SELECT a FROM t WHERE x = 1"
         result = tk.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.DATABRICKS)
         assert result.fallback_used is False
         assert result.output_sql
 
-    def test_fallback_on_invalid_sql(self, tk):
+    def test_fallback_on_invalid_sql(self, tk: SqlToolkit) -> None:
         result = tk.transpiler.transpile(
             "DEFINITELY NOT SQL ???",
             Dialect.DATABRICKS,
@@ -257,12 +260,12 @@ class TestTranspilationContract:
         assert result.output_sql == "DEFINITELY NOT SQL ???"
         assert len(result.warnings) > 0
 
-    def test_transpile_with_join(self, tk):
+    def test_transpile_with_join(self, tk: SqlToolkit) -> None:
         sql = "SELECT a.id, b.name FROM orders a INNER JOIN customers b ON a.cust_id = b.id"
         result = tk.transpiler.transpile(sql, Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.fallback_used is False
 
-    def test_pretty_output(self, tk):
+    def test_pretty_output(self, tk: SqlToolkit) -> None:
         result = tk.transpiler.transpile(
             "SELECT a, b, c FROM t WHERE x = 1",
             Dialect.DATABRICKS,
@@ -271,12 +274,12 @@ class TestTranspilationContract:
         )
         assert "\n" in result.output_sql  # Pretty output has newlines
 
-    def test_transpile_result_dialects(self, tk):
+    def test_transpile_result_dialects(self, tk: SqlToolkit) -> None:
         result = tk.transpiler.transpile("SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.source_dialect == Dialect.DATABRICKS
         assert result.target_dialect == Dialect.DUCKDB
 
-    def test_transpile_empty_result_fallback(self, tk):
+    def test_transpile_empty_result_fallback(self, tk: SqlToolkit) -> None:
         # Edge case: transpile should handle gracefully.
         result = tk.transpiler.transpile("SELECT 1", Dialect.DATABRICKS, Dialect.DUCKDB)
         assert result.output_sql
@@ -290,12 +293,12 @@ class TestTranspilationContract:
 class TestNormalisationContract:
     """Normalizer protocol: normalize()."""
 
-    def test_whitespace_normalisation(self, tk):
+    def test_whitespace_normalisation(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize("SELECT   a,   b   FROM   t", Dialect.DATABRICKS)
         # Normalised SQL should not have excess whitespace.
         assert "   " not in norm.normalized_sql
 
-    def test_comment_stripping(self, tk):
+    def test_comment_stripping(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize(
             "SELECT a -- this is a comment\nFROM t /* block */",
             Dialect.DATABRICKS,
@@ -303,13 +306,13 @@ class TestNormalisationContract:
         assert "--" not in norm.normalized_sql
         assert "/*" not in norm.normalized_sql
 
-    def test_keyword_uppercasing(self, tk):
+    def test_keyword_uppercasing(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize("select a from t where x = 1", Dialect.DATABRICKS)
         # Keywords should be normalized (sqlglot uppercases them).
         assert "SELECT" in norm.normalized_sql
         assert "FROM" in norm.normalized_sql
 
-    def test_cte_reordering_safe(self, tk):
+    def test_cte_reordering_safe(self, tk: SqlToolkit) -> None:
         sql = "WITH z AS (SELECT 1), a AS (SELECT 2) SELECT * FROM a, z"
         norm = tk.normalizer.normalize(sql, Dialect.DATABRICKS)
         # a should come before z in the normalised output.
@@ -319,7 +322,7 @@ class TestNormalisationContract:
         if a_pos >= 0 and z_pos >= 0:
             assert a_pos < z_pos
 
-    def test_cte_reordering_skipped_forward_ref(self, tk):
+    def test_cte_reordering_skipped_forward_ref(self, tk: SqlToolkit) -> None:
         # b references a, but a is defined after b → forward ref, skip reorder.
         sql = "WITH b AS (SELECT * FROM a), a AS (SELECT 1) SELECT * FROM b"
         norm = tk.normalizer.normalize(sql, Dialect.DATABRICKS)
@@ -329,25 +332,25 @@ class TestNormalisationContract:
         if b_pos >= 0 and a_pos >= 0:
             assert b_pos < a_pos
 
-    def test_normalisation_preserves_original(self, tk):
+    def test_normalisation_preserves_original(self, tk: SqlToolkit) -> None:
         original = "select a from t"
         norm = tk.normalizer.normalize(original, Dialect.DATABRICKS)
         assert norm.original_sql == original
 
-    def test_normalisation_applied_rules(self, tk):
+    def test_normalisation_applied_rules(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize("SELECT 1", Dialect.DATABRICKS)
         assert len(norm.applied_rules) > 0
         assert "strip_comments" in norm.applied_rules
 
-    def test_normalisation_empty_sql(self, tk):
+    def test_normalisation_empty_sql(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize("", Dialect.DATABRICKS)
         assert norm.normalized_sql == ""
 
-    def test_normalisation_comment_only(self, tk):
+    def test_normalisation_comment_only(self, tk: SqlToolkit) -> None:
         norm = tk.normalizer.normalize("-- just a comment", Dialect.DATABRICKS)
         assert norm.normalized_sql == ""
 
-    def test_normalisation_invalid_sql_raises(self, tk):
+    def test_normalisation_invalid_sql_raises(self, tk: SqlToolkit) -> None:
         with pytest.raises(SqlNormalizationError):
             tk.normalizer.normalize("NOT VALID SQL ???", Dialect.DATABRICKS)
 
@@ -360,11 +363,11 @@ class TestNormalisationContract:
 class TestDiffingContract:
     """Differ protocol: diff() and extract_column_changes()."""
 
-    def test_identical_sql(self, tk):
+    def test_identical_sql(self, tk: SqlToolkit) -> None:
         diff = tk.differ.diff("SELECT a FROM t", "SELECT a FROM t", Dialect.DATABRICKS)
         assert diff.is_cosmetic_only is True or diff.is_identical is True
 
-    def test_cosmetic_only_whitespace(self, tk):
+    def test_cosmetic_only_whitespace(self, tk: SqlToolkit) -> None:
         diff = tk.differ.diff(
             "SELECT   a   FROM   t",
             "SELECT a FROM t",
@@ -372,7 +375,7 @@ class TestDiffingContract:
         )
         assert diff.is_cosmetic_only is True
 
-    def test_column_addition(self, tk):
+    def test_column_addition(self, tk: SqlToolkit) -> None:
         changes = tk.differ.extract_column_changes(
             "SELECT a FROM t",
             "SELECT a, b FROM t",
@@ -380,7 +383,7 @@ class TestDiffingContract:
         )
         assert changes.get("b") == "added"
 
-    def test_column_removal(self, tk):
+    def test_column_removal(self, tk: SqlToolkit) -> None:
         changes = tk.differ.extract_column_changes(
             "SELECT a, b FROM t",
             "SELECT a FROM t",
@@ -388,7 +391,7 @@ class TestDiffingContract:
         )
         assert changes.get("b") == "removed"
 
-    def test_column_modification(self, tk):
+    def test_column_modification(self, tk: SqlToolkit) -> None:
         changes = tk.differ.extract_column_changes(
             "SELECT a, b AS x FROM t",
             "SELECT a, c AS x FROM t",
@@ -397,7 +400,7 @@ class TestDiffingContract:
         # x is present in both but the expression changed.
         assert changes.get("x") == "modified"
 
-    def test_no_changes(self, tk):
+    def test_no_changes(self, tk: SqlToolkit) -> None:
         changes = tk.differ.extract_column_changes(
             "SELECT a, b FROM t",
             "SELECT a, b FROM t",
@@ -405,7 +408,7 @@ class TestDiffingContract:
         )
         assert len(changes) == 0
 
-    def test_diff_edits_not_empty_on_real_change(self, tk):
+    def test_diff_edits_not_empty_on_real_change(self, tk: SqlToolkit) -> None:
         diff = tk.differ.diff(
             "SELECT a FROM t",
             "SELECT b FROM t",
@@ -414,7 +417,7 @@ class TestDiffingContract:
         assert diff.is_identical is False
         assert diff.is_cosmetic_only is False
 
-    def test_diff_parse_failure_does_not_crash(self, tk):
+    def test_diff_parse_failure_does_not_crash(self, tk: SqlToolkit) -> None:
         diff = tk.differ.diff(
             "NOT SQL ???",
             "SELECT a FROM t",
@@ -422,7 +425,7 @@ class TestDiffingContract:
         )
         assert diff.is_identical is False
 
-    def test_column_changes_parse_failure(self, tk):
+    def test_column_changes_parse_failure(self, tk: SqlToolkit) -> None:
         changes = tk.differ.extract_column_changes(
             "NOT SQL ???",
             "SELECT a FROM t",
@@ -430,7 +433,7 @@ class TestDiffingContract:
         )
         assert isinstance(changes, dict)
 
-    def test_diff_comment_only_is_cosmetic(self, tk):
+    def test_diff_comment_only_is_cosmetic(self, tk: SqlToolkit) -> None:
         # Comments are stripped by sqlglot during transpile normalisation,
         # so comment-only changes produce identical normalised SQL.
         # sqlglot may report this as is_identical=True rather than
@@ -451,59 +454,59 @@ class TestDiffingContract:
 class TestSafetyGuardContract:
     """Safety guard protocol: check()."""
 
-    def test_safe_select(self, tk):
+    def test_safe_select(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("SELECT a FROM t", Dialect.DATABRICKS)
         assert result.is_safe is True
         assert len(result.violations) == 0
 
-    def test_drop_table_detected(self, tk):
+    def test_drop_table_detected(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DROP TABLE users", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "DROP_TABLE" in types
 
-    def test_drop_view_detected(self, tk):
+    def test_drop_view_detected(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DROP VIEW v", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "DROP_VIEW" in types
 
-    def test_truncate_detected(self, tk):
+    def test_truncate_detected(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("TRUNCATE TABLE users", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "TRUNCATE" in types
 
-    def test_delete_without_where_detected(self, tk):
+    def test_delete_without_where_detected(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DELETE FROM users", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "DELETE_WITHOUT_WHERE" in types
 
-    def test_delete_with_where_safe(self, tk):
+    def test_delete_with_where_safe(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DELETE FROM users WHERE id = 5", Dialect.DATABRICKS)
         assert result.is_safe is True
 
-    def test_grant_detected(self, tk):
+    def test_grant_detected(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("GRANT SELECT ON t TO user1", Dialect.DATABRICKS)
         assert result.is_safe is False
         types = {v.violation_type for v in result.violations}
         assert "GRANT" in types
 
-    def test_insert_overwrite_no_partition(self, tk):
+    def test_insert_overwrite_no_partition(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("INSERT OVERWRITE TABLE t SELECT * FROM src", Dialect.DATABRICKS)
         assert result.is_safe is False
 
-    def test_multi_statement_catches_dangerous(self, tk):
+    def test_multi_statement_catches_dangerous(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("SELECT 1; DROP TABLE users", Dialect.DATABRICKS)
         assert result.is_safe is False
         assert result.checked_statements == 2
 
-    def test_create_table_allowed_by_default(self, tk):
+    def test_create_table_allowed_by_default(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("CREATE TABLE t (id INT)", Dialect.DATABRICKS)
         assert result.is_safe is True
 
-    def test_create_table_blocked_when_disallowed(self, tk):
+    def test_create_table_blocked_when_disallowed(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check(
             "CREATE TABLE t (id INT)",
             Dialect.DATABRICKS,
@@ -511,17 +514,17 @@ class TestSafetyGuardContract:
         )
         assert result.is_safe is False
 
-    def test_unparseable_sql_flagged(self, tk):
+    def test_unparseable_sql_flagged(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("???###!!!", Dialect.DATABRICKS)
         assert result.is_safe is False
 
-    def test_violation_has_detail(self, tk):
+    def test_violation_has_detail(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DROP TABLE users", Dialect.DATABRICKS)
         assert len(result.violations) > 0
         assert result.violations[0].detail
         assert result.violations[0].violation_type
 
-    def test_violation_severity_set(self, tk):
+    def test_violation_severity_set(self, tk: SqlToolkit) -> None:
         result = tk.safety_guard.check("DROP TABLE users", Dialect.DATABRICKS)
         assert result.violations[0].severity in ("error", "warning")
 
@@ -534,7 +537,7 @@ class TestSafetyGuardContract:
 class TestRewritingContract:
     """Rewriter protocol: rewrite_tables() and quote_identifier()."""
 
-    def test_simple_rewrite(self, tk):
+    def test_simple_rewrite(self, tk: SqlToolkit) -> None:
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM main.public.orders",
             [
@@ -551,7 +554,7 @@ class TestRewritingContract:
         assert "staging" in result.rewritten_sql
         assert len(result.tables_rewritten) > 0
 
-    def test_unqualified_table_gets_target(self, tk):
+    def test_unqualified_table_gets_target(self, tk: SqlToolkit) -> None:
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM orders",
             [
@@ -565,7 +568,7 @@ class TestRewritingContract:
         assert "prod" in result.rewritten_sql
         assert "analytics" in result.rewritten_sql
 
-    def test_no_match_unchanged(self, tk):
+    def test_no_match_unchanged(self, tk: SqlToolkit) -> None:
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM other_catalog.other_schema.t",
             [
@@ -580,12 +583,12 @@ class TestRewritingContract:
         )
         assert len(result.tables_unchanged) > 0
 
-    def test_empty_rules_noop(self, tk):
+    def test_empty_rules_noop(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM t"
         result = tk.rewriter.rewrite_tables(sql, [], Dialect.DATABRICKS)
         assert result.rewritten_sql == sql
 
-    def test_multi_statement_rewrite(self, tk):
+    def test_multi_statement_rewrite(self, tk: SqlToolkit) -> None:
         result = tk.rewriter.rewrite_tables(
             "SELECT * FROM main.pub.t1; SELECT * FROM main.pub.t2",
             [
@@ -600,16 +603,16 @@ class TestRewritingContract:
         )
         assert result.rewritten_sql.count("dev") >= 2
 
-    def test_quote_identifier(self, tk):
+    def test_quote_identifier(self, tk: SqlToolkit) -> None:
         quoted = tk.rewriter.quote_identifier("my table", Dialect.DATABRICKS)
         assert '"' in quoted or "`" in quoted
         assert "my table" in quoted
 
-    def test_quote_identifier_duckdb(self, tk):
+    def test_quote_identifier_duckdb(self, tk: SqlToolkit) -> None:
         quoted = tk.rewriter.quote_identifier("col name", Dialect.DUCKDB)
         assert '"' in quoted
 
-    def test_parse_failure_returns_original(self, tk):
+    def test_parse_failure_returns_original(self, tk: SqlToolkit) -> None:
         # sqlglot may partially parse malformed SQL rather than raising.
         # The contract is: rewrite must not crash on bad input.
         result = tk.rewriter.rewrite_tables(
@@ -628,25 +631,25 @@ class TestRewritingContract:
 class TestRenderingContract:
     """Renderer protocol: render() and render_expression()."""
 
-    def test_render_parsed_node(self, tk):
+    def test_render_parsed_node(self, tk: SqlToolkit) -> None:
         parsed = tk.parser.parse_one("SELECT a, b FROM t", Dialect.DATABRICKS)
         sql = tk.renderer.render(parsed.single, Dialect.DATABRICKS)
         assert "SELECT" in sql.upper()
         assert "FROM" in sql.upper()
 
-    def test_render_pretty(self, tk):
+    def test_render_pretty(self, tk: SqlToolkit) -> None:
         parsed = tk.parser.parse_one("SELECT a, b FROM t", Dialect.DATABRICKS)
         sql = tk.renderer.render(parsed.single, Dialect.DATABRICKS, pretty=True)
         assert "\n" in sql
 
-    def test_render_expression_fragment(self, tk):
+    def test_render_expression_fragment(self, tk: SqlToolkit) -> None:
         parsed = tk.parser.parse_one("SELECT a, b FROM t", Dialect.DATABRICKS)
         node = parsed.single
         # Render the full node as an expression.
         sql = tk.renderer.render_expression(node, Dialect.DATABRICKS)
         assert sql  # Should produce some output
 
-    def test_render_no_raw_raises(self, tk):
+    def test_render_no_raw_raises(self, tk: SqlToolkit) -> None:
         from core_engine.sql_toolkit._types import SqlNode
 
         node = SqlNode(kind=SqlNodeKind.SELECT, name="test")
@@ -662,17 +665,17 @@ class TestRenderingContract:
 class TestDeterminismInvariant:
     """Same inputs must produce identical outputs across iterations."""
 
-    def test_parse_determinism(self, tk):
+    def test_parse_determinism(self, tk: SqlToolkit) -> None:
         sql = "SELECT a, b FROM orders WHERE region = 'US'"
         results = [tk.parser.parse_one(sql, Dialect.DATABRICKS).single.sql_text for _ in range(50)]
         assert len(set(results)) == 1
 
-    def test_normalisation_determinism(self, tk):
+    def test_normalisation_determinism(self, tk: SqlToolkit) -> None:
         sql = "select  a,  b  from  orders  where  x = 1"
         results = [tk.normalizer.normalize(sql, Dialect.DATABRICKS).normalized_sql for _ in range(50)]
         assert len(set(results)) == 1
 
-    def test_diff_determinism(self, tk):
+    def test_diff_determinism(self, tk: SqlToolkit) -> None:
         old = "SELECT a, b FROM t"
         new = "SELECT a, c FROM t"
         results = [
@@ -684,7 +687,7 @@ class TestDeterminismInvariant:
         ]
         assert len(set(results)) == 1
 
-    def test_scope_determinism(self, tk):
+    def test_scope_determinism(self, tk: SqlToolkit) -> None:
         sql = "SELECT * FROM z_table JOIN a_table ON z_table.id = a_table.id"
         results = [
             tuple(
@@ -694,7 +697,7 @@ class TestDeterminismInvariant:
         ]
         assert len(set(results)) == 1
 
-    def test_safety_determinism(self, tk):
+    def test_safety_determinism(self, tk: SqlToolkit) -> None:
         sql = "DROP TABLE users; SELECT 1"
         results = [
             (

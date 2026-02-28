@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
 
@@ -54,7 +54,7 @@ async def risk_score(
         )
         cached = _cache.get(cache_key)
         if cached is not None:
-            return cached
+            return cast(RiskScoreResponse, cached)
 
     logger.info("Scoring risk for model=%s downstream_depth=%d", request.model_name, request.downstream_depth)
     result = scorer.score(request)

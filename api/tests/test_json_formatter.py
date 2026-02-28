@@ -6,7 +6,6 @@ import json
 import logging
 
 import pytest
-
 from api.middleware.json_formatter import JSONFormatter
 
 

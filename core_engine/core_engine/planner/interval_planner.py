@@ -22,9 +22,9 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import date, timedelta
+from typing import Any
 
 import networkx as nx
-from core_engine.sql_toolkit import Dialect, get_sql_toolkit
 from pydantic import BaseModel, Field
 
 from core_engine.contracts.schema_validator import ContractValidationResult
@@ -39,6 +39,7 @@ from core_engine.models.plan import (
     RunType,
     StepDiffDetail,
 )
+from core_engine.sql_toolkit import Dialect, get_sql_toolkit
 from core_engine.telemetry.profiling import profile_operation
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ def generate_plan(
     diff_result: DiffResult,
     dag: nx.DiGraph,
     watermarks: dict[str, tuple[date, date]],
-    run_stats: dict[str, dict],
+    run_stats: dict[str, dict[str, Any]],
     config: PlannerConfig | None = None,
     *,
     base: str = "",
@@ -226,7 +227,7 @@ def generate_plan(
         depends_on_step_ids: list[str] = [step_id_map[dep] for dep in depends_on_models]
 
         # Embed contract violations for this model if available.
-        step_violations: list[dict] = []
+        step_violations: list[dict[str, Any]] = []
         if contract_results is not None:
             model_violations = contract_results.violations_for_model(model_name)
             step_violations = [
@@ -474,7 +475,7 @@ def _assign_parallel_groups(
 
 def _estimate_cost(
     model_name: str,
-    run_stats: dict[str, dict],
+    run_stats: dict[str, dict[str, Any]],
     config: PlannerConfig,
 ) -> tuple[float, float]:
     """Estimate compute time and USD cost for a single model step.

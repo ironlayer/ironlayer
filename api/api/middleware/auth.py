@@ -19,7 +19,7 @@ import os
 import secrets
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -284,7 +284,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # defined on the TokenClaims schema.
         try:
             dumped = claims.model_dump()
-            return dumped.get("role")
+            return cast("str | None", dumped.get("role"))
         except AttributeError:
             pass
         return None

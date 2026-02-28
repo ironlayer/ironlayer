@@ -21,23 +21,18 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr, ValidationError
-from starlette.requests import Request
-from starlette.testclient import TestClient
-
 from api.middleware.rbac import (
     Permission,
     Role,
-    get_user_role,
     require_permission,
     require_role,
     role_has_permission,
 )
 from api.routers.tenant_config import _redact_key
-from api.security import OIDCProvider, TokenClaims, TokenConfig, TokenManager
+from api.security import OIDCProvider, TokenConfig
 from core_engine.state.database import _TENANT_ID_RE, set_tenant_context
+from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr, ValidationError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -418,10 +413,9 @@ class TestCSRFProtection:
     @pytest.fixture()
     def _csrf_app(self) -> Any:
         """Create a minimal FastAPI app with CSRF middleware."""
+        from api.middleware.csrf import CSRFMiddleware
         from fastapi import FastAPI
         from starlette.responses import JSONResponse
-
-        from api.middleware.csrf import CSRFMiddleware
 
         app = FastAPI()
         app.add_middleware(CSRFMiddleware)
@@ -521,10 +515,9 @@ class TestCSRFProtection:
         _csrf_app: Any,
     ) -> None:
         """PUT is also a state-changing method and needs CSRF protection."""
+        from api.middleware.csrf import CSRFMiddleware
         from fastapi import FastAPI
         from starlette.responses import JSONResponse
-
-        from api.middleware.csrf import CSRFMiddleware
 
         app = FastAPI()
         app.add_middleware(CSRFMiddleware)

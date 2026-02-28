@@ -975,7 +975,7 @@ class LockRepository:
             index_elements=["tenant_id", "model_name", "range_start", "range_end"],
         )
         await self._session.flush()
-        return (result.rowcount or 0) > 0  # type: ignore[attr-defined]
+        return (result.rowcount or 0) > 0
 
     async def release_lock(
         self,
@@ -1023,7 +1023,7 @@ class LockRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined, return-value]
+        return result.rowcount or 0  # type: ignore[attr-defined]
 
     async def force_release_lock(
         self,
@@ -1162,7 +1162,7 @@ class TelemetryRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined]
+        return int(result.rowcount)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -1211,7 +1211,7 @@ class CredentialRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def list_names(self) -> list[str]:
         """List credential names (not values) for the tenant."""
@@ -1250,7 +1250,7 @@ class AuditRepository:
         action: str,
         entity_type: str | None,
         entity_id: str | None,
-        metadata: dict | None,
+        metadata: dict[str, Any] | None,
         previous_hash: str | None,
         created_at: datetime,
     ) -> str:
@@ -1291,7 +1291,7 @@ class AuditRepository:
         action: str,
         entity_type: str | None = None,
         entity_id: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Write an audit entry. Returns the entry ID.
 
@@ -1523,7 +1523,7 @@ class TokenRevocationRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined]
+        return int(result.rowcount)  # type: ignore[attr-defined]
 
     async def cleanup_all_expired(self) -> int:
         """Remove expired revocation entries across **all** tenants.
@@ -1542,7 +1542,7 @@ class TokenRevocationRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined]
+        return int(result.rowcount)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -1591,11 +1591,11 @@ class TenantConfigRepository:
             values["llm_monthly_budget_usd"] = llm_monthly_budget_usd
         if llm_daily_budget_usd is not None:
             values["llm_daily_budget_usd"] = llm_daily_budget_usd
-        if plan_quota_monthly is not ...:
+        if plan_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             values["plan_quota_monthly"] = plan_quota_monthly
-        if api_quota_monthly is not ...:
+        if api_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             values["api_quota_monthly"] = api_quota_monthly
-        if ai_quota_monthly is not ...:
+        if ai_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             values["ai_quota_monthly"] = ai_quota_monthly
 
         values["updated_at"] = datetime.now(UTC)
@@ -1604,11 +1604,11 @@ class TenantConfigRepository:
             update_cols.append("llm_monthly_budget_usd")
         if llm_daily_budget_usd is not None:
             update_cols.append("llm_daily_budget_usd")
-        if plan_quota_monthly is not ...:
+        if plan_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             update_cols.append("plan_quota_monthly")
-        if api_quota_monthly is not ...:
+        if api_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             update_cols.append("api_quota_monthly")
-        if ai_quota_monthly is not ...:
+        if ai_quota_monthly is not ...:  # type: ignore[comparison-overlap]
             update_cols.append("ai_quota_monthly")
 
         await _dialect_upsert(
@@ -1811,7 +1811,7 @@ class AIFeedbackRepository:
         step_id: str,
         model_name: str,
         feedback_type: str,
-        prediction: dict,
+        prediction: dict[str, Any],
     ) -> AIFeedbackTable:
         """Record an AI prediction before execution."""
         row = AIFeedbackTable(
@@ -1832,7 +1832,7 @@ class AIFeedbackRepository:
         step_id: str,
         model_name: str,
         feedback_type: str,
-        outcome: dict,
+        outcome: dict[str, Any],
         accuracy_score: float | None = None,
     ) -> None:
         """Record the actual outcome and compute accuracy for a prediction.
@@ -1896,7 +1896,7 @@ class AIFeedbackRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def get_accuracy_stats(
         self,
@@ -2376,7 +2376,7 @@ class SchemaDriftRepository:
         expected_columns: Any,
         actual_columns: Any,
         drift_type: str,
-        drift_details: dict | None,
+        drift_details: dict[str, Any] | None,
     ) -> SchemaDriftCheckTable:
         """Record a schema drift detection for a model.
 
@@ -2553,7 +2553,7 @@ class ReconciliationScheduleRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def get_all_enabled(self) -> list[ReconciliationScheduleTable]:
         """Return all enabled schedules for this tenant, ordered by schedule type."""
@@ -2670,7 +2670,7 @@ class EnvironmentRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def get_default(self) -> EnvironmentTable | None:
         """Get the default environment for this tenant."""
@@ -2718,7 +2718,7 @@ class EnvironmentRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined]
+        return int(result.rowcount)  # type: ignore[attr-defined]
 
     async def record_promotion(
         self,
@@ -2727,7 +2727,7 @@ class EnvironmentRepository:
         source_snapshot_id: str,
         target_snapshot_id: str,
         promoted_by: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> EnvironmentPromotionTable:
         """Record a promotion event (snapshot reference copy).
 
@@ -2793,7 +2793,7 @@ class ModelTestRepository:
         test_id: str,
         model_name: str,
         test_type: str,
-        test_config: dict | None,
+        test_config: dict[str, Any] | None,
         severity: str = "BLOCK",
     ) -> ModelTestTable:
         """Insert or update a test definition.
@@ -2863,7 +2863,7 @@ class ModelTestRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount  # type: ignore[attr-defined]
+        return int(result.rowcount)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -3102,11 +3102,11 @@ class EventSubscriptionRepository:
             row.url = url
         if secret_hash is not None:
             row.secret_hash = secret_hash
-        if event_types is not ...:
+        if event_types is not ...:  # type: ignore[comparison-overlap]
             row.event_types = event_types
         if active is not None:
             row.active = active
-        if description is not ...:
+        if description is not ...:  # type: ignore[comparison-overlap]
             row.description = description
 
         row.updated_at = datetime.now(UTC)
@@ -3121,7 +3121,7 @@ class EventSubscriptionRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def list_for_event_type(self, event_type: str) -> list[EventSubscriptionTable]:
         """Return active subscriptions that match a specific event type.
@@ -3398,7 +3398,7 @@ class APIKeyRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -4022,7 +4022,7 @@ class CustomerHealthRepository:
         *,
         health_score: float,
         health_status: str,
-        engagement_metrics: dict | None = None,
+        engagement_metrics: dict[str, Any] | None = None,
         trend_direction: str | None = None,
         previous_score: float | None = None,
         last_login_at: datetime | None = None,
@@ -4230,7 +4230,7 @@ class InvoiceRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def update_status(self, invoice_id: str, status: str) -> bool:
         """Update invoice status (generated, paid, void).  Returns True if updated."""
@@ -4244,7 +4244,7 @@ class InvoiceRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
 
     async def get_next_invoice_number(self) -> str:
         """Generate the next sequential invoice number.

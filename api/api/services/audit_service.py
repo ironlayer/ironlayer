@@ -9,6 +9,7 @@ this service so that the audit trail is consistent and complete.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from core_engine.state.repository import AuditRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +99,7 @@ class AuditService:
 
         Returns the generated audit entry ID.
         """
-        metadata: dict | None = dict(kwargs) if kwargs else None  # type: ignore[arg-type]
+        metadata: dict[str, Any] | None = dict(kwargs) if kwargs else None
         return await self._repo.log(
             actor=self._actor,
             action=action,

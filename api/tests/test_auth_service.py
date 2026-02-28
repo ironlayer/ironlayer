@@ -11,11 +11,10 @@ and token manager:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from api.services.auth_service import AuthError, AuthService
 
 # ---------------------------------------------------------------------------
@@ -47,9 +46,9 @@ def _make_user_mock(
     user.tenant_id = tenant_id
     user.is_active = is_active
     user.email_verified = email_verified
-    user.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc) if created_at is _SENTINEL else created_at
+    user.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC) if created_at is _SENTINEL else created_at
     user.last_login_at = (
-        datetime(2024, 6, 20, 9, 30, 0, tzinfo=timezone.utc) if last_login_at is _SENTINEL else last_login_at
+        datetime(2024, 6, 20, 9, 30, 0, tzinfo=UTC) if last_login_at is _SENTINEL else last_login_at
     )
     return user
 
@@ -70,7 +69,7 @@ def _make_api_key_row_mock(
     row.name = name
     row.key_prefix = key_prefix
     row.scopes = scopes or ["read", "write"]
-    row.created_at = created_at or datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    row.created_at = created_at or datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
     row.last_used_at = last_used_at
     row.expires_at = expires_at
     return row
@@ -479,8 +478,8 @@ class TestGetCurrentUser:
         mock_session = AsyncMock()
         mock_tm = _make_token_manager_mock()
 
-        created = datetime(2024, 1, 15, 8, 0, 0, tzinfo=timezone.utc)
-        last_login = datetime(2024, 6, 20, 14, 30, 0, tzinfo=timezone.utc)
+        created = datetime(2024, 1, 15, 8, 0, 0, tzinfo=UTC)
+        last_login = datetime(2024, 6, 20, 14, 30, 0, tzinfo=UTC)
         user = _make_user_mock(created_at=created, last_login_at=last_login)
         mock_repo = AsyncMock()
         mock_repo.get_by_id = AsyncMock(return_value=user)
@@ -593,7 +592,7 @@ class TestAPIKeys:
             key_id="key_002",
             name="Key B",
             key_prefix="bmkey.def34",
-            last_used_at=datetime(2024, 6, 20, 9, 0, 0, tzinfo=timezone.utc),
+            last_used_at=datetime(2024, 6, 20, 9, 0, 0, tzinfo=UTC),
         )
 
         mock_repo = AsyncMock()

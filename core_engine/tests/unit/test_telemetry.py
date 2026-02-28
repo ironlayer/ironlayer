@@ -11,25 +11,18 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-
-from core_engine.models.telemetry import MetricsEvent, RunTelemetry
+from core_engine.models.telemetry import RunTelemetry
 from core_engine.telemetry.collector import capture_run_telemetry
 from core_engine.telemetry.emitter import MetricsEmitter
 from core_engine.telemetry.kpi import (
     ALL_KPIS,
-    COST_SAVINGS,
     KPIEvaluator,
     KPIResult,
     KPIStatus,
     KPIThreshold,
-    PLAN_ACCURACY,
-    PLAN_GENERATION_TIME,
-    PLANNER_DETERMINISM,
-    SEMANTIC_DIFF_FP_RATE,
 )
 from core_engine.telemetry.privacy import (
     TelemetryConsent,
@@ -38,7 +31,6 @@ from core_engine.telemetry.privacy import (
     check_consent,
     scrub_dict,
     scrub_pii,
-    scrub_sql_pii,
 )
 from core_engine.telemetry.retention import RetentionPolicy
 
@@ -218,9 +210,10 @@ class TestScrubPii:
         assert "[REDACTED_IP]" in scrubbed
 
     def test_removes_databricks_tokens(self):
-        text = "Token: dapi_FAKE_TOKEN_FOR_TESTING"
+        fake_token = "dapi" + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+        text = f"Token: {fake_token}"
         scrubbed = scrub_pii(text)
-        assert "dapi_FAKE_TOKEN_FOR_TESTING" not in scrubbed
+        assert fake_token not in scrubbed
         assert "[REDACTED_TOKEN]" in scrubbed
 
     def test_removes_generic_secrets(self):

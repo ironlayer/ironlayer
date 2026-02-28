@@ -11,8 +11,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
-
 from api.middleware.rbac import (
     ROLE_PERMISSIONS,
     Permission,
@@ -22,6 +20,7 @@ from api.middleware.rbac import (
     require_role,
     role_has_permission,
 )
+from fastapi import HTTPException
 
 # ---------------------------------------------------------------------------
 # Role x Permission matrix
@@ -325,7 +324,7 @@ class TestMissingRoleClaim:
         request.state.sub = "user@example.com"
         # Make getattr(request.state, "role", None) return None
         # by ensuring 'role' attribute doesn't exist
-        del_attrs = set()
+        _del_attrs = set()
         original_getattr = type(request.state).__getattribute__
 
         def custom_getattr(self, name):

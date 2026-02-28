@@ -14,7 +14,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from api.services.analytics_service import AnalyticsService
 
 # ---------------------------------------------------------------------------

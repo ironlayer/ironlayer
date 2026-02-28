@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
@@ -59,7 +60,7 @@ class CostModelTrainer:
     """Static helper for training and persisting cost models."""
 
     @staticmethod
-    def train(features: np.ndarray, targets: np.ndarray) -> LinearRegression:
+    def train(features: np.ndarray[Any, np.dtype[Any]], targets: np.ndarray[Any, np.dtype[Any]]) -> LinearRegression:
         """Fit a ``LinearRegression`` on the provided feature matrix.
 
         Parameters
@@ -156,7 +157,7 @@ class CostModelTrainer:
             return None
 
     @staticmethod
-    def predict(model: LinearRegression, features: np.ndarray) -> np.ndarray:
+    def predict(model: LinearRegression, features: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
         """Run inference on the trained model.
 
         Parameters
@@ -175,4 +176,5 @@ class CostModelTrainer:
             raise ValueError(f"features must be 2-D, got shape {features.shape}")
         predictions = model.predict(features)
         # Clamp negative predictions to a sane minimum
-        return np.maximum(predictions, 0.0)
+        result: np.ndarray[Any, Any] = np.maximum(predictions, 0.0)
+        return result

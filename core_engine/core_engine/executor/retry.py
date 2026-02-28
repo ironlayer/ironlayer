@@ -46,7 +46,7 @@ class RetryConfig(BaseModel):
 
 def _compute_delay(attempt: int, config: RetryConfig) -> float:
     """Return the backoff delay for *attempt* given *config*."""
-    delay = min(config.base_delay * (2**attempt), config.max_delay)
+    delay: float = min(config.base_delay * (2**attempt), config.max_delay)
     if config.jitter:
         delay *= random.uniform(0.5, 1.5)  # noqa: S311
     return delay
@@ -136,7 +136,7 @@ async def async_retry_with_backoff(
             result = fn()
             if asyncio.iscoroutine(result):
                 result = await result
-            return result  # type: ignore[return-value]
+            return result
         except retryable_exceptions as exc:
             last_exception = exc
             if attempt >= config.max_retries:

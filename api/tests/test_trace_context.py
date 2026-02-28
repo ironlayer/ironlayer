@@ -8,19 +8,13 @@ from __future__ import annotations
 
 import logging
 import re
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from api.middleware.trace_context import (
     TraceContextMiddleware,
     TraceLoggingFilter,
     _generate_span_id,
     _generate_trace_id,
-    get_span_id,
-    get_trace_context,
-    get_trace_flags,
-    get_trace_id,
     get_traceparent,
 )
 
@@ -182,7 +176,7 @@ class TestTraceLoggingFilter:
             exc_info=None,
         )
         # Simulate context vars being set.
-        from api.middleware.trace_context import _trace_id_var, _span_id_var
+        from api.middleware.trace_context import _span_id_var, _trace_id_var
 
         token_t = _trace_id_var.set("abc123def456abc123def456abc123de")
         token_s = _span_id_var.set("1234567890abcdef")
@@ -206,7 +200,7 @@ class TestTraceLoggingFilter:
             exc_info=None,
         )
         # Context vars default to empty string.
-        from api.middleware.trace_context import _trace_id_var, _span_id_var
+        from api.middleware.trace_context import _span_id_var, _trace_id_var
 
         token_t = _trace_id_var.set("")
         token_s = _span_id_var.set("")
@@ -226,7 +220,7 @@ class TestTraceLoggingFilter:
 
 class TestGetTraceparent:
     def test_builds_w3c_format(self) -> None:
-        from api.middleware.trace_context import _trace_id_var, _span_id_var, _trace_flags_var
+        from api.middleware.trace_context import _span_id_var, _trace_flags_var, _trace_id_var
 
         t1 = _trace_id_var.set("4bf92f3577b16e8153e785e29fc5f28c")
         t2 = _span_id_var.set("d75597dee50b0cac")
@@ -240,7 +234,7 @@ class TestGetTraceparent:
             _trace_flags_var.reset(t3)
 
     def test_empty_when_no_context(self) -> None:
-        from api.middleware.trace_context import _trace_id_var, _span_id_var
+        from api.middleware.trace_context import _span_id_var, _trace_id_var
 
         t1 = _trace_id_var.set("")
         t2 = _span_id_var.set("")
@@ -260,7 +254,7 @@ class TestAIClientForwarding:
     @pytest.mark.asyncio
     async def test_traceparent_forwarded(self) -> None:
         """Verify the AI client includes traceparent in outgoing requests."""
-        from api.middleware.trace_context import _trace_id_var, _span_id_var, _trace_flags_var
+        from api.middleware.trace_context import _span_id_var, _trace_flags_var, _trace_id_var
 
         t1 = _trace_id_var.set("4bf92f3577b16e8153e785e29fc5f28c")
         t2 = _span_id_var.set("d75597dee50b0cac")

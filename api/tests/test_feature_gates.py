@@ -20,8 +20,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from api.config import APISettings
 from api.dependencies import (
     get_admin_session,
@@ -33,6 +31,7 @@ from api.dependencies import (
 )
 from api.main import create_app
 from api.services.ai_client import AIServiceClient
+from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Helpers

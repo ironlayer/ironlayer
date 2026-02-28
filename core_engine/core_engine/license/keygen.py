@@ -23,6 +23,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from core_engine.license.feature_flags import LicenseTier
 
@@ -75,7 +76,7 @@ def sign_license(
     ai_enabled: bool = True,
     features: list[str] | None = None,
     private_key_bytes: bytes,
-) -> dict:
+) -> dict[str, Any]:
     """Create and sign a license file.
 
     Parameters

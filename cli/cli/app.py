@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from core_engine.models.model_definition import ModelDefinition
@@ -23,7 +23,6 @@ import typer
 from rich.console import Console
 
 from cli.display import (
-    display_column_lineage,
     display_cross_model_column_lineage,
     display_lineage,
     display_migration_report,
@@ -58,8 +57,8 @@ mcp_app = typer.Typer(
 app.add_typer(mcp_app, name="mcp")
 
 # Register the init and dev commands.
-from cli.commands.dev import dev_command
-from cli.commands.init import init_command
+from cli.commands.dev import dev_command  # noqa: E402
+from cli.commands.init import init_command  # noqa: E402
 
 app.command(name="init")(init_command)
 app.command(name="dev")(dev_command)
@@ -107,7 +106,7 @@ def _global_options(
 # ---------------------------------------------------------------------------
 
 
-def _emit_metrics(event: str, data: dict) -> None:
+def _emit_metrics(event: str, data: dict[str, Any]) -> None:
     """Append a timestamped metrics event to the metrics file, if configured.
 
     Failures are logged but never propagate — metrics emission must never
@@ -150,7 +149,7 @@ def _load_stored_token() -> str | None:
         return None
     try:
         data = json.loads(cred_path.read_text(encoding="utf-8"))
-        return data.get("access_token")
+        return cast("str | None", data.get("access_token"))
     except Exception:
         return None
 
@@ -546,7 +545,7 @@ def apply_plan(
 
     # Execute each step sequentially, respecting depends_on ordering
     # (steps are already in topological order from the planner).
-    run_records: list[dict] = []
+    run_records: list[dict[str, Any]] = []
     failed = False
 
     with LocalExecutor(db_path=settings.local_db_path) as executor:
@@ -875,7 +874,7 @@ def backfill_chunked(
             },
         )
 
-        run_records: list[dict] = []
+        run_records: list[dict[str, Any]] = []
         failed = False
         completed_through: date | None = None
 
@@ -1252,7 +1251,6 @@ def lineage(
     # ---------------------------------------------------------------
     if column is not None:
         from core_engine.graph import (
-            compute_model_column_lineage,
             trace_column_across_dag,
         )
         from core_engine.sql_toolkit import Dialect

@@ -6,12 +6,9 @@ the built-in audit log and metrics handlers.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from api.services.event_bus import (
     EventBus,
     EventPayload,

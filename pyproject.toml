@@ -33,6 +33,10 @@ ignore = [
     "SIM108", # if-else-block-instead-of-if-exp (readability preference)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["N806", "N803"]
+"tests/**/*.py" = ["N806", "N803"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -44,6 +48,31 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "anthropic",
+    "anthropic.*",
+    "mcp",
+    "mcp.*",
+    "networkx",
+    "networkx.*",
+    "stripe",
+    "stripe.*",
+    "tomli",
+    "tomli.*",
+    "joblib",
+    "joblib.*",
+    "sklearn",
+    "sklearn.*",
+    "reportlab",
+    "reportlab.*",
+    "azure",
+    "azure.*",
+    "boto3",
+    "boto3.*",
+]
+ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "*/tests/*"]

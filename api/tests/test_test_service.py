@@ -10,8 +10,7 @@ Covers:
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -311,14 +310,16 @@ class TestSyncFromDefinitions:
             mock_repo.delete_for_model = AsyncMock(return_value=0)
             mock_repo.save_test = AsyncMock()
 
-            with patch("api.services.test_service.TestResultRepository"):
-                with patch("api.services.test_service.ModelRepository"):
-                    from api.services.test_service import TestService
+            with (
+                patch("api.services.test_service.TestResultRepository"),
+                patch("api.services.test_service.ModelRepository"),
+            ):
+                from api.services.test_service import TestService
 
-                    service = TestService(mock_session, tenant_id="default")
-                    service._test_repo = mock_repo
+                service = TestService(mock_session, tenant_id="default")
+                service._test_repo = mock_repo
 
-                    result = await service.sync_tests_from_definitions([model])
+                result = await service.sync_tests_from_definitions([model])
 
         assert result["models_synced"] == 1
         assert result["tests_created"] == 2
@@ -343,14 +344,16 @@ class TestSyncFromDefinitions:
         with patch("api.services.test_service.ModelTestRepository") as MockTestRepo:
             mock_repo = MockTestRepo.return_value
 
-            with patch("api.services.test_service.TestResultRepository"):
-                with patch("api.services.test_service.ModelRepository"):
-                    from api.services.test_service import TestService
+            with (
+                patch("api.services.test_service.TestResultRepository"),
+                patch("api.services.test_service.ModelRepository"),
+            ):
+                from api.services.test_service import TestService
 
-                    service = TestService(mock_session, tenant_id="default")
-                    service._test_repo = mock_repo
+                service = TestService(mock_session, tenant_id="default")
+                service._test_repo = mock_repo
 
-                    result = await service.sync_tests_from_definitions([model])
+                result = await service.sync_tests_from_definitions([model])
 
         assert result["models_synced"] == 0
         assert result["tests_created"] == 0

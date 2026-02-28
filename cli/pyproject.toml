@@ -69,3 +69,6 @@ warn_return_any = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=cli --cov-report=term-missing"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["N806", "N803"]

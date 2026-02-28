@@ -10,14 +10,15 @@ from __future__ import annotations
 
 import io
 from datetime import date
-from unittest.mock import MagicMock
 
-import pytest
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.tree import Tree
-
+from cli.display import (
+    _STATUS_COLOURS,
+    _coloured_status,
+    display_lineage,
+    display_model_list,
+    display_plan_summary,
+    display_run_results,
+)
 from core_engine.models.model_definition import (
     Materialization,
     ModelDefinition,
@@ -30,15 +31,7 @@ from core_engine.models.plan import (
     PlanSummary,
     RunType,
 )
-
-from cli.display import (
-    _STATUS_COLOURS,
-    _coloured_status,
-    display_lineage,
-    display_model_list,
-    display_plan_summary,
-    display_run_results,
-)
+from rich.console import Console
 
 # ---------------------------------------------------------------------------
 # Helpers

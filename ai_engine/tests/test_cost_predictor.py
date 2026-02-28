@@ -7,17 +7,13 @@ cost rate variation, and edge cases (zero partitions, very large volumes).
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pytest
-
 from ai_engine.engines.cost_predictor import (
-    CostPredictor,
     _COST_RATES,
     _HEURISTIC_BASE_SECONDS,
     _HEURISTIC_PER_PARTITION_SECONDS,
+    CostPredictor,
 )
 from ai_engine.models.requests import CostPredictRequest
 from ai_engine.models.responses import CostPredictResponse
@@ -59,9 +55,8 @@ class TestHasTrainedModel:
 
     def test_model_loaded_from_disk(self, tmp_path):
         """When a valid model file exists, has_trained_model is True."""
-        from sklearn.linear_model import LinearRegression
-
         import joblib
+        from sklearn.linear_model import LinearRegression
 
         model = LinearRegression()
         # 8 features matching extract_features output:
@@ -171,9 +166,8 @@ class TestTrainedModelPrediction:
     @pytest.fixture()
     def trained_predictor(self, tmp_path):
         """Create a predictor with a real trained model."""
-        from sklearn.linear_model import LinearRegression
-
         import joblib
+        from sklearn.linear_model import LinearRegression
 
         # Train a simple model with 8 features matching extract_features:
         # partition_count, log_volume, workers, sql_complexity,

@@ -7,6 +7,7 @@ import logging
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ _DEFAULT_CSP = (
 class ContentSecurityPolicyMiddleware(BaseHTTPMiddleware):
     """Adds Content-Security-Policy and other security headers to responses."""
 
-    def __init__(self, app, *, csp_policy: str | None = None, api_url: str | None = None) -> None:
+    def __init__(self, app: ASGIApp, *, csp_policy: str | None = None, api_url: str | None = None) -> None:
         super().__init__(app)
         policy = csp_policy or _DEFAULT_CSP
         if api_url:

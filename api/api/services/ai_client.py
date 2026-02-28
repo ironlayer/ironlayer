@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -316,7 +316,7 @@ class AIServiceClient:
         try:
             response = await self._client.post(path, json=payload, headers=extra_headers if extra_headers else None)
             response.raise_for_status()
-            return response.json()
+            return cast("dict[str, Any] | None", response.json())
         except httpx.HTTPStatusError as exc:
             logger.warning(
                 "AI engine returned %d for %s: %s",

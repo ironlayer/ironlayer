@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
 
@@ -55,7 +55,7 @@ async def semantic_classify(
         )
         cached = _cache.get(cache_key)
         if cached is not None:
-            return cached
+            return cast(SemanticClassifyResponse, cached)
 
     logger.info("Classifying change (old_sql length=%d, new_sql length=%d)", len(request.old_sql), len(request.new_sql))
     result = classifier.classify(request)

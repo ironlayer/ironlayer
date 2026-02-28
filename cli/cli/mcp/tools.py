@@ -56,10 +56,10 @@ async def ironlayer_plan(
     Loads models, computes the DAG, detects changed models via git
     diff + content hashing, and produces a deterministic plan.
     """
-    from core_engine.diff.change_detector import detect_changes
+    from core_engine.diff.change_detector import detect_changes  # type: ignore[import-not-found]
     from core_engine.graph import build_dag, topological_sort
     from core_engine.loader import load_models_from_directory
-    from core_engine.planner.planner import build_plan
+    from core_engine.planner.planner import build_plan  # type: ignore[import-not-found]
 
     models_dir = _resolve_models_dir(repo_path)
 
@@ -75,7 +75,7 @@ async def ironlayer_plan(
         dag=dag,
         base_ref=base_ref,
         target_ref=target_ref,
-        repo_path=str(repo),
+        repo_path=repo_path,
     )
 
     if not changes.changed_models:

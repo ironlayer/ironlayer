@@ -10,8 +10,6 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-_GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{4,40}$")
-
 from core_engine.contracts.schema_validator import (
     ContractValidationResult,
     validate_schema_contracts_batch,
@@ -44,6 +42,7 @@ from api.config import APISettings
 from api.services.ai_client import AIServiceClient
 
 logger = logging.getLogger(__name__)
+_GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{4,40}$")
 
 
 class PlanService:
@@ -323,7 +322,7 @@ class PlanService:
         row = await self._plan_repo.get_plan(plan_id)
         if row is None:
             return None
-        data = json.loads(row.plan_json)  # type: ignore[arg-type]
+        data: dict[str, Any] = json.loads(row.plan_json)  # type: ignore[arg-type]
         data["approvals"] = json.loads(row.approvals_json) if row.approvals_json else []  # type: ignore[arg-type]
         data["auto_approved"] = row.auto_approved
         data["created_at"] = row.created_at.isoformat() if row.created_at else None

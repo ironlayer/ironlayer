@@ -17,6 +17,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
-def _render_template(template_name: str, context: dict) -> str:
+def _render_template(template_name: str, context: dict[str, Any]) -> str:
     """Render a Jinja2-style template using simple string substitution.
 
     We use Python's built-in ``string.Template``-style rendering via a

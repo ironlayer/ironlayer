@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import SecretStr
-
 from api.security import TokenClaims, TokenConfig, TokenManager
+from pydantic import SecretStr
 
 _TEST_SECRET = SecretStr("test-secret-key")
 

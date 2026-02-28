@@ -20,17 +20,16 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
-
 from api.middleware.rate_limit import (
     RateLimitConfig,
     RateLimitMiddleware,
     SlidingWindowCounter,
 )
+from httpx import ASGITransport, AsyncClient
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -219,7 +218,7 @@ async def test_sliding_window_resets() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # Use a patched window to avoid waiting 60 seconds.
         # We manipulate time.monotonic to simulate window expiry.
-        base_time = time.monotonic()
+        _base_time = time.monotonic()
         call_count = 0
 
         original_monotonic = time.monotonic

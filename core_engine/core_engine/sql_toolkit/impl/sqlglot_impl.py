@@ -9,7 +9,7 @@ consumer files has been consolidated here.  Consumer files retain only their
 business logic and delegate all SQL parsing, analysis, transpilation,
 normalisation, diffing, safety checking, and rewriting to this implementation.
 
-Supports SQLGlot v25.x (pinned at v25.34.1).
+Supports SQLGlot v25.34+ and v26.x (>=25.34,<27).
 """
 
 from __future__ import annotations
@@ -52,7 +52,6 @@ from .._types import (
     SqlNodeKind,
     SqlNormalizationError,
     SqlParseError,
-    SqlTranspileError,
     TableRef,
     TranspileResult,
 )
@@ -431,7 +430,7 @@ class SqlGlotScopeAnalyzer:
                 if ref.name and ref.name not in cte_names:
                     tables.add(ref)
         else:
-            for scope in root_scope.traverse():
+            for scope in root_scope.traverse():  # type: ignore[no-untyped-call]
                 for _source_name, source in scope.sources.items():
                     if isinstance(source, exp.Table):
                         ref = _normalise_table_name(source)
@@ -1754,7 +1753,6 @@ class SqlGlotQualifier:
                 schema=mapping,
                 dialect=dialect_str,
                 qualify_columns=True,
-                qualify_tables=True,
                 validate_qualify_columns=False,
             )
         except Exception as exc:

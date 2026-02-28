@@ -192,6 +192,6 @@ class TraceLoggingFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.trace_id = _trace_id_var.get()  # type: ignore[attr-defined]
-        record.span_id = _span_id_var.get()  # type: ignore[attr-defined]
+        record.trace_id = _trace_id_var.get()
+        record.span_id = _span_id_var.get()
         return True

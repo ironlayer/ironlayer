@@ -111,7 +111,7 @@ class AIFeedbackService:
 
         recorded = 0
 
-        step_advisories: dict[str, dict] = advisory.get("steps", {})
+        step_advisories: dict[str, dict[str, Any]] = advisory.get("steps", {})
         for step_id, step_advisory in step_advisories.items():
             step = step_map.get(step_id, {})
             model_name = step.get("model", step_advisory.get("model", "unknown"))

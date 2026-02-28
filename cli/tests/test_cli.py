@@ -13,13 +13,11 @@ inside the function body), mocks must target the source modules rather than
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-from typer.testing import CliRunner
-
+from cli.app import app
 from core_engine.models.diff import DiffResult
 from core_engine.models.model_definition import (
     Materialization,
@@ -34,8 +32,7 @@ from core_engine.models.plan import (
     RunType,
 )
 from core_engine.models.run import RunRecord, RunStatus
-
-from cli.app import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -114,8 +111,8 @@ def _make_run_record(
         step_id="step-001",
         model_name=model,
         status=status,
-        started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-        finished_at=datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+        started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
+        finished_at=datetime(2025, 1, 1, 0, 0, 5, tzinfo=UTC),
         executor_version="local-duckdb",
         retry_count=retry_count,
     )
@@ -1632,7 +1629,7 @@ class TestGlobalOptions:
         executor_instance.__exit__ = MagicMock(return_value=False)
         mock_executor_cls.return_value = executor_instance
 
-        result = runner.invoke(
+        _result = runner.invoke(
             app,
             [
                 "--env",

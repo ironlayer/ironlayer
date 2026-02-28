@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     import tomllib
@@ -37,13 +37,13 @@ def load_cloud_config() -> dict[str, Any]:
 def load_stored_token() -> str | None:
     """Return the stored API token, or ``None`` if not authenticated."""
     config = load_cloud_config()
-    return config.get("cloud", {}).get("api_token")
+    return cast("str | None", config.get("cloud", {}).get("api_token"))
 
 
 def load_api_url() -> str:
     """Return the configured API URL, defaulting to production."""
     config = load_cloud_config()
-    return config.get("cloud", {}).get("api_url", "https://api.ironlayer.app")
+    return cast(str, config.get("cloud", {}).get("api_url", "https://api.ironlayer.app"))
 
 
 def save_cloud_config(api_url: str, api_token: str) -> None:

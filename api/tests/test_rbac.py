@@ -22,8 +22,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
 from api.config import APISettings
 from api.dependencies import get_ai_client, get_db_session, get_metering_collector, get_settings, get_tenant_session
 from api.main import create_app
@@ -31,12 +29,10 @@ from api.middleware.rbac import (
     ROLE_PERMISSIONS,
     Permission,
     Role,
-    get_user_role,
     parse_role,
-    require_permission,
-    require_role,
     role_has_permission,
 )
+from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Helpers: generate development-mode tokens with role claims
@@ -488,10 +484,10 @@ class TestAdminRole:
 
     @pytest.mark.asyncio
     async def test_admin_can_read_runs(self, rbac_client: AsyncClient) -> None:
-        with patch("api.routers.runs.RunRepository") as MockRepo:
+        with patch("api.routers.runs.RunRepository") as _MockRepo:
             mock_result = MagicMock()
             mock_result.scalars.return_value.all.return_value = []
-            rbac_client._transport.app  # noqa: ensure app is accessible
+            assert rbac_client._transport.app  # ensure app is accessible
             # Use a mock session execute that returns empty results.
             resp = await rbac_client.get(
                 "/api/v1/runs",

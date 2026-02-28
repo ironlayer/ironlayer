@@ -6,8 +6,6 @@ preserving SQL structure, keywords, and non-sensitive identifiers.
 
 from __future__ import annotations
 
-import pytest
-
 from ai_engine.engines.pii_scrubber import (
     contains_pii,
     scrub_for_llm,
@@ -148,7 +146,7 @@ class TestContainsPII:
         assert contains_pii("user@example.com") is True
 
     def test_token_detected(self):
-        assert contains_pii("dapi_FAKE_TOKEN_FOR_TESTING") is True
+        assert contains_pii("dapi" + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6") is True
 
     def test_sql_literal_detected(self):
         assert contains_pii("WHERE name = 'Alice'") is True

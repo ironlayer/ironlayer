@@ -6,12 +6,9 @@ save_cloud_config, clear_cloud_config.
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # load_cloud_config

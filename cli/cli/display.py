@@ -7,7 +7,7 @@ polluted with human-readable decoration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -167,7 +167,7 @@ def display_plan_summary(console: Console, plan: Plan) -> None:
 # ---------------------------------------------------------------------------
 
 
-def display_run_results(console: Console, runs: list[dict]) -> None:
+def display_run_results(console: Console, runs: list[dict[str, Any]]) -> None:
     """Render an execution results table.
 
     Parameters
@@ -508,7 +508,7 @@ def display_cross_model_column_lineage(
         return
 
     # Group lineage nodes by source table for cleaner display.
-    by_table: dict[str | None, list] = {}
+    by_table: dict[str | None, list[Any]] = {}
     for node in result.lineage_path:
         by_table.setdefault(node.source_table, []).append(node)
 

@@ -9,6 +9,7 @@ body size) by enforcing per-field semantic limits.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
@@ -49,7 +50,7 @@ def _check_dag_size(v: dict[str, list[str]]) -> dict[str, list[str]]:
     return v
 
 
-def _check_dict_serialised_size(v: dict | None, field_name: str, max_bytes: int) -> dict | None:
+def _check_dict_serialised_size(v: dict[str, Any] | None, field_name: str, max_bytes: int) -> dict[str, Any] | None:
     """Raise ``ValueError`` when a dict's JSON representation is too large."""
     if v is None:
         return v
@@ -75,11 +76,11 @@ class SemanticClassifyRequest(BaseModel):
         ...,
         description="The SQL of the model *after* the change.",
     )
-    schema_diff: dict | None = Field(
+    schema_diff: dict[str, Any] | None = Field(
         default=None,
         description=("Optional column-level diff produced by the schema comparator.  Keys: added, removed, modified."),
     )
-    column_lineage: dict | None = Field(
+    column_lineage: dict[str, Any] | None = Field(
         default=None,
         description=("Optional upstream-to-downstream column lineage map."),
     )
@@ -112,12 +113,12 @@ class SemanticClassifyRequest(BaseModel):
 
     @field_validator("schema_diff")
     @classmethod
-    def validate_schema_diff_size(cls, v: dict | None) -> dict | None:
+    def validate_schema_diff_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         return _check_dict_serialised_size(v, "schema_diff", _MAX_TABLE_STATS_BYTES)
 
     @field_validator("column_lineage")
     @classmethod
-    def validate_column_lineage_size(cls, v: dict | None) -> dict | None:
+    def validate_column_lineage_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         return _check_dict_serialised_size(v, "column_lineage", _MAX_TABLE_STATS_BYTES)
 
 
@@ -274,11 +275,11 @@ class OptimizeSQLRequest(BaseModel):
     """Request body for ``POST /optimize_sql``."""
 
     sql: str = Field(..., description="SQL query to analyse for optimisations.")
-    table_statistics: dict | None = Field(
+    table_statistics: dict[str, Any] | None = Field(
         default=None,
         description=("Optional table-level statistics (row counts, partitioning info)."),
     )
-    query_metrics: dict | None = Field(
+    query_metrics: dict[str, Any] | None = Field(
         default=None,
         description=("Optional historical query metrics (avg runtime, bytes scanned)."),
     )
@@ -306,10 +307,10 @@ class OptimizeSQLRequest(BaseModel):
 
     @field_validator("table_statistics")
     @classmethod
-    def validate_table_statistics_size(cls, v: dict | None) -> dict | None:
+    def validate_table_statistics_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         return _check_dict_serialised_size(v, "table_statistics", _MAX_TABLE_STATS_BYTES)
 
     @field_validator("query_metrics")
     @classmethod
-    def validate_query_metrics_size(cls, v: dict | None) -> dict | None:
+    def validate_query_metrics_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         return _check_dict_serialised_size(v, "query_metrics", _MAX_TABLE_STATS_BYTES)

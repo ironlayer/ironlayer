@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 import numpy as np
 
@@ -39,8 +40,8 @@ _DEFAULT_RUNTIME_SECONDS = 300.0
 
 
 def extract_features(
-    telemetry_records: list[dict],
-) -> tuple[np.ndarray, np.ndarray]:
+    telemetry_records: list[dict[str, Any]],
+) -> tuple[np.ndarray[Any, np.dtype[Any]], np.ndarray[Any, np.dtype[Any]]]:
     """Extract feature matrix and target vector from telemetry records.
 
     Each record is expected to contain some subset of:
@@ -226,7 +227,7 @@ def _extract_sql_features(sql: str) -> dict[str, float]:
     }
 
 
-def _extract_sql_features_from_record(record: dict) -> dict[str, float]:
+def _extract_sql_features_from_record(record: dict[str, Any]) -> dict[str, float]:
     """Extract SQL features from pre-computed record fields.
 
     Used when the raw SQL text is not available but the caller has

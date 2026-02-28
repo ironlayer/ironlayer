@@ -16,13 +16,11 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from api.config import APISettings
 from api.dependencies import (
     get_admin_session,
@@ -34,6 +32,7 @@ from api.dependencies import (
 )
 from api.main import create_app
 from api.services.ai_client import AIServiceClient
+from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,8 +99,8 @@ def _make_user_row(
     row.role = role
     row.is_active = is_active
     row.tenant_id = "test-tenant"
-    row.created_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
-    row.last_login_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    row.created_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=UTC)
+    row.last_login_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
     return row
 
 
