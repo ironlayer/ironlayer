@@ -52,6 +52,9 @@ marketing/dist/
 frontend/dist/
 *.tsbuildinfo
 
+# Rust
+target/
+
 # Logs
 *.log
 npm-debug.log*
