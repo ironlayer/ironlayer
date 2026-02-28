@@ -1,5 +1,3 @@
-// PyO3-generated code triggers this lint on PyResult return types — suppress globally.
-#![allow(clippy::useless_conversion)]
 //! IronLayer Check Engine — Rust-powered validation for SQL models.
 //!
 //! This crate provides the `ironlayer_check_engine` Python module via PyO3,
@@ -10,6 +8,9 @@
 //! ```python
 //! from ironlayer_check_engine import CheckEngine, CheckConfig, CheckResult
 //! ```
+
+// PyO3-generated code triggers this lint on PyResult return types — suppress globally.
+#![allow(clippy::useless_conversion)]
 
 pub mod cache;
 pub mod checkers;
