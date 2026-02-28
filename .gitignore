@@ -32,8 +32,8 @@ terraform.tfvars
 .terraform.lock.hcl
 
 # Claude Code
-.claude/settings.local.json
-.claude/projects/
+CLAUDE.md
+.claude/
 
 # IDE
 .vscode/
