@@ -249,6 +249,103 @@ pub fn compute_sha256(content: &str) -> String {
     format!("sha256:{}", hex::encode(hasher.finalize()))
 }
 
+/// Get the set of changed files in a git repository for `--changed-only` mode.
+///
+/// Runs `git diff --name-only HEAD` and `git diff --name-only --staged` to
+/// collect both modified/untracked files and staged files. Returns their union.
+///
+/// Falls back to `None` if git is not available or the directory is not a git repo.
+///
+/// # Arguments
+///
+/// * `root` — Project root directory (must be inside a git repo).
+///
+/// # Returns
+///
+/// `Some(set_of_changed_paths)` if git is available and working,
+/// `None` if git is unavailable or directory is not a git repo.
+pub fn get_changed_files(root: &Path) -> Option<std::collections::HashSet<String>> {
+    use std::collections::HashSet;
+    use std::process::Command;
+
+    let mut changed = HashSet::new();
+
+    // Get modified + untracked files relative to HEAD
+    let unstaged = Command::new("git")
+        .args(["diff", "--name-only", "HEAD"])
+        .current_dir(root)
+        .output();
+
+    match unstaged {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    changed.insert(trimmed.replace('\\', "/"));
+                }
+            }
+        }
+        _ => {
+            // git not available or not a git repo — try ls-files for untracked
+            // If that also fails, return None
+            let untracked = Command::new("git")
+                .args(["ls-files", "--others", "--exclude-standard"])
+                .current_dir(root)
+                .output();
+
+            match untracked {
+                Ok(output) if output.status.success() => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for line in stdout.lines() {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            changed.insert(trimmed.replace('\\', "/"));
+                        }
+                    }
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    // Get staged files
+    let staged = Command::new("git")
+        .args(["diff", "--name-only", "--staged"])
+        .current_dir(root)
+        .output();
+
+    if let Ok(output) = staged {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    changed.insert(trimmed.replace('\\', "/"));
+                }
+            }
+        }
+    }
+
+    Some(changed)
+}
+
+/// Filter a list of discovered files to only those that appear in the
+/// changed-files set (for `--changed-only` mode).
+///
+/// Only filters `.sql`, `.yml`, and `.yaml` files. The full list is still needed
+/// for building the model registry.
+pub fn filter_changed_only(
+    files: &[DiscoveredFile],
+    changed: &std::collections::HashSet<String>,
+) -> Vec<DiscoveredFile> {
+    files
+        .iter()
+        .filter(|f| changed.contains(&f.rel_path))
+        .cloned()
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -405,6 +502,39 @@ mod tests {
         // Blank lines don't terminate the header
         let content = "\n\n-- name: stg_orders\nSELECT 1";
         assert!(has_header_name_field(content));
+    }
+
+    #[test]
+    fn test_filter_changed_only_includes_changed() {
+        let files = vec![
+            DiscoveredFile {
+                rel_path: "models/a.sql".into(),
+                content: "SELECT 1".into(),
+                content_hash: compute_sha256("SELECT 1"),
+            },
+            DiscoveredFile {
+                rel_path: "models/b.sql".into(),
+                content: "SELECT 2".into(),
+                content_hash: compute_sha256("SELECT 2"),
+            },
+        ];
+        let mut changed = std::collections::HashSet::new();
+        changed.insert("models/a.sql".to_string());
+        let filtered = filter_changed_only(&files, &changed);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].rel_path, "models/a.sql");
+    }
+
+    #[test]
+    fn test_filter_changed_only_empty_changed_set() {
+        let files = vec![DiscoveredFile {
+            rel_path: "models/a.sql".into(),
+            content: "SELECT 1".into(),
+            content_hash: compute_sha256("SELECT 1"),
+        }];
+        let changed = std::collections::HashSet::new();
+        let filtered = filter_changed_only(&files, &changed);
+        assert!(filtered.is_empty());
     }
 
     #[test]

@@ -219,13 +219,13 @@ impl CheckResult {
         })
     }
 
-    /// Serialize the result to SARIF v2.1.0 JSON using the spec §8.3 format.
+    /// Serialize the result to SARIF v2.1.0 JSON for GitHub Code Scanning.
     ///
     /// # Errors
     ///
-    /// Returns a `PyErr` if serialization fails (should not happen for valid data).
+    /// Returns a `PyErr` if serialization fails.
     fn to_sarif_json(&self) -> PyResult<String> {
-        crate::reporter::to_sarif_json(self).map_err(|e| {
+        crate::reporter::to_sarif(self).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("SARIF serialization failed: {e}"))
         })
     }

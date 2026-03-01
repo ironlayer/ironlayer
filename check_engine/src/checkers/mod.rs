@@ -7,11 +7,14 @@
 //! The registry function [`build_checker_registry`] returns all available
 //! checkers for the current phase.
 
+pub mod dbt_project;
+pub mod model_consistency;
 pub mod naming;
 pub mod ref_resolver;
 pub mod sql_header;
 pub mod sql_safety;
 pub mod sql_syntax;
+pub mod yaml_schema;
 
 use crate::config::CheckConfig;
 use crate::types::{CheckDiagnostic, DiscoveredModel};
@@ -53,7 +56,8 @@ pub trait Checker: Send + Sync {
 /// Build the checker registry containing all available checkers.
 ///
 /// Returns a vector of boxed checker trait objects, one per check category.
-/// Phase 2 includes: SQL header, SQL syntax, SQL safety, ref resolver, and naming checkers.
+/// Includes Phase 1 (HDR), Phase 2 (SQL, SAF, REF, NAME), and Phase 3
+/// (YML, DBT, CON) checkers.
 #[must_use]
 pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
     vec![
@@ -62,5 +66,8 @@ pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
         Box::new(sql_safety::SqlSafetyChecker),
         Box::new(ref_resolver::RefResolverChecker),
         Box::new(naming::NamingChecker),
+        Box::new(yaml_schema::YamlSchemaChecker),
+        Box::new(dbt_project::DbtProjectChecker),
+        Box::new(model_consistency::ModelConsistencyChecker),
     ]
 }

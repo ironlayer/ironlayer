@@ -160,6 +160,9 @@ pub struct CheckConfig {
     /// Whether to use `--changed-only` mode (check only git-modified files).
     pub changed_only: bool,
 
+    /// Whether to auto-fix fixable rules (`--fix` mode).
+    pub fix: bool,
+
     /// Whether to disable the cache entirely (`--no-cache`).
     pub no_cache: bool,
 
@@ -190,6 +193,7 @@ impl Default for CheckConfig {
             dbt: DbtConfig::default(),
             per_path: Vec::new(),
             changed_only: false,
+            fix: false,
             no_cache: false,
             select: None,
             exclude_rules: None,
