@@ -11,7 +11,6 @@ name = "ironlayer_check_engine"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["extension-module"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]

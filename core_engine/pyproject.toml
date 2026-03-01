@@ -64,7 +64,7 @@ module-name = "ironlayer_check_engine"
 # Bindings type.
 bindings = "pyo3"
 # Use stable ABI for a single wheel per platform.
-features = ["pyo3/abi3-py311"]
+features = ["pyo3/abi3-py311", "extension-module"]
 
 [tool.mypy]
 python_version = "3.11"
