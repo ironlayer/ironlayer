@@ -57,10 +57,12 @@ build-backend = "maturin"
 [tool.maturin]
 # Path to the Rust crate for the check engine extension module.
 manifest-path = "../check_engine/Cargo.toml"
-# Include the Python package alongside the compiled extension.
-python-source = "."
+# Python packages to include alongside the compiled Rust extension.
+python-packages = ["core_engine"]
 # Module name matches the Rust crate lib name.
 module-name = "ironlayer_check_engine"
+# Bindings type.
+bindings = "pyo3"
 # Use stable ABI for a single wheel per platform.
 features = ["pyo3/abi3-py311"]
 

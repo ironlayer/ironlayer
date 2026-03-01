@@ -14,7 +14,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::config::CheckConfig;
-use crate::types::{CheckDiagnostic, DiscoveredFile};
+use crate::types::{CheckCategory, CheckDiagnostic, DiscoveredFile, Severity};
 
 /// Current engine version, used for cache invalidation.
 const ENGINE_VERSION: &str = "0.3.0";
@@ -33,15 +33,67 @@ pub struct CacheEntry {
     pub diagnostics: Vec<CachedDiagnostic>,
 }
 
-/// Lightweight diagnostic stored in the cache (subset of [`CheckDiagnostic`]).
+/// Diagnostic stored in the cache, preserving all fields needed for replay.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedDiagnostic {
     /// Rule identifier (e.g., `"HDR001"`).
     pub rule_id: String,
     /// Severity level as a string.
     pub severity: String,
+    /// Check category as a string.
+    pub category: String,
     /// Human-readable message.
     pub message: String,
+    /// File path relative to project root.
+    pub file_path: String,
+    /// 1-based line number (0 if not applicable).
+    pub line: u32,
+    /// 1-based column number (0 if not applicable).
+    pub column: u32,
+    /// Offending text snippet, if available.
+    pub snippet: Option<String>,
+    /// Suggested fix, if applicable.
+    pub suggestion: Option<String>,
+    /// Link to documentation for this rule.
+    pub doc_url: Option<String>,
+}
+
+impl CachedDiagnostic {
+    /// Convert a cached diagnostic back into a full [`CheckDiagnostic`].
+    pub fn to_diagnostic(&self) -> CheckDiagnostic {
+        let severity = match self.severity.as_str() {
+            "error" | "Error" => Severity::Error,
+            "warning" | "Warning" => Severity::Warning,
+            _ => Severity::Info,
+        };
+
+        let category = match self.category.as_str() {
+            "SqlSyntax" => CheckCategory::SqlSyntax,
+            "SqlSafety" => CheckCategory::SqlSafety,
+            "SqlHeader" => CheckCategory::SqlHeader,
+            "RefResolution" => CheckCategory::RefResolution,
+            "SchemaContract" => CheckCategory::SchemaContract,
+            "YamlSchema" => CheckCategory::YamlSchema,
+            "NamingConvention" => CheckCategory::NamingConvention,
+            "DbtProject" => CheckCategory::DbtProject,
+            "ModelConsistency" => CheckCategory::ModelConsistency,
+            "FileStructure" => CheckCategory::FileStructure,
+            _ => CheckCategory::FileStructure,
+        };
+
+        CheckDiagnostic {
+            rule_id: self.rule_id.clone(),
+            message: self.message.clone(),
+            severity,
+            category,
+            file_path: self.file_path.clone(),
+            line: self.line,
+            column: self.column,
+            snippet: self.snippet.clone(),
+            suggestion: self.suggestion.clone(),
+            doc_url: self.doc_url.clone(),
+        }
+    }
 }
 
 /// The on-disk cache file format.
@@ -170,7 +222,14 @@ impl CheckCache {
             .map(|d| CachedDiagnostic {
                 rule_id: d.rule_id.clone(),
                 severity: d.severity.to_string(),
+                category: d.category.to_string(),
                 message: d.message.clone(),
+                file_path: d.file_path.clone(),
+                line: d.line,
+                column: d.column,
+                snippet: d.snippet.clone(),
+                suggestion: d.suggestion.clone(),
+                doc_url: d.doc_url.clone(),
             })
             .collect();
 
@@ -468,5 +527,61 @@ mod tests {
         let cached = cache.get_cached_diagnostics(&file).unwrap();
         assert_eq!(cached.len(), 1);
         assert_eq!(cached[0].rule_id, "HDR001");
+    }
+
+    #[test]
+    fn test_cached_diagnostic_severity_roundtrip() {
+        let dir = tempdir().unwrap();
+        let config = make_config();
+        let mut cache = CheckCache::new(dir.path(), &config);
+
+        let file = make_file("test.sql", "SELECT 1");
+        let diags = vec![
+            crate::types::CheckDiagnostic {
+                rule_id: "HDR001".to_owned(),
+                message: "Missing name".to_owned(),
+                severity: crate::types::Severity::Error,
+                category: crate::types::CheckCategory::SqlHeader,
+                file_path: "test.sql".to_owned(),
+                line: 1,
+                column: 0,
+                snippet: Some("-- kind: FULL_REFRESH".to_owned()),
+                suggestion: Some("Add a name field".to_owned()),
+                doc_url: Some("https://docs.ironlayer.app/check/rules/HDR001".to_owned()),
+            },
+            crate::types::CheckDiagnostic {
+                rule_id: "NAME001".to_owned(),
+                message: "Bad name".to_owned(),
+                severity: crate::types::Severity::Warning,
+                category: crate::types::CheckCategory::NamingConvention,
+                file_path: "test.sql".to_owned(),
+                line: 1,
+                column: 0,
+                snippet: None,
+                suggestion: None,
+                doc_url: None,
+            },
+        ];
+        cache.update(&file.rel_path, &file.content_hash, &diags);
+
+        let cached = cache.get_cached_diagnostics(&file).unwrap();
+        assert_eq!(cached.len(), 2);
+
+        // Verify severity roundtrips correctly
+        let d1 = cached[0].to_diagnostic();
+        assert_eq!(d1.severity, crate::types::Severity::Error);
+        assert_eq!(d1.category, crate::types::CheckCategory::SqlHeader);
+        assert_eq!(d1.rule_id, "HDR001");
+        assert_eq!(d1.snippet, Some("-- kind: FULL_REFRESH".to_owned()));
+        assert_eq!(d1.suggestion, Some("Add a name field".to_owned()));
+        assert_eq!(
+            d1.doc_url,
+            Some("https://docs.ironlayer.app/check/rules/HDR001".to_owned())
+        );
+
+        let d2 = cached[1].to_diagnostic();
+        assert_eq!(d2.severity, crate::types::Severity::Warning);
+        assert_eq!(d2.category, crate::types::CheckCategory::NamingConvention);
+        assert_eq!(d2.rule_id, "NAME001");
     }
 }
