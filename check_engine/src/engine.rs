@@ -1,16 +1,19 @@
 //! Check engine orchestrator — the main entry point for running checks.
 //!
 //! Coordinates file discovery, caching, header parsing, ref extraction,
-//! per-file checks, cross-file checks, and result assembly. Per-file checks
-//! run in parallel via rayon; cross-file checks run sequentially after.
+//! per-file checks, cross-file checks, and result assembly.
+//!
+//! Supports `--changed-only` mode for incremental checking (git integration),
+//! `--fix` mode for auto-fixing fixable rules, and `--sarif` for SARIF output.
 //!
 //! Every per-file check dispatch is wrapped in `catch_unwind` so that a
 //! panic in one checker emits an `INTERNAL` diagnostic instead of crashing
 //! the Python process.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rayon::prelude::*;
@@ -19,7 +22,9 @@ use regex::Regex;
 use crate::cache::CheckCache;
 use crate::checkers::{build_checker_registry, Checker};
 use crate::config::CheckConfig;
-use crate::discovery::{detect_project_type, walk_files};
+use crate::discovery::{
+    compute_sha256, detect_project_type, filter_changed_only, get_changed_files, walk_files,
+};
 use crate::types::{
     CheckCategory, CheckDiagnostic, CheckResult, DiscoveredFile, DiscoveredModel, ProjectType,
     Severity,
@@ -60,17 +65,39 @@ impl CheckEngine {
         let project_type = detect_project_type(root);
 
         // 2. Walk files (respecting .gitignore, .ironlayerignore, exclusions)
-        let files = walk_files(root, &self.config);
+        let all_files = walk_files(root, &self.config);
+
+        // 2b. If --changed-only, filter to only git-modified files
+        //     but keep all_files available for building the full model registry
+        let check_files = if self.config.changed_only {
+            match get_changed_files(root) {
+                Some(changed) => filter_changed_only(&all_files, &changed),
+                None => {
+                    log::warn!(
+                        "--changed-only requested but git is unavailable. Checking all files."
+                    );
+                    all_files.clone()
+                }
+            }
+        } else {
+            all_files.clone()
+        };
 
         // 3. Initialize cache and partition files
         let mut cache = CheckCache::new(root, &self.config);
-        let (cached_files, uncached_files) = cache.partition(&files);
+        let (cached_files, uncached_files) = cache.partition(&check_files);
 
-        // 4. Parse SQL headers + extract refs from uncached .sql files
-        let models: Vec<DiscoveredModel> = uncached_files
+        // 4. Parse SQL headers + extract refs from ALL files (not just uncached)
+        //    This is required so that cross-file checks (ref resolution, consistency)
+        //    have the full model registry even in --changed-only mode.
+        let models: Vec<DiscoveredModel> = all_files
             .iter()
-            .filter(|f| f.rel_path.ends_with(".sql"))
-            .map(|f| discover_model(f))
+            .filter(|f| {
+                f.rel_path.ends_with(".sql")
+                    || f.rel_path.ends_with(".yml")
+                    || f.rel_path.ends_with(".yaml")
+            })
+            .map(discover_model)
             .collect();
 
         // 5. Run per-file checks in parallel via rayon
@@ -97,16 +124,40 @@ impl CheckEngine {
             }
         }
 
-        // 6. Run cross-file checks (sequential, needs full model list)
-        let project_diags = self.run_cross_file_checks(&models);
+        // 7. Run cross-file checks (sequential, needs full model list)
+        let project_diags = self.run_cross_file_checks(&models, &project_type);
         all_diags.extend(project_diags);
 
-        // 7. Truncate to max_diagnostics
-        if max_diags > 0 && all_diags.len() > max_diags {
-            all_diags.truncate(max_diags);
+        // 8. Apply --fix if requested (5-step workflow)
+        if self.config.fix {
+            let fixed = apply_fixes(root, &all_diags);
+            if !fixed.is_empty() {
+                // Re-discover and re-check fixed files
+                let mut recheck_diags = Vec::new();
+                for fixed_path in &fixed {
+                    let abs_path = root.join(fixed_path);
+                    let content = match std::fs::read_to_string(&abs_path) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    let content_hash = compute_sha256(&content);
+                    let file = DiscoveredFile {
+                        rel_path: fixed_path.clone(),
+                        content,
+                        content_hash,
+                    };
+                    let model = discover_model(&file);
+                    let file_diags = self.run_per_file_checks(&file, Some(&model), &project_type);
+                    recheck_diags.extend(file_diags);
+                }
+
+                // Replace diagnostics for fixed files with re-check results
+                all_diags.retain(|d| !fixed.contains(&d.file_path));
+                all_diags.extend(recheck_diags);
+            }
         }
 
-        // 8. Sort diagnostics by (file_path, line, column)
+        // 9. Sort diagnostics by (file_path, line, column)
         all_diags.sort_by(|a, b| {
             a.file_path
                 .cmp(&b.file_path)
@@ -114,7 +165,12 @@ impl CheckEngine {
                 .then(a.column.cmp(&b.column))
         });
 
-        // 9. Compute summary counts
+        // 10. Truncate to max_diagnostics
+        if max_diags > 0 && all_diags.len() > max_diags {
+            all_diags.truncate(max_diags);
+        }
+
+        // 11. Compute summary counts
         let total_errors = all_diags
             .iter()
             .filter(|d| d.severity == Severity::Error)
@@ -128,14 +184,14 @@ impl CheckEngine {
             .filter(|d| d.severity == Severity::Info)
             .count() as u32;
 
-        // 10. Determine pass/fail
+        // 12. Determine pass/fail
         let passed = if self.config.fail_on_warnings {
             total_errors == 0 && total_warnings == 0
         } else {
             total_errors == 0
         };
 
-        // 11. Flush cache to disk
+        // 13. Flush cache to disk
         cache.flush();
 
         let elapsed = start.elapsed();
@@ -211,10 +267,18 @@ impl CheckEngine {
     }
 
     /// Run all cross-file (project-level) checks, wrapped in catch_unwind.
-    fn run_cross_file_checks(&self, models: &[DiscoveredModel]) -> Vec<CheckDiagnostic> {
+    fn run_cross_file_checks(
+        &self,
+        models: &[DiscoveredModel],
+        project_type: &ProjectType,
+    ) -> Vec<CheckDiagnostic> {
         let mut diags = Vec::new();
 
         for checker in &self.checkers {
+            if !should_run_checker(checker.name(), project_type) {
+                continue;
+            }
+
             let result = catch_unwind(AssertUnwindSafe(|| {
                 checker.check_project(models, &self.config)
             }));
@@ -355,6 +419,193 @@ fn extract_ref_names(content: &str) -> Vec<String> {
         }
     }
     refs
+}
+
+// ---------------------------------------------------------------------------
+// --fix support
+// ---------------------------------------------------------------------------
+
+/// Set of rule IDs that can be auto-fixed.
+const FIXABLE_RULES: &[&str] = &["SQL007", "SQL009", "HDR013", "REF004"];
+
+/// Check if a diagnostic is for a fixable rule.
+#[must_use]
+fn is_fixable(diag: &CheckDiagnostic) -> bool {
+    FIXABLE_RULES.contains(&diag.rule_id.as_str())
+}
+
+/// Apply auto-fixes for fixable diagnostics.
+///
+/// Follows the 5-step workflow:
+/// 1. Dry-run: diagnostics already collected
+/// 2. Filter: only fixable rules
+/// 3. Apply: read file → apply fixes in reverse line order → atomic write
+/// 4. Re-check: caller re-runs checks on modified files
+/// 5. Report: caller reports which fixes were applied
+///
+/// Returns the set of file paths that were modified.
+fn apply_fixes(root: &Path, diags: &[CheckDiagnostic]) -> Vec<String> {
+    // Step 2: Filter to fixable diagnostics only
+    let fixable: Vec<&CheckDiagnostic> = diags.iter().filter(|d| is_fixable(d)).collect();
+    if fixable.is_empty() {
+        return Vec::new();
+    }
+
+    // Group fixable diagnostics by file path
+    let mut by_file: HashMap<String, Vec<&CheckDiagnostic>> = HashMap::new();
+    for diag in &fixable {
+        by_file
+            .entry(diag.file_path.clone())
+            .or_default()
+            .push(diag);
+    }
+
+    let mut modified_files = Vec::new();
+
+    // Step 3: Apply fixes per file in reverse line order
+    for (file_path, mut file_diags) in by_file {
+        let abs_path = root.join(&file_path);
+        let content = match std::fs::read_to_string(&abs_path) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("--fix: could not read {}: {}", file_path, e);
+                continue;
+            }
+        };
+
+        // Sort in reverse line order so that fixes don't shift line numbers
+        file_diags.sort_by(|a, b| b.line.cmp(&a.line));
+
+        let mut lines: Vec<String> = content.lines().map(|l| l.to_owned()).collect();
+        let mut any_changed = false;
+
+        for diag in &file_diags {
+            let changed = apply_single_fix(&mut lines, diag);
+            if changed {
+                any_changed = true;
+            }
+        }
+
+        if any_changed {
+            // Atomic write: write to temp file, then rename
+            if let Err(e) = atomic_write_lines(&abs_path, &lines) {
+                log::warn!("--fix: could not write {}: {}", file_path, e);
+                continue;
+            }
+            modified_files.push(file_path);
+        }
+    }
+
+    modified_files
+}
+
+/// Apply a single fix to the lines of a file.
+///
+/// Returns `true` if any modification was made.
+fn apply_single_fix(lines: &mut Vec<String>, diag: &CheckDiagnostic) -> bool {
+    match diag.rule_id.as_str() {
+        "HDR013" => fix_hdr013(lines, diag),
+        "SQL007" => fix_sql007(lines, diag),
+        "SQL009" => fix_sql009(lines, diag),
+        "REF004" => fix_ref004(lines, diag),
+        _ => false,
+    }
+}
+
+/// HDR013 fix: Remove duplicate header lines (keep first occurrence).
+///
+/// The diagnostic's line number points to the duplicate. Remove that line.
+fn fix_hdr013(lines: &mut Vec<String>, diag: &CheckDiagnostic) -> bool {
+    if diag.line == 0 || diag.line as usize > lines.len() {
+        return false;
+    }
+    // Remove the duplicate header line (1-based index)
+    lines.remove(diag.line as usize - 1);
+    true
+}
+
+/// SQL007 fix: Remove trailing semicolons from SQL body.
+///
+/// The diagnostic's line number points to the line with the trailing semicolon.
+fn fix_sql007(lines: &mut [String], diag: &CheckDiagnostic) -> bool {
+    if diag.line == 0 || diag.line as usize > lines.len() {
+        return false;
+    }
+    let idx = diag.line as usize - 1;
+    let trimmed = lines[idx].trim_end();
+    if trimmed.ends_with(';') {
+        lines[idx] = trimmed.trim_end_matches(';').to_owned();
+        true
+    } else {
+        false
+    }
+}
+
+/// SQL009 fix: Replace tab characters with 4 spaces.
+///
+/// The diagnostic's line number points to the line with tab characters.
+fn fix_sql009(lines: &mut [String], diag: &CheckDiagnostic) -> bool {
+    if diag.line == 0 || diag.line as usize > lines.len() {
+        return false;
+    }
+    let idx = diag.line as usize - 1;
+    if lines[idx].contains('\t') {
+        lines[idx] = lines[idx].replace('\t', "    ");
+        true
+    } else {
+        false
+    }
+}
+
+/// REF004 fix: Replace fully-qualified ref name with short name where unambiguous.
+///
+/// The diagnostic's snippet should contain the fully-qualified ref pattern.
+/// The suggestion contains the short name to use.
+fn fix_ref004(lines: &mut [String], diag: &CheckDiagnostic) -> bool {
+    if diag.line == 0 || diag.line as usize > lines.len() {
+        return false;
+    }
+
+    let (snippet, suggestion) = match (&diag.snippet, &diag.suggestion) {
+        (Some(s), Some(sug)) => (s, sug),
+        _ => return false,
+    };
+
+    let idx = diag.line as usize - 1;
+    if lines[idx].contains(snippet.as_str()) {
+        lines[idx] = lines[idx].replace(snippet.as_str(), suggestion.as_str());
+        true
+    } else {
+        false
+    }
+}
+
+/// Atomically write lines to a file (write to temp, then rename).
+///
+/// Uses `.tmp.{pid}` suffix for the temp file, then renames. On POSIX,
+/// rename is atomic. No backups are created (assumes files are under VCS).
+///
+/// # Errors
+///
+/// Returns an error if the temp file cannot be written or renamed.
+fn atomic_write_lines(path: &PathBuf, lines: &[String]) -> std::io::Result<()> {
+    let pid = std::process::id();
+    let tmp_path = path.with_extension(format!("tmp.{pid}"));
+
+    let mut file = std::fs::File::create(&tmp_path)?;
+    for (i, line) in lines.iter().enumerate() {
+        file.write_all(line.as_bytes())?;
+        if i < lines.len() - 1 {
+            file.write_all(b"\n")?;
+        }
+    }
+    // Preserve trailing newline if the original file likely had one
+    file.write_all(b"\n")?;
+    file.flush()?;
+    drop(file);
+
+    std::fs::rename(&tmp_path, path)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
