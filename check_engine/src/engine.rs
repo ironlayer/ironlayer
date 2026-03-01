@@ -871,4 +871,460 @@ mod tests {
             assert!(result.diagnostics[0].file_path <= result.diagnostics[1].file_path);
         }
     }
+
+    // -----------------------------------------------------------------------
+    // --fix mechanics tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_is_fixable_hdr013() {
+        let diag = CheckDiagnostic {
+            rule_id: "HDR013".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlHeader,
+            file_path: "test.sql".to_owned(),
+            line: 3,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(is_fixable(&diag));
+    }
+
+    #[test]
+    fn test_is_fixable_sql007() {
+        let diag = CheckDiagnostic {
+            rule_id: "SQL007".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(is_fixable(&diag));
+    }
+
+    #[test]
+    fn test_is_fixable_non_fixable_rule() {
+        let diag = CheckDiagnostic {
+            rule_id: "HDR001".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Error,
+            category: CheckCategory::SqlHeader,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!is_fixable(&diag));
+    }
+
+    #[test]
+    fn test_fix_hdr013_removes_duplicate_line() {
+        let mut lines = vec![
+            "-- name: test".to_owned(),
+            "-- kind: FULL_REFRESH".to_owned(),
+            "-- name: test2".to_owned(),
+            "SELECT 1".to_owned(),
+        ];
+        let diag = CheckDiagnostic {
+            rule_id: "HDR013".to_owned(),
+            message: "Duplicate header".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlHeader,
+            file_path: "test.sql".to_owned(),
+            line: 3, // 1-based: the duplicate "-- name: test2"
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(fix_hdr013(&mut lines, &diag));
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "-- name: test");
+        assert_eq!(lines[1], "-- kind: FULL_REFRESH");
+        assert_eq!(lines[2], "SELECT 1");
+    }
+
+    #[test]
+    fn test_fix_hdr013_out_of_range() {
+        let mut lines = vec!["-- name: test".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "HDR013".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlHeader,
+            file_path: "test.sql".to_owned(),
+            line: 10, // Out of range
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!fix_hdr013(&mut lines, &diag));
+    }
+
+    #[test]
+    fn test_fix_sql007_removes_trailing_semicolon() {
+        let mut lines = vec!["-- name: test".to_owned(), "SELECT 1;".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "SQL007".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 2,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(fix_sql007(&mut lines, &diag));
+        assert_eq!(lines[1], "SELECT 1");
+    }
+
+    #[test]
+    fn test_fix_sql007_no_semicolon() {
+        let mut lines = vec!["SELECT 1".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "SQL007".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!fix_sql007(&mut lines, &diag));
+    }
+
+    #[test]
+    fn test_fix_sql009_replaces_tabs() {
+        let mut lines = vec!["\tSELECT 1".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "SQL009".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(fix_sql009(&mut lines, &diag));
+        assert_eq!(lines[0], "    SELECT 1");
+    }
+
+    #[test]
+    fn test_fix_sql009_no_tabs() {
+        let mut lines = vec!["    SELECT 1".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "SQL009".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!fix_sql009(&mut lines, &diag));
+    }
+
+    #[test]
+    fn test_fix_ref004_replaces_snippet() {
+        let mut lines = vec!["SELECT * FROM {{ ref('schema.stg_orders') }}".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "REF004".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::RefResolution,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: Some("ref('schema.stg_orders')".to_owned()),
+            suggestion: Some("ref('stg_orders')".to_owned()),
+            doc_url: None,
+        };
+        assert!(fix_ref004(&mut lines, &diag));
+        assert!(lines[0].contains("ref('stg_orders')"));
+        assert!(!lines[0].contains("schema.stg_orders"));
+    }
+
+    #[test]
+    fn test_fix_ref004_no_snippet() {
+        let mut lines = vec!["SELECT 1".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "REF004".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::RefResolution,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!fix_ref004(&mut lines, &diag));
+    }
+
+    #[test]
+    fn test_apply_fixes_empty_diags() {
+        let dir = tempdir().unwrap();
+        let result = apply_fixes(dir.path(), &[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_apply_fixes_non_fixable_diags_ignored() {
+        let dir = tempdir().unwrap();
+        let diags = vec![CheckDiagnostic {
+            rule_id: "HDR001".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Error,
+            category: CheckCategory::SqlHeader,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        }];
+        let result = apply_fixes(dir.path(), &diags);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_atomic_write_lines() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.sql");
+        let lines = vec!["-- name: test".to_owned(), "SELECT 1".to_owned()];
+        atomic_write_lines(&path, &lines).unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.starts_with("-- name: test\nSELECT 1\n"));
+    }
+
+    #[test]
+    fn test_apply_single_fix_unknown_rule() {
+        let mut lines = vec!["SELECT 1".to_owned()];
+        let diag = CheckDiagnostic {
+            rule_id: "UNKNOWN".to_owned(),
+            message: "test".to_owned(),
+            severity: Severity::Warning,
+            category: CheckCategory::SqlSyntax,
+            file_path: "test.sql".to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: None,
+        };
+        assert!(!apply_single_fix(&mut lines, &diag));
+    }
+
+    // -----------------------------------------------------------------------
+    // --fix integration test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_fix_mode_removes_duplicate_header() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("stg_orders.sql"),
+            "-- name: stg_orders\n-- kind: FULL_REFRESH\n-- name: stg_orders2\nSELECT 1",
+        )
+        .unwrap();
+
+        let mut config = CheckConfig::default();
+        config.fix = true;
+        let engine = CheckEngine::new(config);
+        let _result = engine.check(dir.path());
+
+        // Verify the file was fixed
+        let content = fs::read_to_string(models_dir.join("stg_orders.sql")).unwrap();
+        assert!(
+            !content.contains("-- name: stg_orders2"),
+            "Duplicate header line should be removed by --fix"
+        );
+        assert!(content.contains("-- name: stg_orders"));
+        assert!(content.contains("-- kind: FULL_REFRESH"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Cross-file check scenarios
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_con001_duplicate_names_detected() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("a.sql"),
+            "-- name: dup_model\n-- kind: FULL_REFRESH\nSELECT 1",
+        )
+        .unwrap();
+        fs::write(
+            models_dir.join("b.sql"),
+            "-- name: dup_model\n-- kind: FULL_REFRESH\nSELECT 2",
+        )
+        .unwrap();
+
+        let engine = CheckEngine::new(CheckConfig::default());
+        let result = engine.check(dir.path());
+        assert!(result.diagnostics.iter().any(|d| d.rule_id == "CON001"));
+    }
+
+    #[test]
+    fn test_yml005_undocumented_model() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("stg.sql"),
+            "-- name: stg\n-- kind: FULL_REFRESH\nSELECT 1",
+        )
+        .unwrap();
+
+        let engine = CheckEngine::new(CheckConfig::default());
+        let result = engine.check(dir.path());
+        assert!(
+            result.diagnostics.iter().any(|d| d.rule_id == "YML005"),
+            "YML005 should fire for SQL without YAML docs"
+        );
+    }
+
+    #[test]
+    fn test_yml004_yaml_model_no_sql_file() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("schema.yml"),
+            "models:\n  - name: phantom_model\n    columns:\n      - name: id\n",
+        )
+        .unwrap();
+
+        let engine = CheckEngine::new(CheckConfig::default());
+        let result = engine.check(dir.path());
+        assert!(
+            result.diagnostics.iter().any(|d| d.rule_id == "YML004"),
+            "YML004 should fire for YAML model with no SQL"
+        );
+    }
+
+    #[test]
+    fn test_dbt_project_skips_hdr_rules() {
+        let dir = tempdir().unwrap();
+        fs::write(
+            dir.path().join("dbt_project.yml"),
+            "name: my_project\nversion: '1.0'\n",
+        )
+        .unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(models_dir.join("stg.sql"), "SELECT 1").unwrap();
+
+        let engine = CheckEngine::new(CheckConfig::default());
+        let result = engine.check(dir.path());
+        assert_eq!(result.project_type, "dbt");
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|d| d.rule_id.starts_with("HDR")),
+            "HDR rules should not fire for dbt projects"
+        );
+    }
+
+    #[test]
+    fn test_config_disables_rule() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(models_dir.join("test.sql"), "SELECT 1").unwrap();
+
+        let mut config = CheckConfig::default();
+        config.rules.insert(
+            "HDR001".to_owned(),
+            crate::config::RuleSeverityOverride::Off,
+        );
+        config.rules.insert(
+            "HDR002".to_owned(),
+            crate::config::RuleSeverityOverride::Off,
+        );
+
+        let engine = CheckEngine::new(config);
+        let result = engine.check(dir.path());
+        assert!(!result.diagnostics.iter().any(|d| d.rule_id == "HDR001"));
+        assert!(!result.diagnostics.iter().any(|d| d.rule_id == "HDR002"));
+    }
+
+    #[test]
+    fn test_hdr007_disabled_by_default_unknown_field_passes() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("stg.sql"),
+            "-- name: stg\n-- kind: FULL_REFRESH\n-- foobar: something\nSELECT 1",
+        )
+        .unwrap();
+
+        let engine = CheckEngine::new(CheckConfig::default());
+        let result = engine.check(dir.path());
+        assert!(
+            !result.diagnostics.iter().any(|d| d.rule_id == "HDR007"),
+            "HDR007 should NOT fire by default"
+        );
+    }
+
+    #[test]
+    fn test_cache_invalidation_on_content_change() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        fs::write(
+            models_dir.join("stg.sql"),
+            "-- name: stg\n-- kind: FULL_REFRESH\nSELECT 1",
+        )
+        .unwrap();
+
+        let config = CheckConfig::default();
+        let engine = CheckEngine::new(config.clone());
+        let r1 = engine.check(dir.path());
+        assert!(r1.passed);
+
+        // Modify file to break it
+        fs::write(models_dir.join("stg.sql"), "SELECT 1").unwrap();
+
+        let engine2 = CheckEngine::new(config);
+        let r2 = engine2.check(dir.path());
+        assert!(!r2.passed, "Should fail after header removed");
+    }
 }

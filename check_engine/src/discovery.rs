@@ -505,6 +505,39 @@ mod tests {
     }
 
     #[test]
+    fn test_filter_changed_only_includes_changed() {
+        let files = vec![
+            DiscoveredFile {
+                rel_path: "models/a.sql".into(),
+                content: "SELECT 1".into(),
+                content_hash: compute_sha256("SELECT 1"),
+            },
+            DiscoveredFile {
+                rel_path: "models/b.sql".into(),
+                content: "SELECT 2".into(),
+                content_hash: compute_sha256("SELECT 2"),
+            },
+        ];
+        let mut changed = std::collections::HashSet::new();
+        changed.insert("models/a.sql".to_string());
+        let filtered = filter_changed_only(&files, &changed);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].rel_path, "models/a.sql");
+    }
+
+    #[test]
+    fn test_filter_changed_only_empty_changed_set() {
+        let files = vec![DiscoveredFile {
+            rel_path: "models/a.sql".into(),
+            content: "SELECT 1".into(),
+            content_hash: compute_sha256("SELECT 1"),
+        }];
+        let changed = std::collections::HashSet::new();
+        let filtered = filter_changed_only(&files, &changed);
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
     fn test_walk_files_ironlayerignore() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join(".ironlayerignore"), "legacy_*.sql\n").unwrap();

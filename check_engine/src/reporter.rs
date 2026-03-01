@@ -673,4 +673,58 @@ mod tests {
         let location = &parsed["runs"][0]["results"][0]["locations"][0]["physicalLocation"];
         assert!(location.get("region").is_none());
     }
+
+    #[test]
+    fn test_sarif_phase3_rule_ids() {
+        let yml_diag = CheckDiagnostic {
+            rule_id: "YML001".into(),
+            message: "Invalid YAML syntax".into(),
+            severity: Severity::Error,
+            category: CheckCategory::YamlSchema,
+            file_path: "schema.yml".into(),
+            line: 3,
+            column: 1,
+            snippet: None,
+            suggestion: Some("Fix YAML indentation".into()),
+            doc_url: Some("https://docs.ironlayer.app/check/rules/YML001".into()),
+        };
+        let dbt_diag = CheckDiagnostic {
+            rule_id: "DBT001".into(),
+            message: "Missing dbt_project.yml".into(),
+            severity: Severity::Error,
+            category: CheckCategory::DbtProject,
+            file_path: ".".into(),
+            line: 0,
+            column: 0,
+            snippet: None,
+            suggestion: Some("Create a dbt_project.yml file".into()),
+            doc_url: Some("https://docs.ironlayer.app/check/rules/DBT001".into()),
+        };
+        let con_diag = CheckDiagnostic {
+            rule_id: "CON001".into(),
+            message: "Duplicate model name 'stg_orders'".into(),
+            severity: Severity::Error,
+            category: CheckCategory::ModelConsistency,
+            file_path: "models/stg_orders.sql".into(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: None,
+            doc_url: Some("https://docs.ironlayer.app/check/rules/CON001".into()),
+        };
+        let result = make_result(vec![yml_diag, dbt_diag, con_diag]);
+        let sarif = to_sarif(&result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&sarif).unwrap();
+
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+            .as_array()
+            .unwrap();
+        let rule_ids: Vec<&str> = rules.iter().map(|r| r["id"].as_str().unwrap()).collect();
+        assert!(rule_ids.contains(&"CON001"));
+        assert!(rule_ids.contains(&"DBT001"));
+        assert!(rule_ids.contains(&"YML001"));
+
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+        assert_eq!(results.len(), 3);
+    }
 }
