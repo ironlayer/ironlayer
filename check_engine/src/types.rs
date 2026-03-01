@@ -291,6 +291,23 @@ impl std::fmt::Display for ProjectType {
     }
 }
 
+/// Lightweight file metadata collected by a stat-only directory walk.
+///
+/// Used for the fast-path cache check: if the file's mtime and size match
+/// the cached entry, the file content is never read. This makes warm cache
+/// runs O(stat) instead of O(read + SHA-256).
+#[derive(Debug, Clone)]
+pub struct DiscoveredFileMeta {
+    /// Relative path from project root (forward slashes).
+    pub rel_path: String,
+
+    /// File size in bytes from `fs::metadata`.
+    pub size: u64,
+
+    /// File modification time as seconds since the Unix epoch.
+    pub mtime_secs: i64,
+}
+
 /// A discovered file with its content and metadata, ready for checking.
 #[derive(Debug, Clone)]
 pub struct DiscoveredFile {

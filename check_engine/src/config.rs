@@ -661,14 +661,76 @@ impl CheckConfig {
     /// Compute a SHA-256 hash of the configuration for cache invalidation.
     ///
     /// If any config value changes, the hash changes, invalidating the entire cache.
+    /// Uses canonical JSON (sorted keys) to ensure deterministic hashing regardless
+    /// of HashMap iteration order.
     #[must_use]
     pub fn config_hash(&self) -> String {
         use sha2::{Digest, Sha256};
 
-        let serialized = serde_json::to_string(self).unwrap_or_default();
+        let value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        let canonical = canonical_json(&value);
         let mut hasher = Sha256::new();
-        hasher.update(serialized.as_bytes());
+        hasher.update(canonical.as_bytes());
         hex::encode(hasher.finalize())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Canonical JSON for deterministic hashing
+// ---------------------------------------------------------------------------
+
+/// Produce a canonical JSON string with sorted object keys.
+///
+/// HashMap iteration order is non-deterministic in Rust, so `serde_json::to_string`
+/// may produce different JSON for the same logical config on different runs. This
+/// function ensures the output is deterministic by sorting all object keys recursively.
+fn canonical_json(value: &serde_json::Value) -> String {
+    let mut buf = String::new();
+    write_canonical(value, &mut buf);
+    buf
+}
+
+/// Recursively write a JSON value with sorted object keys.
+fn write_canonical(value: &serde_json::Value, buf: &mut String) {
+    use std::fmt::Write;
+
+    match value {
+        serde_json::Value::Null => buf.push_str("null"),
+        serde_json::Value::Bool(b) => {
+            let _ = write!(buf, "{b}");
+        }
+        serde_json::Value::Number(n) => {
+            let _ = write!(buf, "{n}");
+        }
+        serde_json::Value::String(s) => {
+            // Use serde_json for proper escaping
+            let _ = write!(buf, "{}", serde_json::to_string(s).unwrap_or_default());
+        }
+        serde_json::Value::Array(arr) => {
+            buf.push('[');
+            for (i, v) in arr.iter().enumerate() {
+                if i > 0 {
+                    buf.push(',');
+                }
+                write_canonical(v, buf);
+            }
+            buf.push(']');
+        }
+        serde_json::Value::Object(map) => {
+            buf.push('{');
+            // Sort keys for deterministic output
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            for (i, k) in keys.iter().enumerate() {
+                if i > 0 {
+                    buf.push(',');
+                }
+                let _ = write!(buf, "{}", serde_json::to_string(*k).unwrap_or_default());
+                buf.push(':');
+                write_canonical(&map[*k], buf);
+            }
+            buf.push('}');
+        }
     }
 }
 
