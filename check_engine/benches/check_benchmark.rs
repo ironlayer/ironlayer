@@ -48,11 +48,11 @@ fn bench_cold_100(c: &mut Criterion) {
     let dir = tempdir().unwrap();
     create_synthetic_project(dir.path(), 100);
 
-    // Delete cache before each iteration for cold runs
-    let cache_dir = dir.path().join(".ironlayer").join("cache");
+    // Delete cache file before each iteration for cold runs
+    let cache_file = dir.path().join(".ironlayer").join("check_cache.json");
     c.bench_function("100_models_cold", |b| {
         b.iter(|| {
-            let _ = fs::remove_dir_all(&cache_dir);
+            let _ = fs::remove_file(&cache_file);
             let config = CheckConfig::default();
             let engine = CheckEngine::new(config);
             engine.check(dir.path())
@@ -64,10 +64,11 @@ fn bench_cold_500(c: &mut Criterion) {
     let dir = tempdir().unwrap();
     create_synthetic_project(dir.path(), 500);
 
-    let cache_dir = dir.path().join(".ironlayer").join("cache");
+    // Delete cache file before each iteration for cold runs
+    let cache_file = dir.path().join(".ironlayer").join("check_cache.json");
     c.bench_function("500_models_cold", |b| {
         b.iter(|| {
-            let _ = fs::remove_dir_all(&cache_dir);
+            let _ = fs::remove_file(&cache_file);
             let config = CheckConfig::default();
             let engine = CheckEngine::new(config);
             engine.check(dir.path())
