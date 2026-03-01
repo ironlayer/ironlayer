@@ -1,6 +1,6 @@
 [project]
 name = "ironlayer-core"
-version = "0.2.0"
+version = "0.3.0"
 description = "IronLayer Core Engine — deterministic SQL transformation planning and execution"
 requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
+    "Programming Language :: Rust",
 ]
 dependencies = [
     "sqlglot>=25.34,<27",  # Range: sqlglot is still MIT-licensed post-Fivetran; cap at <27 for API stability
@@ -50,11 +51,18 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.wheel]
-packages = ["core_engine"]
+[tool.maturin]
+# Path to the Rust crate for the check engine extension module.
+manifest-path = "../check_engine/Cargo.toml"
+# Include the Python package alongside the compiled extension.
+python-source = "."
+# Module name matches the Rust crate lib name.
+module-name = "ironlayer_check_engine"
+# Use stable ABI for a single wheel per platform.
+features = ["pyo3/abi3-py311"]
 
 [tool.mypy]
 python_version = "3.11"

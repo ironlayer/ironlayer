@@ -23,6 +23,7 @@ import typer
 from rich.console import Console
 
 from cli.display import (
+    display_check_results,
     display_cross_model_column_lineage,
     display_lineage,
     display_migration_report,

@@ -1,6 +1,6 @@
 [project]
 name = "ironlayer"
-version = "0.2.0"
+version = "0.3.0"
 description = "IronLayer CLI — AI-native Databricks transformation control plane"
 requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
