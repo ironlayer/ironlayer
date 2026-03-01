@@ -524,3 +524,81 @@ def display_cross_model_column_lineage(
 
     console.print(Panel(tree, title="Cross-Model Column Lineage", border_style="yellow"))
     console.print(f"[bold]{len(result.lineage_path)}[/bold] lineage hop(s) traced")
+
+
+# ---------------------------------------------------------------------------
+# Check engine results
+# ---------------------------------------------------------------------------
+
+_SEVERITY_ICONS: dict[str, str] = {
+    "error": "\u2717",
+    "warning": "\u26a0",
+    "info": "\u2139",
+}
+
+_SEVERITY_COLOURS: dict[str, str] = {
+    "error": "red",
+    "warning": "yellow",
+    "info": "dim",
+}
+
+
+def display_check_results(console: Console, result: Any) -> None:
+    """Render check engine results with Rich formatting.
+
+    Parameters
+    ----------
+    console:
+        Rich console to write to (typically stderr).
+    result:
+        A ``CheckResult`` object from the Rust check engine (PyO3),
+        with attributes: ``passed``, ``elapsed_ms``, ``project_type``,
+        ``total_files_checked``, ``total_files_skipped_cache``,
+        ``total_errors``, ``total_warnings``, ``total_infos``,
+        ``diagnostics`` (list of ``CheckDiagnostic``).
+    """
+    # Header.
+    status = "[green]PASSED[/green]" if result.passed else "[red]FAILED[/red]"
+    console.print(f"\n\u26a1 IronLayer Check \u2014 {status}  ({result.elapsed_ms}ms)\n")
+
+    # File summary.
+    console.print(
+        f"  Files: {result.total_files_checked} checked, "
+        f"{result.total_files_skipped_cache} cached  "
+        f"({result.project_type} project)"
+    )
+
+    if not result.diagnostics:
+        console.print("\n  [green]\u2713 No issues found.[/green]\n")
+        return
+
+    # Group diagnostics by file.
+    by_file: dict[str, list[Any]] = {}
+    for d in result.diagnostics:
+        by_file.setdefault(d.file_path, []).append(d)
+
+    for file_path, diags in sorted(by_file.items()):
+        console.print(f"\n  [bold]{file_path}[/bold]")
+        for d in diags:
+            severity_str = str(d.severity).lower()
+            # Handle PyO3 enum repr (e.g., "Severity.Error" -> "error")
+            if "." in severity_str:
+                severity_str = severity_str.rsplit(".", maxsplit=1)[-1].lower()
+            icon = _SEVERITY_ICONS.get(severity_str, "?")
+            colour = _SEVERITY_COLOURS.get(severity_str, "white")
+            loc = f":{d.line}" if d.line > 0 else ""
+            col = f":{d.column}" if d.column > 0 else ""
+            console.print(
+                f"    [{colour}]{icon} {d.rule_id}[/{colour}] "
+                f"[dim]{file_path}{loc}{col}[/dim]  {d.message}"
+            )
+            if d.suggestion:
+                console.print(f"      [dim]\u2192 {d.suggestion}[/dim]")
+
+    # Summary line.
+    console.print(
+        f"\n\u2500\u2500 {result.total_errors} error(s), "
+        f"{result.total_warnings} warning(s), "
+        f"{result.total_infos} info(s)  "
+        f"({result.elapsed_ms}ms)\n"
+    )

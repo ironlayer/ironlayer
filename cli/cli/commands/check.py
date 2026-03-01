@@ -1,202 +1,312 @@
-"""``ironlayer check`` -- run quality checks against SQL models.
+"""``ironlayer check`` — run the Rust-powered check engine against SQL models.
 
-Executes registered check types (model tests, schema contracts, etc.)
-and displays a summary of results.  Human-readable output goes to
-stderr via Rich; JSON output goes to stdout in ``--json`` mode.
+Validates SQL models, YAML schemas, naming conventions, ref() integrity,
+and project structure using the fast parallel Rust engine via PyO3.
+Falls back to a pure Python implementation if the Rust extension is
+unavailable.  Human-readable output goes to stderr via Rich; JSON/SARIF
+output goes to stdout in ``--json`` mode.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import sys
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
 console = Console(stderr=True)
 
+# ---------------------------------------------------------------------------
+# Rust extension availability
+# ---------------------------------------------------------------------------
+
+_RUST_AVAILABLE = False
+try:
+    from ironlayer_check_engine import CheckConfig as RustCheckConfig
+    from ironlayer_check_engine import CheckEngine as RustCheckEngine
+    from ironlayer_check_engine import quick_check as rust_quick_check
+
+    _RUST_AVAILABLE = True
+except ImportError:
+    RustCheckEngine = None  # type: ignore[assignment,misc]
+    RustCheckConfig = None  # type: ignore[assignment,misc]
+    rust_quick_check = None  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# Check command
+# ---------------------------------------------------------------------------
+
 
 def check_command(
-    model_dir: Path = typer.Argument(
+    repo: Path = typer.Argument(
         ...,
-        help="Path to the directory containing SQL model files.",
+        help="Path to the project root directory.",
         exists=True,
         file_okay=False,
         resolve_path=True,
     ),
-    model_name: str | None = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
-        "--model",
-        "-m",
-        help="Run checks for a specific model only.",
+        "--config",
+        "-c",
+        help="Path to ironlayer.check.toml config file.",
     ),
-    check_type: str | None = typer.Option(
-        None,
-        "--type",
-        "-t",
-        help="Run only a specific check type (e.g. MODEL_TEST, SCHEMA_CONTRACT).",
-    ),
-    json_output: bool = typer.Option(
+    fix: bool = typer.Option(
         False,
-        "--json/--no-json",
-        help="Emit structured JSON to stdout.",
+        "--fix",
+        help="Auto-fix fixable rule violations in place.",
+    ),
+    changed_only: bool = typer.Option(
+        False,
+        "--changed-only",
+        help="Only check files modified in the current git working tree.",
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        help="Disable the content-addressable check cache.",
+    ),
+    max_diagnostics: int | None = typer.Option(
+        None,
+        "--max-diagnostics",
+        help="Maximum number of diagnostics to report (0 = unlimited).",
+    ),
+    select: str | None = typer.Option(
+        None,
+        "--select",
+        "-s",
+        help="Comma-separated rule IDs or categories to include.",
+    ),
+    exclude_rules: str | None = typer.Option(
+        None,
+        "--exclude",
+        "-e",
+        help="Comma-separated rule IDs or categories to exclude.",
     ),
     fail_on_warn: bool = typer.Option(
         False,
         "--fail-on-warn",
         help="Treat warnings as failures (exit code 1).",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, or sarif.",
+    ),
 ) -> None:
-    """Run quality checks against SQL models.
+    """Run quality checks against SQL models using the Rust check engine.
 
-    Executes all registered check types and reports results.  By default
-    only blocking failures (CRITICAL/HIGH severity) cause a non-zero
-    exit code.
+    Validates SQL headers, syntax, safety, ref integrity, naming
+    conventions, YAML schemas, and project structure.  Results are
+    displayed with Rich formatting (text mode) or emitted as JSON/SARIF
+    to stdout.
 
     Examples::
 
-        ironlayer check ./models
-        ironlayer check ./models --model analytics.orders_daily
-        ironlayer check ./models --type MODEL_TEST
-        ironlayer check ./models --json
+        ironlayer check .
+        ironlayer check ./my-project --fix
+        ironlayer check . --changed-only
+        ironlayer check . --format json
+        ironlayer check . --select HDR,SQL --fail-on-warn
     """
-    asyncio.run(
-        _run_checks(
-            model_dir=model_dir,
-            model_name=model_name,
-            check_type=check_type,
-            json_output=json_output,
-            fail_on_warn=fail_on_warn,
+    # Import app-level globals from the parent module.
+    from cli.app import _emit_metrics, _json_output
+
+    # If the global --json flag is set, override format to json.
+    if _json_output:
+        output_format = "json"
+
+    if output_format not in ("text", "json", "sarif"):
+        console.print(
+            f"[red]Invalid format '{output_format}'. Must be one of: text, json, sarif.[/red]"
         )
-    )
+        raise typer.Exit(code=3)
 
+    start_time = time.monotonic()
 
-async def _run_checks(
-    *,
-    model_dir: Path,
-    model_name: str | None,
-    check_type: str | None,
-    json_output: bool,
-    fail_on_warn: bool,
-) -> None:
-    """Internal async implementation for the check command."""
-    from core_engine.checks import CheckContext, CheckType, create_default_engine
-    from core_engine.loader import load_models_from_directory
-
-    # 1. Load models.
-    try:
-        models = load_models_from_directory(str(model_dir))
-    except Exception as exc:
-        console.print(f"[red]Failed to load models from {model_dir}: {exc}[/red]")
-        raise typer.Exit(code=2) from exc
-
-    if not models:
-        console.print("[yellow]No models found.[/yellow]")
-        raise typer.Exit(code=0)
-
-    console.print(f"[dim]Loaded {len(models)} model(s) from {model_dir}[/dim]")
-
-    # 2. Build context.
-    check_types = None
-    if check_type is not None:
-        try:
-            ct = CheckType(check_type)
-            check_types = [ct]
-        except ValueError:
-            valid_types = ", ".join(t.value for t in CheckType)
-            console.print(f"[red]Unknown check type '{check_type}'. Valid types: {valid_types}[/red]")
-            raise typer.Exit(code=2)
-
-    model_names = [model_name] if model_name is not None else None
-
-    context = CheckContext(
-        models=models,
-        check_types=check_types,
-        model_names=model_names,
-    )
-
-    # 3. Run checks.
-    engine = create_default_engine()
-    console.print("[dim]Running checks...[/dim]")
-    summary = await engine.run(context)
-
-    # 4. Output results.
-    if json_output:
-        output = {
-            "total": summary.total,
-            "passed": summary.passed,
-            "failed": summary.failed,
-            "warned": summary.warned,
-            "errored": summary.errored,
-            "skipped": summary.skipped,
-            "blocking_failures": summary.blocking_failures,
-            "duration_ms": summary.duration_ms,
-            "results": [r.model_dump() for r in summary.results],
-        }
-        sys.stdout.write(json.dumps(output, sort_keys=True, indent=2, default=str) + "\n")
-    else:
-        _display_check_summary(summary)
-
-    # 5. Exit code.
-    if summary.has_blocking_failures:
-        raise typer.Exit(code=1)
-    if fail_on_warn and summary.warned > 0:
-        raise typer.Exit(code=1)
-
-
-def _display_check_summary(summary: "CheckSummary") -> None:  # noqa: F821
-    """Render check results as a Rich table to stderr."""
-    from core_engine.checks.models import CheckStatus
-
-    # Summary panel.
-    status_color = "green" if not summary.has_blocking_failures else "red"
-    status_text = "ALL CHECKS PASSED" if not summary.has_blocking_failures else "CHECKS FAILED"
-
-    summary_text = (
-        f"[bold {status_color}]{status_text}[/bold {status_color}]\n"
-        f"Total: {summary.total}  "
-        f"Passed: [green]{summary.passed}[/green]  "
-        f"Failed: [red]{summary.failed}[/red]  "
-        f"Warned: [yellow]{summary.warned}[/yellow]  "
-        f"Errors: [red]{summary.errored}[/red]  "
-        f"Skipped: [dim]{summary.skipped}[/dim]  "
-        f"Duration: {summary.duration_ms}ms"
-    )
-    console.print(Panel(summary_text, title="Check Engine Results", border_style=status_color))
-
-    # Only show details for non-PASS, non-SKIP results.
-    detail_results = [r for r in summary.results if r.status not in (CheckStatus.PASS, CheckStatus.SKIP)]
-    if not detail_results:
+    if not _RUST_AVAILABLE:
+        console.print(
+            "[yellow]Note: Rust check engine unavailable, "
+            "using Python fallback (slower).[/yellow]"
+        )
+        _run_python_fallback(
+            repo=repo,
+            fail_on_warn=fail_on_warn,
+            output_format=output_format,
+        )
         return
 
-    table = Table(title="Check Details", show_lines=True)
-    table.add_column("Model", style="cyan")
-    table.add_column("Check Type", style="blue")
-    table.add_column("Status")
-    table.add_column("Severity")
-    table.add_column("Message")
+    # Build configuration from Rust defaults, then apply CLI overrides.
+    try:
+        config = RustCheckConfig()
+        if fix:
+            config.fix = True
+        if changed_only:
+            config.changed_only = True
+        if no_cache:
+            config.no_cache = True
+        if max_diagnostics is not None:
+            config.max_diagnostics = max_diagnostics
+        if select is not None:
+            config.select = select
+        if exclude_rules is not None:
+            config.exclude_rules = exclude_rules
+        if fail_on_warn:
+            config.fail_on_warnings = True
+    except Exception as exc:
+        console.print(f"[red]Failed to create check config: {exc}[/red]")
+        raise typer.Exit(code=3) from exc
 
-    status_styles = {
-        CheckStatus.FAIL: "red",
-        CheckStatus.WARN: "yellow",
-        CheckStatus.ERROR: "red bold",
-    }
+    # Run the Rust check engine.
+    try:
+        engine = RustCheckEngine(config)
+        result = engine.check(str(repo))
+    except Exception as exc:
+        console.print(f"[red]Check engine error: {exc}[/red]")
+        _emit_metrics("check_error", {"error": str(exc)})
+        raise typer.Exit(code=3) from exc
 
-    for r in detail_results:
-        style = status_styles.get(r.status, "white")
-        table.add_row(
-            r.model_name,
-            r.check_type.value,
-            f"[{style}]{r.status.value}[/{style}]",
-            r.severity.value,
-            r.message,
+    elapsed_total_ms = int((time.monotonic() - start_time) * 1000)
+
+    # Emit metrics.
+    _emit_metrics(
+        "check_complete",
+        {
+            "passed": result.passed,
+            "project_type": result.project_type,
+            "total_files_checked": result.total_files_checked,
+            "total_files_skipped_cache": result.total_files_skipped_cache,
+            "total_errors": result.total_errors,
+            "total_warnings": result.total_warnings,
+            "total_infos": result.total_infos,
+            "elapsed_ms": result.elapsed_ms,
+            "elapsed_total_ms": elapsed_total_ms,
+            "fix": fix,
+            "changed_only": changed_only,
+        },
+    )
+
+    # Output results.
+    if output_format == "json":
+        sys.stdout.write(result.to_json() + "\n")
+    elif output_format == "sarif":
+        sys.stdout.write(result.to_sarif_json() + "\n")
+    else:
+        from cli.display import display_check_results
+
+        display_check_results(console, result)
+
+    # Exit code: 0 = passed, 1 = failures found.
+    if not result.passed:
+        raise typer.Exit(code=1)
+    if fail_on_warn and result.total_warnings > 0:
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# Python fallback (no Rust extension available)
+# ---------------------------------------------------------------------------
+
+
+def _run_python_fallback(
+    *,
+    repo: Path,
+    fail_on_warn: bool,
+    output_format: str,
+) -> None:
+    """Run checks using the pure Python implementation.
+
+    This is a limited fallback that uses existing core_engine modules
+    (model_loader, ref_resolver, sql_guard) when the Rust extension
+    is not available (e.g., unsupported platform).
+    """
+    from core_engine.loader import load_models_from_directory
+    from core_engine.loader.ref_resolver import resolve_refs
+    from core_engine.parser.sql_guard import SQLGuard
+
+    start_time = time.monotonic()
+
+    models_dir = repo / "models"
+    if not models_dir.is_dir():
+        models_dir = repo
+
+    try:
+        models = load_models_from_directory(str(models_dir))
+    except Exception as exc:
+        console.print(f"[red]Failed to load models: {exc}[/red]")
+        raise typer.Exit(code=3) from exc
+
+    if not models:
+        console.print("[dim]No models found.[/dim]")
+        return
+
+    diagnostics: list[dict[str, Any]] = []
+    guard = SQLGuard()
+
+    for model in models:
+        sql = model.clean_sql or model.raw_sql
+        if not sql:
+            continue
+
+        # Safety checks.
+        safety_result = guard.check(sql)
+        if not safety_result.is_safe:
+            for v in safety_result.violations:
+                diagnostics.append(
+                    {
+                        "rule_id": f"SAF-{v.violation_type}",
+                        "message": f"{v.violation_type}: {v.detail}",
+                        "severity": v.severity.lower(),
+                        "file_path": model.file_path or model.name,
+                        "line": 0,
+                        "column": 0,
+                    }
+                )
+
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+    errors = sum(1 for d in diagnostics if d["severity"] == "critical")
+    warnings = sum(1 for d in diagnostics if d["severity"] in ("high", "medium"))
+    passed = errors == 0
+
+    if output_format == "json":
+        output = {
+            "passed": passed,
+            "project_type": "unknown",
+            "total_files_checked": len(models),
+            "total_files_skipped_cache": 0,
+            "total_errors": errors,
+            "total_warnings": warnings,
+            "total_infos": 0,
+            "elapsed_ms": elapsed_ms,
+            "diagnostics": diagnostics,
+        }
+        sys.stdout.write(json.dumps(output, indent=2, sort_keys=True) + "\n")
+    else:
+        status = "[green]PASSED[/green]" if passed else "[red]FAILED[/red]"
+        console.print(f"\nIronLayer Check (Python fallback) — {status}  ({elapsed_ms}ms)")
+        console.print(f"  Files: {len(models)} checked")
+        if diagnostics:
+            for d in diagnostics:
+                console.print(f"    {d['rule_id']}  {d['file_path']}  {d['message']}")
+        else:
+            console.print("  [green]No issues found.[/green]")
+        console.print(
+            f"\n-- {errors} error(s), {warnings} warning(s)  ({elapsed_ms}ms)\n"
         )
 
-    console.print(table)
+    if not passed:
+        raise typer.Exit(code=1)
+    if fail_on_warn and warnings > 0:
+        raise typer.Exit(code=1)

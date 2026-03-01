@@ -49,6 +49,44 @@ impl CheckEngine {
         Self { config, checkers }
     }
 
+    /// Create a merged config from the project root's config files and CLI overrides.
+    ///
+    /// Loads config from the project root (ironlayer.check.toml, pyproject.toml, etc.)
+    /// and then applies CLI-provided overrides (fix, changed_only, no_cache, etc.).
+    fn merged_config(&self, root: &Path) -> CheckConfig {
+        // Load project config from disk (4-level resolution)
+        let mut config = match CheckConfig::load_from_project(root) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("Failed to load project config: {}. Using defaults.", e);
+                CheckConfig::default()
+            }
+        };
+
+        // Apply CLI overrides from self.config (CLI flags take precedence)
+        config.fix = self.config.fix;
+        config.changed_only = self.config.changed_only;
+        config.no_cache = self.config.no_cache;
+        if self.config.select.is_some() {
+            config.select = self.config.select.clone();
+        }
+        if self.config.exclude_rules.is_some() {
+            config.exclude_rules = self.config.exclude_rules.clone();
+        }
+        if self.config.fail_on_warnings {
+            config.fail_on_warnings = true;
+        }
+        if self.config.max_diagnostics != 0 {
+            config.max_diagnostics = self.config.max_diagnostics;
+        }
+        // Merge per-rule severity overrides (CLI overrides project config)
+        for (rule_id, severity) in &self.config.rules {
+            config.rules.insert(rule_id.clone(), severity.clone());
+        }
+
+        config
+    }
+
     /// Run all checks on the project at the given root path.
     ///
     /// This is the main entry point called from Python via PyO3.
@@ -61,15 +99,18 @@ impl CheckEngine {
     pub fn check(&self, root: &Path) -> CheckResult {
         let start = Instant::now();
 
+        // 0. Merge project config with CLI config (CLI flags take precedence)
+        let config = self.merged_config(root);
+
         // 1. Detect project type
         let project_type = detect_project_type(root);
 
         // 2. Walk files (respecting .gitignore, .ironlayerignore, exclusions)
-        let all_files = walk_files(root, &self.config);
+        let all_files = walk_files(root, &config);
 
         // 2b. If --changed-only, filter to only git-modified files
         //     but keep all_files available for building the full model registry
-        let check_files = if self.config.changed_only {
+        let check_files = if config.changed_only {
             match get_changed_files(root) {
                 Some(changed) => filter_changed_only(&all_files, &changed),
                 None => {
@@ -84,7 +125,7 @@ impl CheckEngine {
         };
 
         // 3. Initialize cache and partition files
-        let mut cache = CheckCache::new(root, &self.config);
+        let mut cache = CheckCache::new(root, &config);
         let (cached_files, uncached_files) = cache.partition(&check_files);
 
         // 4. Parse SQL headers + extract refs from ALL files (not just uncached)
@@ -101,7 +142,7 @@ impl CheckEngine {
             .collect();
 
         // 5. Run per-file checks on uncached files (parallel via rayon)
-        let max_diags = self.config.max_diagnostics;
+        let max_diags = config.max_diagnostics;
 
         // Build a model lookup map for O(1) per-file model resolution
         let model_map: HashMap<&str, &DiscoveredModel> =
@@ -112,7 +153,7 @@ impl CheckEngine {
             .par_iter()
             .map(|file| {
                 let model = model_map.get(file.rel_path.as_str()).copied();
-                let file_diags = self.run_per_file_checks(file, model, &project_type);
+                let file_diags = self.run_per_file_checks(file, model, &project_type, &config);
                 (file.rel_path.clone(), file.content_hash.clone(), file_diags)
             })
             .collect();
@@ -129,12 +170,21 @@ impl CheckEngine {
             }
         }
 
+        // 6. Replay cached diagnostics for files with cache hits
+        for file in &cached_files {
+            if let Some(cached_diags) = cache.get_cached_diagnostics(file) {
+                for cd in cached_diags {
+                    all_diags.push(cd.to_diagnostic());
+                }
+            }
+        }
+
         // 7. Run cross-file checks (sequential, needs full model list)
-        let project_diags = self.run_cross_file_checks(&models, &project_type);
+        let project_diags = self.run_cross_file_checks(&models, &project_type, &config);
         all_diags.extend(project_diags);
 
         // 8. Apply --fix if requested (5-step workflow)
-        if self.config.fix {
+        if config.fix {
             let fixed = apply_fixes(root, &all_diags);
             if !fixed.is_empty() {
                 // Re-discover and re-check fixed files
@@ -152,7 +202,8 @@ impl CheckEngine {
                         content_hash,
                     };
                     let model = discover_model(&file);
-                    let file_diags = self.run_per_file_checks(&file, Some(&model), &project_type);
+                    let file_diags =
+                        self.run_per_file_checks(&file, Some(&model), &project_type, &config);
                     recheck_diags.extend(file_diags);
                 }
 
@@ -190,7 +241,7 @@ impl CheckEngine {
             .count() as u32;
 
         // 12. Determine pass/fail
-        let passed = if self.config.fail_on_warnings {
+        let passed = if config.fail_on_warnings {
             total_errors == 0 && total_warnings == 0
         } else {
             total_errors == 0
@@ -220,6 +271,7 @@ impl CheckEngine {
         file: &DiscoveredFile,
         model: Option<&DiscoveredModel>,
         project_type: &ProjectType,
+        config: &CheckConfig,
     ) -> Vec<CheckDiagnostic> {
         let mut diags = Vec::new();
 
@@ -230,7 +282,7 @@ impl CheckEngine {
             }
 
             let result = catch_unwind(AssertUnwindSafe(|| {
-                checker.check_file(&file.rel_path, &file.content, model, &self.config)
+                checker.check_file(&file.rel_path, &file.content, model, config)
             }));
 
             match result {
@@ -276,6 +328,7 @@ impl CheckEngine {
         &self,
         models: &[DiscoveredModel],
         project_type: &ProjectType,
+        config: &CheckConfig,
     ) -> Vec<CheckDiagnostic> {
         let mut diags = Vec::new();
 
@@ -284,9 +337,7 @@ impl CheckEngine {
                 continue;
             }
 
-            let result = catch_unwind(AssertUnwindSafe(|| {
-                checker.check_project(models, &self.config)
-            }));
+            let result = catch_unwind(AssertUnwindSafe(|| checker.check_project(models, config)));
 
             match result {
                 Ok(checker_diags) => diags.extend(checker_diags),

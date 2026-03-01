@@ -209,6 +209,102 @@ impl CheckConfig {
         Self::default()
     }
 
+    /// Whether warnings should cause a non-zero exit code.
+    #[getter]
+    fn get_fail_on_warnings(&self) -> bool {
+        self.fail_on_warnings
+    }
+
+    /// Set whether warnings should cause a non-zero exit code.
+    #[setter]
+    fn set_fail_on_warnings(&mut self, value: bool) {
+        self.fail_on_warnings = value;
+    }
+
+    /// Maximum number of diagnostics to report.
+    #[getter]
+    fn get_max_diagnostics(&self) -> usize {
+        self.max_diagnostics
+    }
+
+    /// Set maximum number of diagnostics.
+    #[setter]
+    fn set_max_diagnostics(&mut self, value: usize) {
+        self.max_diagnostics = value;
+    }
+
+    /// Whether to use `--changed-only` mode.
+    #[getter]
+    fn get_changed_only(&self) -> bool {
+        self.changed_only
+    }
+
+    /// Set `--changed-only` mode.
+    #[setter]
+    fn set_changed_only(&mut self, value: bool) {
+        self.changed_only = value;
+    }
+
+    /// Whether to auto-fix fixable rules.
+    #[getter]
+    fn get_fix(&self) -> bool {
+        self.fix
+    }
+
+    /// Set `--fix` mode.
+    #[setter]
+    fn set_fix(&mut self, value: bool) {
+        self.fix = value;
+    }
+
+    /// Whether to disable the cache.
+    #[getter]
+    fn get_no_cache(&self) -> bool {
+        self.no_cache
+    }
+
+    /// Set `--no-cache` mode.
+    #[setter]
+    fn set_no_cache(&mut self, value: bool) {
+        self.no_cache = value;
+    }
+
+    /// Comma-separated rule IDs or categories to select.
+    #[getter]
+    fn get_select(&self) -> Option<String> {
+        self.select.clone()
+    }
+
+    /// Set rule/category selection.
+    #[setter]
+    fn set_select(&mut self, value: Option<String>) {
+        self.select = value;
+    }
+
+    /// Comma-separated rule IDs or categories to exclude.
+    #[getter]
+    fn get_exclude_rules(&self) -> Option<String> {
+        self.exclude_rules.clone()
+    }
+
+    /// Set rule/category exclusion.
+    #[setter]
+    fn set_exclude_rules(&mut self, value: Option<String>) {
+        self.exclude_rules = value;
+    }
+
+    /// SQL dialect.
+    #[getter]
+    fn get_dialect(&self) -> Dialect {
+        self.dialect
+    }
+
+    /// Set SQL dialect.
+    #[setter]
+    fn set_dialect(&mut self, value: Dialect) {
+        self.dialect = value;
+    }
+
     /// Return a human-readable string representation.
     fn __repr__(&self) -> String {
         format!(
