@@ -176,7 +176,7 @@ ironlayer CLI (Python/Typer)
 | 3 | YAML & dbt | Week 5-6 | YML/DBT/CON rules, SARIF, git integration, --fix, Python fallback |
 | 4 | Polish & Launch | Week 7-8 | Multi-platform wheels, type stubs, docs, MCP tool, PyPI release |
 
-## Rule ID Registry (66 total)
+## Rule ID Registry (90 total)
 
 | Category | Prefix | Count | Phase |
 |----------|--------|-------|-------|
@@ -188,6 +188,10 @@ ironlayer CLI (Python/Typer)
 | YAML Schema | YML | 9 | 3 |
 | dbt Project | DBT | 6 | 3 |
 | Model Consistency | CON | 5 | 3 |
+| Databricks SQL | DBK | 7 | Post-4 |
+| Incremental Logic | INC | 5 | Post-4 |
+| Performance | PERF | 7 | Post-4 |
+| Test Adequacy | TST | 5 | Post-4 |
 
 Rule IDs are permanent — once assigned, never reused or reassigned.
 
@@ -239,7 +243,11 @@ ironlayer/
 │   │       ├── yaml_schema.rs          # YML001-YML009
 │   │       ├── naming.rs              # NAME001-NAME008
 │   │       ├── dbt_project.rs          # DBT001-DBT006
-│   │       └── model_consistency.rs    # CON001-CON005
+│   │       ├── model_consistency.rs    # CON001-CON005
+│   │       ├── databricks_sql.rs       # DBK001-DBK007
+│   │       ├── incremental_logic.rs    # INC001-INC005
+│   │       ├── performance.rs          # PERF001-PERF007
+│   │       └── test_adequacy.rs        # TST001-TST005
 │   ├── tests/
 │   │   ├── fixtures/
 │   │   ├── test_sql_header.rs
@@ -349,6 +357,7 @@ The header block does NOT end on blank lines or bare `--` comments. Only the fir
 These rules are intentionally disabled. Never enable them by default:
 - **HDR007** — preserves forward-compatible header extensions per `model_loader.py` design
 - **CON004** — terminal mart models are legitimate leaf nodes (consumed by BI tools, not other models)
+- **TST005** — some projects legitimately have models without any tests
 
 ### Panic Recovery (Appendix D.1)
 Every per-file check dispatch in `engine.rs` MUST be wrapped in `catch_unwind`. A panic in one checker emits an `INTERNAL` diagnostic instead of crashing the Python process. Cross-file `check_project()` calls are also wrapped.

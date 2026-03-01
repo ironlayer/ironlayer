@@ -100,6 +100,14 @@ pub enum CheckCategory {
     ModelConsistency,
     /// File/directory organization issues.
     FileStructure,
+    /// Databricks-specific SQL validation (DBK001-DBK007).
+    DatabricksSql,
+    /// Incremental model logic validation (INC001-INC005).
+    IncrementalLogic,
+    /// Performance anti-pattern detection (PERF001-PERF007).
+    Performance,
+    /// Test adequacy validation (TST001-TST005).
+    TestAdequacy,
 }
 
 impl std::fmt::Display for CheckCategory {
@@ -115,6 +123,10 @@ impl std::fmt::Display for CheckCategory {
             Self::DbtProject => write!(f, "DbtProject"),
             Self::ModelConsistency => write!(f, "ModelConsistency"),
             Self::FileStructure => write!(f, "FileStructure"),
+            Self::DatabricksSql => write!(f, "DatabricksSql"),
+            Self::IncrementalLogic => write!(f, "IncrementalLogic"),
+            Self::Performance => write!(f, "Performance"),
+            Self::TestAdequacy => write!(f, "TestAdequacy"),
         }
     }
 }

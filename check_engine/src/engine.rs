@@ -519,11 +519,17 @@ impl CheckEngine {
 
 /// Determine if a checker should run for a given project type.
 ///
-/// - `sql_header` only runs for IronLayer projects.
-/// - Most other checkers run for all project types.
+/// - `sql_header`, `incremental_logic`, `test_adequacy` only run for IronLayer
+///   projects (they depend on `-- key: value` header fields).
+/// - `dbt_project` only runs for dbt projects.
+/// - All other checkers (sql_syntax, sql_safety, ref_resolver, naming,
+///   yaml_schema, model_consistency, databricks_sql, performance) run for
+///   all project types.
 fn should_run_checker(checker_name: &str, project_type: &ProjectType) -> bool {
     match checker_name {
-        "sql_header" => *project_type == ProjectType::IronLayer,
+        "sql_header" | "incremental_logic" | "test_adequacy" => {
+            *project_type == ProjectType::IronLayer
+        }
         "dbt_project" => *project_type == ProjectType::Dbt,
         _ => true,
     }
@@ -1041,6 +1047,27 @@ mod tests {
         assert!(should_run_checker("sql_syntax", &ProjectType::IronLayer));
         assert!(should_run_checker("sql_syntax", &ProjectType::Dbt));
         assert!(should_run_checker("sql_syntax", &ProjectType::RawSql));
+        // New checkers
+        assert!(should_run_checker(
+            "incremental_logic",
+            &ProjectType::IronLayer
+        ));
+        assert!(!should_run_checker("incremental_logic", &ProjectType::Dbt));
+        assert!(!should_run_checker(
+            "incremental_logic",
+            &ProjectType::RawSql
+        ));
+        assert!(should_run_checker("test_adequacy", &ProjectType::IronLayer));
+        assert!(!should_run_checker("test_adequacy", &ProjectType::Dbt));
+        assert!(should_run_checker(
+            "databricks_sql",
+            &ProjectType::IronLayer
+        ));
+        assert!(should_run_checker("databricks_sql", &ProjectType::Dbt));
+        assert!(should_run_checker("databricks_sql", &ProjectType::RawSql));
+        assert!(should_run_checker("performance", &ProjectType::IronLayer));
+        assert!(should_run_checker("performance", &ProjectType::Dbt));
+        assert!(should_run_checker("performance", &ProjectType::RawSql));
     }
 
     #[test]
