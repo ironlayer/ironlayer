@@ -110,8 +110,7 @@ fn check_saf001(
                     format!("DROP TABLE {}", name_text)
                 } else {
                     // Reconstruct e.g. "DROP IF EXISTS TABLE my_table"
-                    let middle: Vec<&str> =
-                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    let middle: Vec<&str> = meaningful[i..=j].iter().map(|t| t.text).collect();
                     format!("{} {}", middle.join(" "), name_text)
                 };
                 diags.push(CheckDiagnostic {
@@ -177,8 +176,7 @@ fn check_saf002(
                 let snippet = if j == i + 1 {
                     format!("DROP VIEW {}", name_text)
                 } else {
-                    let middle: Vec<&str> =
-                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    let middle: Vec<&str> = meaningful[i..=j].iter().map(|t| t.text).collect();
                     format!("{} {}", middle.join(" "), name_text)
                 };
                 diags.push(CheckDiagnostic {
@@ -246,8 +244,7 @@ fn check_saf003(
                 let snippet = if j == i + 1 {
                     format!("DROP {}", target)
                 } else {
-                    let middle: Vec<&str> =
-                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    let middle: Vec<&str> = meaningful[i..=j].iter().map(|t| t.text).collect();
                     middle.join(" ")
                 };
                 diags.push(CheckDiagnostic {
@@ -402,54 +399,54 @@ fn check_saf006(
 
     let mut i = 0;
     while i < meaningful.len() {
-        if is_kw(meaningful[i], "ALTER") {
-            if i + 1 < meaningful.len() && is_kw(meaningful[i + 1], "TABLE") {
-                let alter_idx = i;
-                // Scan forward within this statement for DROP COLUMN
-                let mut j = i + 2;
-                while j < meaningful.len() {
-                    if meaningful[j].kind == TokenKind::Semicolon {
-                        break;
-                    }
-                    if is_kw(meaningful[j], "DROP")
-                        && j + 1 < meaningful.len()
-                        && is_kw(meaningful[j + 1], "COLUMN")
-                    {
-                        let line = header_lines + meaningful[alter_idx].line;
-                        diags.push(CheckDiagnostic {
-                            rule_id: "SAF006".to_owned(),
-                            message: format!(
-                                "ALTER TABLE ... DROP COLUMN detected at line {}. \
-                                 Dropping columns can break downstream dependencies.",
-                                line
-                            ),
-                            severity: config.effective_severity_for_path(
-                                "SAF006",
-                                file_path,
-                                Severity::Warning,
-                            ),
-                            category: CheckCategory::SqlSafety,
-                            file_path: file_path.to_owned(),
-                            line,
-                            column: meaningful[alter_idx].column,
-                            snippet: Some(format!(
-                                "ALTER TABLE ... DROP COLUMN {}",
-                                meaningful.get(j + 2).map_or("...", |t| t.text)
-                            )),
-                            suggestion: Some(
-                                "Consider deprecating the column first before dropping it."
-                                    .to_owned(),
-                            ),
-                            doc_url: doc_url("SAF006"),
-                        });
-                        j += 2;
-                        continue;
-                    }
-                    j += 1;
+        if is_kw(meaningful[i], "ALTER")
+            && i + 1 < meaningful.len()
+            && is_kw(meaningful[i + 1], "TABLE")
+        {
+            let alter_idx = i;
+            // Scan forward within this statement for DROP COLUMN
+            let mut j = i + 2;
+            while j < meaningful.len() {
+                if meaningful[j].kind == TokenKind::Semicolon {
+                    break;
                 }
-                i = j.max(i + 2);
-                continue;
+                if is_kw(meaningful[j], "DROP")
+                    && j + 1 < meaningful.len()
+                    && is_kw(meaningful[j + 1], "COLUMN")
+                {
+                    let line = header_lines + meaningful[alter_idx].line;
+                    diags.push(CheckDiagnostic {
+                        rule_id: "SAF006".to_owned(),
+                        message: format!(
+                            "ALTER TABLE ... DROP COLUMN detected at line {}. \
+                             Dropping columns can break downstream dependencies.",
+                            line
+                        ),
+                        severity: config.effective_severity_for_path(
+                            "SAF006",
+                            file_path,
+                            Severity::Warning,
+                        ),
+                        category: CheckCategory::SqlSafety,
+                        file_path: file_path.to_owned(),
+                        line,
+                        column: meaningful[alter_idx].column,
+                        snippet: Some(format!(
+                            "ALTER TABLE ... DROP COLUMN {}",
+                            meaningful.get(j + 2).map_or("...", |t| t.text)
+                        )),
+                        suggestion: Some(
+                            "Consider deprecating the column first before dropping it.".to_owned(),
+                        ),
+                        doc_url: doc_url("SAF006"),
+                    });
+                    j += 2;
+                    continue;
+                }
+                j += 1;
             }
+            i = j.max(i + 2);
+            continue;
         }
         i += 1;
     }
@@ -689,21 +686,40 @@ mod tests {
     // ── SAF001 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf001_drop_table() {
+    fn test_saf001_drop_table_fires() {
         let diags = check("DROP TABLE my_table");
         assert!(diags.iter().any(|d| d.rule_id == "SAF001"));
     }
 
     #[test]
-    fn test_saf001_no_drop() {
-        let diags = check("SELECT * FROM my_table");
+    fn test_saf001_drop_table_if_exists_fires() {
+        let diags = check("DROP TABLE IF EXISTS my_table");
+        let saf001: Vec<_> = diags.iter().filter(|d| d.rule_id == "SAF001").collect();
+        assert_eq!(saf001.len(), 1);
+        assert!(saf001[0]
+            .snippet
+            .as_ref()
+            .unwrap()
+            .to_uppercase()
+            .contains("IF"));
+    }
+
+    #[test]
+    fn test_saf001_in_string_not_detected() {
+        let diags = check("SELECT 'DROP TABLE trick' FROM t");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
     }
 
     #[test]
-    fn test_saf001_drop_table_if_exists() {
-        let diags = check("DROP TABLE IF EXISTS my_table");
-        assert!(diags.iter().any(|d| d.rule_id == "SAF001"));
+    fn test_saf001_in_comment_not_detected() {
+        let diags = check("-- DROP TABLE foo\nSELECT 1");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
+    }
+
+    #[test]
+    fn test_saf001_in_block_comment_not_detected() {
+        let diags = check("/* DROP TABLE foo */ SELECT 1");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
     }
 
     #[test]
@@ -714,21 +730,33 @@ mod tests {
     }
 
     #[test]
-    fn test_saf001_in_string_not_detected() {
-        let diags = check("SELECT 'DROP TABLE trick' FROM t");
+    fn test_saf001_drop_view_does_not_fire_saf001() {
+        let diags = check("DROP VIEW my_view");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
     }
 
     // ── SAF002 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf002_drop_view() {
+    fn test_saf002_drop_view_fires() {
         let diags = check("DROP VIEW my_view");
         assert!(diags.iter().any(|d| d.rule_id == "SAF002"));
     }
 
     #[test]
-    fn test_saf002_no_drop_view() {
+    fn test_saf002_drop_view_if_exists_fires() {
+        let diags = check("DROP VIEW IF EXISTS my_view");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF002"));
+    }
+
+    #[test]
+    fn test_saf002_in_string_not_detected() {
+        let diags = check("SELECT 'DROP VIEW foo'");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF002"));
+    }
+
+    #[test]
+    fn test_saf002_create_view_does_not_fire() {
         let diags = check("CREATE VIEW my_view AS SELECT 1");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF002"));
     }
@@ -736,53 +764,66 @@ mod tests {
     // ── SAF003 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf003_drop_schema() {
+    fn test_saf003_drop_schema_fires() {
         let diags = check("DROP SCHEMA my_schema");
         assert!(diags.iter().any(|d| d.rule_id == "SAF003"));
     }
 
     #[test]
-    fn test_saf003_drop_database() {
+    fn test_saf003_drop_database_fires() {
         let diags = check("DROP DATABASE my_db");
         assert!(diags.iter().any(|d| d.rule_id == "SAF003"));
     }
 
     #[test]
-    fn test_saf003_no_drop_schema() {
-        let diags = check("CREATE SCHEMA my_schema");
+    fn test_saf003_drop_database_if_exists_fires() {
+        let diags = check("DROP DATABASE IF EXISTS my_db");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF003"));
+    }
+
+    #[test]
+    fn test_saf003_drop_table_does_not_fire_saf003() {
+        let diags = check("DROP TABLE my_table");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF003"));
     }
 
     // ── SAF004 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf004_truncate() {
+    fn test_saf004_truncate_table_fires() {
         let diags = check("TRUNCATE TABLE my_table");
         assert!(diags.iter().any(|d| d.rule_id == "SAF004"));
     }
 
     #[test]
-    fn test_saf004_truncate_bare() {
+    fn test_saf004_truncate_bare_fires() {
         let diags = check("TRUNCATE my_table");
         assert!(diags.iter().any(|d| d.rule_id == "SAF004"));
     }
 
     #[test]
-    fn test_saf004_no_truncate() {
-        let diags = check("DELETE FROM my_table WHERE id = 1");
+    fn test_saf004_in_comment_not_detected() {
+        let diags = check("-- TRUNCATE TABLE foo\nSELECT 1");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF004"));
+    }
+
+    #[test]
+    fn test_saf004_severity_is_error() {
+        let diags = check("TRUNCATE TABLE t");
+        let d = diags.iter().find(|d| d.rule_id == "SAF004").unwrap();
+        assert_eq!(d.severity, Severity::Error);
     }
 
     // ── SAF005 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf005_delete_without_where() {
+    fn test_saf005_delete_without_where_fires() {
         let diags = check("DELETE FROM my_table");
         assert!(diags.iter().any(|d| d.rule_id == "SAF005"));
     }
 
     #[test]
-    fn test_saf005_delete_with_where() {
+    fn test_saf005_delete_with_where_passes() {
         let diags = check("DELETE FROM my_table WHERE id = 1");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF005"));
     }
@@ -794,17 +835,32 @@ mod tests {
         assert_eq!(d.severity, Severity::Warning);
     }
 
+    #[test]
+    fn test_saf005_multi_statement_fires() {
+        // DELETE without WHERE in first statement should fire even when
+        // second statement has WHERE.
+        let diags = check("DELETE FROM t1; SELECT 1 WHERE true");
+        let saf005: Vec<_> = diags.iter().filter(|d| d.rule_id == "SAF005").collect();
+        assert_eq!(saf005.len(), 1);
+    }
+
     // ── SAF006 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf006_alter_drop_column() {
+    fn test_saf006_alter_table_drop_column_fires() {
         let diags = check("ALTER TABLE my_table DROP COLUMN old_col");
         assert!(diags.iter().any(|d| d.rule_id == "SAF006"));
     }
 
     #[test]
-    fn test_saf006_alter_add_column() {
+    fn test_saf006_alter_table_add_column_passes() {
         let diags = check("ALTER TABLE my_table ADD COLUMN new_col INT");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF006"));
+    }
+
+    #[test]
+    fn test_saf006_alter_table_rename_passes() {
+        let diags = check("ALTER TABLE my_table RENAME TO new_table");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF006"));
     }
 
@@ -818,14 +874,27 @@ mod tests {
     // ── SAF007 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf007_grant() {
+    fn test_saf007_grant_at_start_fires() {
         let diags = check("GRANT SELECT ON t TO user1");
         assert!(diags.iter().any(|d| d.rule_id == "SAF007"));
     }
 
     #[test]
-    fn test_saf007_no_grant() {
-        let diags = check("SELECT * FROM t");
+    fn test_saf007_grant_after_semicolon_fires() {
+        let diags = check("SELECT 1; GRANT ALL ON db TO admin");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF007"));
+    }
+
+    #[test]
+    fn test_saf007_grant_not_at_start_does_not_fire() {
+        // GRANT not as a statement-leading keyword should not fire.
+        let diags = check("SELECT GRANT FROM permissions");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF007"));
+    }
+
+    #[test]
+    fn test_saf007_grant_in_string_does_not_fire() {
+        let diags = check("SELECT 'GRANT permissions' AS msg");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF007"));
     }
 
@@ -839,54 +908,73 @@ mod tests {
     // ── SAF008 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf008_revoke() {
+    fn test_saf008_revoke_at_start_fires() {
         let diags = check("REVOKE SELECT ON t FROM user1");
         assert!(diags.iter().any(|d| d.rule_id == "SAF008"));
     }
 
     #[test]
-    fn test_saf008_no_revoke() {
-        let diags = check("SELECT * FROM t");
+    fn test_saf008_revoke_after_semicolon_fires() {
+        let diags = check("SELECT 1; REVOKE ALL ON db FROM admin");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF008"));
+    }
+
+    #[test]
+    fn test_saf008_revoke_in_comment_does_not_fire() {
+        let diags = check("-- REVOKE ALL\nSELECT 1");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF008"));
+    }
+
+    #[test]
+    fn test_saf008_severity_is_error() {
+        let diags = check("REVOKE ALL ON t FROM u");
+        let d = diags.iter().find(|d| d.rule_id == "SAF008").unwrap();
+        assert_eq!(d.severity, Severity::Error);
     }
 
     // ── SAF009 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf009_create_user() {
+    fn test_saf009_create_user_fires() {
         let diags = check("CREATE USER admin");
         assert!(diags.iter().any(|d| d.rule_id == "SAF009"));
     }
 
     #[test]
-    fn test_saf009_create_role() {
+    fn test_saf009_create_role_fires() {
         let diags = check("CREATE ROLE admin_role");
         assert!(diags.iter().any(|d| d.rule_id == "SAF009"));
     }
 
     #[test]
-    fn test_saf009_create_table_ok() {
+    fn test_saf009_create_table_passes() {
         let diags = check("CREATE TABLE my_table (id INT)");
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF009"));
+    }
+
+    #[test]
+    fn test_saf009_create_view_passes() {
+        let diags = check("CREATE VIEW my_view AS SELECT 1");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF009"));
     }
 
     // ── SAF010 tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_saf010_insert_overwrite_no_partition() {
+    fn test_saf010_insert_overwrite_without_partition_fires() {
         let diags = check("INSERT OVERWRITE my_table SELECT * FROM t");
         assert!(diags.iter().any(|d| d.rule_id == "SAF010"));
     }
 
     #[test]
-    fn test_saf010_insert_overwrite_with_partition() {
+    fn test_saf010_insert_overwrite_with_partition_passes() {
         let diags =
             check("INSERT OVERWRITE my_table PARTITION (dt = '2024-01-01') SELECT * FROM t");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF010"));
     }
 
     #[test]
-    fn test_saf010_regular_insert_ok() {
+    fn test_saf010_insert_into_passes() {
         let diags = check("INSERT INTO my_table SELECT * FROM t");
         assert!(!diags.iter().any(|d| d.rule_id == "SAF010"));
     }
@@ -898,7 +986,7 @@ mod tests {
         assert_eq!(d.severity, Severity::Warning);
     }
 
-    // ── Non-SQL file test ──────────────────────────────────────────────────
+    // ── Cross-rule / integration tests ───────────────────────────────────
 
     #[test]
     fn test_non_sql_file_ignored() {
@@ -907,7 +995,21 @@ mod tests {
         assert!(diags.is_empty());
     }
 
-    // ── Config override test ───────────────────────────────────────────────
+    #[test]
+    fn test_empty_file_returns_no_diagnostics() {
+        let diags = check("");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_violations_in_one_file() {
+        let sql = "DROP TABLE t1; DROP VIEW v1; GRANT ALL ON db TO user1";
+        let diags = check(sql);
+        let rule_ids: Vec<&str> = diags.iter().map(|d| d.rule_id.as_str()).collect();
+        assert!(rule_ids.contains(&"SAF001"));
+        assert!(rule_ids.contains(&"SAF002"));
+        assert!(rule_ids.contains(&"SAF007"));
+    }
 
     #[test]
     fn test_rule_disabled_via_config() {
@@ -919,5 +1021,92 @@ mod tests {
         let checker = SqlSafetyChecker;
         let diags = checker.check_file("test.sql", "DROP TABLE t", None, &config);
         assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
+    }
+
+    #[test]
+    fn test_severity_override_applies() {
+        let mut config = default_config();
+        config.rules.insert(
+            "SAF001".to_owned(),
+            crate::config::RuleSeverityOverride::Warning,
+        );
+        let checker = SqlSafetyChecker;
+        let diags = checker.check_file("test.sql", "DROP TABLE foo", None, &config);
+        let saf001: Vec<_> = diags.iter().filter(|d| d.rule_id == "SAF001").collect();
+        assert_eq!(saf001.len(), 1);
+        assert_eq!(saf001[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_case_insensitive_keyword_matching() {
+        let diags = check("drop table my_table");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF001"));
+    }
+
+    #[test]
+    fn test_mixed_case_keyword_matching() {
+        let diags = check("Drop Table my_table");
+        assert!(diags.iter().any(|d| d.rule_id == "SAF001"));
+    }
+
+    #[test]
+    fn test_all_diagnostics_have_doc_url() {
+        let sql = "DROP TABLE t; DROP VIEW v; DROP SCHEMA s; TRUNCATE TABLE t; \
+                   DELETE FROM t; ALTER TABLE t DROP COLUMN c; \
+                   GRANT ALL ON t TO u; REVOKE ALL ON t FROM u; \
+                   CREATE USER u; INSERT OVERWRITE t SELECT 1";
+        let diags = check(sql);
+        for d in &diags {
+            assert!(
+                d.doc_url.is_some(),
+                "Missing doc_url for rule {}",
+                d.rule_id
+            );
+            assert!(
+                d.doc_url
+                    .as_ref()
+                    .unwrap()
+                    .starts_with("https://docs.ironlayer.app/check/rules/"),
+                "Bad doc_url for rule {}",
+                d.rule_id
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_diagnostics_have_suggestions() {
+        let sql = "DROP TABLE t; DELETE FROM t; GRANT ALL TO u";
+        let diags = check(sql);
+        for d in &diags {
+            assert!(
+                d.suggestion.is_some(),
+                "Missing suggestion for rule {}",
+                d.rule_id
+            );
+        }
+    }
+
+    #[test]
+    fn test_checker_name_is_sql_safety() {
+        let checker = SqlSafetyChecker;
+        assert_eq!(checker.name(), "sql_safety");
+    }
+
+    #[test]
+    fn test_jinja_comment_does_not_trigger() {
+        // Keywords inside Jinja comments ({# ... #}) are consumed as a single
+        // JinjaBlock token, so they are not visible as SQL keywords.
+        let sql = "{# DROP TABLE t #}\nSELECT 1";
+        let diags = check(sql);
+        assert!(!diags.iter().any(|d| d.rule_id == "SAF001"));
+    }
+
+    #[test]
+    fn test_sql_between_jinja_blocks_does_trigger() {
+        // Content between Jinja blocks IS visible SQL -- the lexer only
+        // consumes {% ... %} delimiters, not the SQL between them.
+        let sql = "{% if env == 'dev' %}DROP TABLE t{% endif %}";
+        let diags = check(sql);
+        assert!(diags.iter().any(|d| d.rule_id == "SAF001"));
     }
 }

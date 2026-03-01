@@ -1,38 +1,43 @@
 //! Ref resolution checker — rules REF001 through REF006.
 //!
-//! Validates `{{ ref('...') }}` macro usage, reimplementing the resolution
-//! logic from `ref_resolver.py`. Uses regex extraction identical to
-//! `ref_resolver._REF_PATTERN` and cross-file resolution via model registry.
+//! Validates `{{ ref('...') }}` usage across the project, ensuring that
+//! references resolve to existing models, no circular dependencies exist,
+//! models don't reference themselves, fully-qualified names are flagged
+//! when short names suffice, ambiguous short names are detected, and
+//! hardcoded table references are identified.
 //!
-//! REF001-REF003 and REF005 are cross-file checks that run in `check_project()`.
-//! REF004 and REF006 are per-file checks.
+//! ## Rule Summary
+//!
+//! | Rule   | Default  | Severity | Description                                          | Phase         |
+//! |--------|----------|----------|------------------------------------------------------|---------------|
+//! | REF001 | enabled  | error    | Ref references a model that doesn't exist            | check_project |
+//! | REF002 | enabled  | warning  | Circular ref dependency detected                     | check_project |
+//! | REF003 | enabled  | warning  | Self-referential ref                                 | check_file    |
+//! | REF004 | enabled  | info     | Fully-qualified name where short name suffices        | check_project |
+//! | REF005 | enabled  | warning  | Ambiguous short name across schemas                  | check_project |
+//! | REF006 | disabled | info     | Hardcoded table reference instead of ref()           | check_file    |
 
 use std::collections::{HashMap, HashSet};
 
-use regex::Regex;
-
 use crate::checkers::Checker;
 use crate::config::CheckConfig;
+use crate::sql_lexer::{tokenize, TokenKind};
 use crate::types::{CheckCategory, CheckDiagnostic, DiscoveredModel, Severity};
 
-/// Ref resolution checker implementing REF001-REF006.
+/// Ref resolution checker validating `{{ ref('...') }}` usage.
 pub struct RefResolverChecker;
-
-/// Generate the doc URL for a given rule ID.
-fn doc_url(rule_id: &str) -> Option<String> {
-    Some(format!("https://docs.ironlayer.app/check/rules/{rule_id}"))
-}
 
 impl Checker for RefResolverChecker {
     fn name(&self) -> &'static str {
         "ref_resolver"
     }
 
+    /// Per-file checks: REF003 (self-ref) and REF006 (hardcoded table reference).
     fn check_file(
         &self,
         file_path: &str,
         content: &str,
-        _model: Option<&DiscoveredModel>,
+        model: Option<&DiscoveredModel>,
         config: &CheckConfig,
     ) -> Vec<CheckDiagnostic> {
         if !file_path.ends_with(".sql") {
@@ -41,15 +46,21 @@ impl Checker for RefResolverChecker {
 
         let mut diags = Vec::new();
 
-        // REF004: Ref uses fully-qualified name where short name would suffice
-        check_ref004(file_path, content, config, &mut diags);
+        // REF003: Self-referential ref
+        if config.is_rule_enabled_for_path("REF003", file_path, true) {
+            check_ref003(file_path, content, model, config, &mut diags);
+        }
 
-        // REF006: Direct table reference instead of ref() — disabled by default
-        check_ref006(file_path, content, config, &mut diags);
+        // REF006: Hardcoded table reference (disabled by default)
+        if config.is_rule_enabled_for_path("REF006", file_path, false) {
+            check_ref006(file_path, content, config, &mut diags);
+        }
 
         diags
     }
 
+    /// Cross-file checks: REF001 (undefined ref), REF002 (circular),
+    /// REF004 (fully-qualified), REF005 (ambiguous short name).
     fn check_project(
         &self,
         models: &[DiscoveredModel],
@@ -57,317 +68,379 @@ impl Checker for RefResolverChecker {
     ) -> Vec<CheckDiagnostic> {
         let mut diags = Vec::new();
 
-        // Build model registry: short_name → canonical, canonical → canonical
-        let registry = build_model_registry(models);
-        let model_names: HashSet<&str> = models.iter().map(|m| m.name.as_str()).collect();
+        let sql_models: Vec<&DiscoveredModel> = models
+            .iter()
+            .filter(|m| m.file_path.ends_with(".sql"))
+            .collect();
 
-        // REF001: Undefined ref
-        check_ref001(models, &registry, &model_names, config, &mut diags);
+        let registry = build_model_registry(&sql_models);
 
-        // REF002: Circular ref dependency
-        check_ref002(models, config, &mut diags);
+        if config.is_rule_enabled("REF001", true) {
+            check_ref001(&sql_models, &registry, config, &mut diags);
+        }
 
-        // REF003: Self-referential ref
-        check_ref003(models, config, &mut diags);
+        if config.is_rule_enabled("REF002", true) {
+            check_ref002(&sql_models, &registry, config, &mut diags);
+        }
 
-        // REF005: Ambiguous short name
-        check_ref005(models, config, &mut diags);
+        if config.is_rule_enabled("REF004", true) {
+            check_ref004(&sql_models, &registry, config, &mut diags);
+        }
+
+        if config.is_rule_enabled("REF005", true) {
+            check_ref005(&sql_models, config, &mut diags);
+        }
 
         diags
     }
 }
 
-/// Build a model registry mapping short names and canonical names to canonical names.
+// ---------------------------------------------------------------------------
+// Model registry
+// ---------------------------------------------------------------------------
+
+/// Maps model names (both short and canonical) to their canonical forms.
 ///
-/// This mirrors `ref_resolver.build_model_registry()`.
-fn build_model_registry(models: &[DiscoveredModel]) -> HashMap<String, String> {
-    let mut registry = HashMap::new();
+/// For model `"analytics.orders_daily"`:
+///   - `"orders_daily"` -> `["analytics.orders_daily"]`
+///   - `"analytics.orders_daily"` -> `["analytics.orders_daily"]`
+///
+/// For model `"stg_users"` (no dot):
+///   - `"stg_users"` -> `["stg_users"]`
+struct ModelRegistry {
+    /// Maps short and canonical names to lists of canonical names.
+    name_to_canonical: HashMap<String, Vec<String>>,
+    /// Set of all canonical model names.
+    all_canonical: HashSet<String>,
+}
+
+/// Build the model registry from discovered SQL models.
+fn build_model_registry(models: &[&DiscoveredModel]) -> ModelRegistry {
+    let mut name_to_canonical: HashMap<String, Vec<String>> = HashMap::new();
+    let mut all_canonical: HashSet<String> = HashSet::new();
 
     for model in models {
         let canonical = model.name.clone();
+        all_canonical.insert(canonical.clone());
 
-        // Map canonical name to itself
-        registry.insert(canonical.clone(), canonical.clone());
+        // Map canonical name -> itself
+        name_to_canonical
+            .entry(canonical.clone())
+            .or_default()
+            .push(canonical.clone());
 
-        // Map short name (after last dot) to canonical name if unambiguous
-        if let Some(dot_pos) = canonical.rfind('.') {
-            let short_name = &canonical[dot_pos + 1..];
+        // If name has a dot, also map the short name
+        if let Some(dot_pos) = model.name.rfind('.') {
+            let short_name = &model.name[dot_pos + 1..];
             if !short_name.is_empty() {
-                registry
+                name_to_canonical
                     .entry(short_name.to_owned())
-                    .or_insert_with(|| canonical.clone());
+                    .or_default()
+                    .push(canonical);
             }
         }
     }
 
-    registry
+    ModelRegistry {
+        name_to_canonical,
+        all_canonical,
+    }
 }
 
-/// Full Wagner-Fischer Levenshtein distance computation.
+/// Check if a ref_name resolves to at least one model.
+fn ref_resolves(registry: &ModelRegistry, ref_name: &str) -> bool {
+    registry
+        .name_to_canonical
+        .get(ref_name)
+        .is_some_and(|v| !v.is_empty())
+}
+
+/// Collect all known lookup names for fuzzy matching.
+fn all_known_names(registry: &ModelRegistry) -> Vec<&str> {
+    registry
+        .name_to_canonical
+        .keys()
+        .map(|s| s.as_str())
+        .collect()
+}
+
+/// Count distinct canonical names a short name maps to.
+fn unique_canonical_count(registry: &ModelRegistry, name: &str) -> usize {
+    registry.name_to_canonical.get(name).map_or(0, |v| {
+        let unique: HashSet<&str> = v.iter().map(|s| s.as_str()).collect();
+        unique.len()
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Levenshtein distance (full Wagner-Fischer)
+// ---------------------------------------------------------------------------
+
+/// Compute the Levenshtein edit distance between two strings.
 ///
-/// Returns the minimum number of single-character edits (insertions,
-/// deletions, substitutions) needed to transform `a` into `b`.
+/// Uses the full Wagner-Fischer dynamic programming algorithm with two
+/// rows for O(min(m,n)) space. NOT a simplified approximation.
 fn levenshtein(a: &str, b: &str) -> usize {
+    let n = a.len();
+    let m = b.len();
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();
-    let m = a_chars.len();
-    let n = b_chars.len();
+    let mut prev = vec![0usize; m + 1];
+    let mut curr = vec![0usize; m + 1];
 
-    if m == 0 {
-        return n;
-    }
-    if n == 0 {
-        return m;
+    for (j, item) in prev.iter_mut().enumerate().take(m + 1) {
+        *item = j;
     }
 
-    // Use two rows instead of full matrix for O(min(m,n)) space
-    let mut prev = vec![0usize; n + 1];
-    let mut curr = vec![0usize; n + 1];
-
-    for (j, val) in prev.iter_mut().enumerate().take(n + 1) {
-        *val = j;
-    }
-
-    for i in 1..=m {
+    for i in 1..=n {
         curr[0] = i;
-        for j in 1..=n {
+        for j in 1..=m {
             let cost = if a_chars[i - 1] == b_chars[j - 1] {
                 0
             } else {
                 1
             };
-            curr[j] = (prev[j] + 1) // deletion
-                .min(curr[j - 1] + 1) // insertion
-                .min(prev[j - 1] + cost); // substitution
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
 
-    prev[n]
+    prev[m]
 }
 
-/// Find the best suggestion for an undefined ref name from the model registry.
-///
-/// Returns a suggestion string if a close match (Levenshtein distance ≤ 3) is found.
-fn find_suggestion(ref_name: &str, model_names: &HashSet<&str>) -> Option<String> {
-    let mut best_distance = usize::MAX;
-    let mut best_name = None;
+/// Find the closest match to `name` among `candidates` within `max_distance`.
+fn find_closest_match<'a>(
+    name: &str,
+    candidates: &[&'a str],
+    max_distance: usize,
+) -> Option<(&'a str, usize)> {
+    let mut best: Option<(&str, usize)> = None;
 
-    for &name in model_names {
-        let dist = levenshtein(ref_name, name);
-        if dist < best_distance && dist <= 3 {
-            best_distance = dist;
-            best_name = Some(name);
+    for &candidate in candidates {
+        if candidate == name {
+            continue;
         }
-    }
-
-    best_name.map(|name| {
-        format!(
-            "Did you mean '{}'? (Levenshtein distance: {})",
-            name, best_distance
-        )
-    })
-}
-
-/// Extract ref names with their line numbers from SQL content.
-fn extract_refs_with_lines(content: &str) -> Vec<(String, u32)> {
-    let re = Regex::new(r#"\{\{\s*ref\s*\(\s*(?:'([^']+)'|"([^"]+)")\s*\)\s*\}\}"#)
-        .expect("ref pattern regex is valid");
-
-    let mut refs = Vec::new();
-
-    for (line_idx, line) in content.lines().enumerate() {
-        let line_num = (line_idx + 1) as u32;
-        for cap in re.captures_iter(line) {
-            let ref_name = cap
-                .get(1)
-                .or_else(|| cap.get(2))
-                .map(|m| m.as_str().to_owned());
-            if let Some(name) = ref_name {
-                refs.push((name, line_num));
+        let dist = levenshtein(name, candidate);
+        if dist <= max_distance {
+            match best {
+                Some((_, best_dist)) if dist < best_dist => {
+                    best = Some((candidate, dist));
+                }
+                None => {
+                    best = Some((candidate, dist));
+                }
+                _ => {}
             }
         }
     }
 
-    refs
+    best
 }
 
 // ---------------------------------------------------------------------------
-// REF001: Undefined ref — model doesn't exist in project
+// Helper: find the line number of a ref() call
 // ---------------------------------------------------------------------------
 
+/// Find the 1-based line number where `{{ ref('name') }}` appears.
+fn find_ref_line(content: &str, ref_name: &str) -> u32 {
+    let pattern_single = format!("ref('{ref_name}')");
+    let pattern_double = format!("ref(\"{ref_name}\")");
+
+    for (idx, line) in content.lines().enumerate() {
+        if line.contains(&pattern_single) || line.contains(&pattern_double) {
+            return (idx + 1) as u32;
+        }
+    }
+    0
+}
+
+// ---------------------------------------------------------------------------
+// REF001: Undefined ref (check_project)
+// ---------------------------------------------------------------------------
+
+/// REF001: `{{ ref('model_name') }}` references a model that doesn't exist.
 fn check_ref001(
-    models: &[DiscoveredModel],
-    registry: &HashMap<String, String>,
-    model_names: &HashSet<&str>,
+    models: &[&DiscoveredModel],
+    registry: &ModelRegistry,
     config: &CheckConfig,
     diags: &mut Vec<CheckDiagnostic>,
 ) {
+    let known_names = all_known_names(registry);
+
     for model in models {
         if !config.is_rule_enabled_for_path("REF001", &model.file_path, true) {
             continue;
         }
 
-        let refs_with_lines = extract_refs_with_lines(&model.content);
-
-        for (ref_name, line) in &refs_with_lines {
-            if !registry.contains_key(ref_name) {
-                let suggestion = find_suggestion(ref_name, model_names);
-
-                diags.push(CheckDiagnostic {
-                    rule_id: "REF001".to_owned(),
-                    message: format!(
-                        "Undefined ref: '{}'. No model with this name exists in the project.",
-                        ref_name
-                    ),
-                    severity: config.effective_severity_for_path(
-                        "REF001",
-                        &model.file_path,
-                        Severity::Error,
-                    ),
-                    category: CheckCategory::RefResolution,
-                    file_path: model.file_path.clone(),
-                    line: *line,
-                    column: 0,
-                    snippet: Some(format!("{{{{ ref('{}') }}}}", ref_name)),
-                    suggestion,
-                    doc_url: doc_url("REF001"),
-                });
+        for ref_name in &model.ref_names {
+            if ref_resolves(registry, ref_name) {
+                continue;
             }
+
+            let severity =
+                config.effective_severity_for_path("REF001", &model.file_path, Severity::Error);
+
+            let suggestion = match find_closest_match(ref_name, &known_names, 3) {
+                Some((match_name, _)) => Some(format!(
+                    "Did you mean '{match_name}'? Check for typos in the model name."
+                )),
+                None => Some(
+                    "Ensure the referenced model exists in the project and the \
+                     name matches its '-- name:' header exactly."
+                        .to_owned(),
+                ),
+            };
+
+            let line = find_ref_line(&model.content, ref_name);
+
+            diags.push(CheckDiagnostic {
+                rule_id: "REF001".to_owned(),
+                message: format!(
+                    "Undefined ref: {{{{ ref('{}') }}}} in model '{}' references \
+                     a model that does not exist in this project.",
+                    ref_name, model.name
+                ),
+                severity,
+                category: CheckCategory::RefResolution,
+                file_path: model.file_path.clone(),
+                line,
+                column: 0,
+                snippet: Some(format!("{{{{ ref('{ref_name}') }}}}")),
+                suggestion,
+                doc_url: Some("https://docs.ironlayer.app/check/rules/REF001".to_owned()),
+            });
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// REF002: Circular ref dependency detected (A->B->A)
+// REF002: Circular dependency (check_project)
 // ---------------------------------------------------------------------------
 
+/// REF002: Circular ref dependency detected (e.g., A -> B -> A).
 fn check_ref002(
-    models: &[DiscoveredModel],
+    models: &[&DiscoveredModel],
+    registry: &ModelRegistry,
     config: &CheckConfig,
     diags: &mut Vec<CheckDiagnostic>,
 ) {
-    if models.is_empty() {
-        return;
-    }
-
-    // Build adjacency: model_name → set of ref'd model names
-    let model_name_set: HashSet<&str> = models.iter().map(|m| m.name.as_str()).collect();
-    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
-    let name_to_file: HashMap<&str, &str> = models
+    // Build adjacency list: model canonical name -> resolved ref targets
+    let mut adjacency: HashMap<&str, Vec<&str>> = HashMap::new();
+    let model_name_to_file: HashMap<&str, &str> = models
         .iter()
         .map(|m| (m.name.as_str(), m.file_path.as_str()))
         .collect();
 
     for model in models {
-        let deps: Vec<&str> = model
-            .ref_names
-            .iter()
-            .filter(|r| model_name_set.contains(r.as_str()))
-            .map(|r| r.as_str())
-            .collect();
-        adj.insert(model.name.as_str(), deps);
+        let mut targets = Vec::new();
+        for ref_name in &model.ref_names {
+            if let Some(canonicals) = registry.name_to_canonical.get(ref_name.as_str()) {
+                for canonical in canonicals {
+                    if registry.all_canonical.contains(canonical.as_str()) {
+                        targets.push(canonical.as_str());
+                    }
+                }
+            }
+        }
+        adjacency.insert(model.name.as_str(), targets);
     }
 
     // DFS cycle detection
+    let all_names: Vec<&str> = models.iter().map(|m| m.name.as_str()).collect();
     let mut visited: HashSet<&str> = HashSet::new();
     let mut in_stack: HashSet<&str> = HashSet::new();
-    let mut reported_cycles: HashSet<String> = HashSet::new();
+    let mut cycle_participants: HashSet<&str> = HashSet::new();
 
-    for model in models {
-        let file_path = model.file_path.as_str();
+    for &start in &all_names {
+        if !visited.contains(start) {
+            dfs_detect_cycles(
+                start,
+                &adjacency,
+                &mut visited,
+                &mut in_stack,
+                &mut cycle_participants,
+                &mut Vec::new(),
+            );
+        }
+    }
+
+    for &participant in &cycle_participants {
+        let file_path = match model_name_to_file.get(participant) {
+            Some(fp) => *fp,
+            None => continue,
+        };
+
         if !config.is_rule_enabled_for_path("REF002", file_path, true) {
             continue;
         }
 
-        if !visited.contains(model.name.as_str()) {
-            detect_cycles_dfs(
-                model.name.as_str(),
-                &adj,
-                &name_to_file,
-                &mut visited,
-                &mut in_stack,
-                &mut Vec::new(),
-                &mut reported_cycles,
-                config,
-                diags,
-            );
-        }
+        let severity = config.effective_severity_for_path("REF002", file_path, Severity::Warning);
+
+        let deps = adjacency
+            .get(participant)
+            .map_or(&[] as &[&str], |v| v.as_slice());
+        let cyclic_deps: Vec<&str> = deps
+            .iter()
+            .filter(|d| cycle_participants.contains(**d))
+            .copied()
+            .collect();
+
+        diags.push(CheckDiagnostic {
+            rule_id: "REF002".to_owned(),
+            message: format!(
+                "Circular dependency detected: model '{}' is part of a \
+                 dependency cycle involving: {}. Circular references prevent \
+                 correct execution ordering.",
+                participant,
+                cyclic_deps.join(", ")
+            ),
+            severity,
+            category: CheckCategory::RefResolution,
+            file_path: file_path.to_owned(),
+            line: 1,
+            column: 0,
+            snippet: None,
+            suggestion: Some(
+                "Break the circular dependency by refactoring one of the \
+                 models to remove the cyclical ref() call."
+                    .to_owned(),
+            ),
+            doc_url: Some("https://docs.ironlayer.app/check/rules/REF002".to_owned()),
+        });
     }
 }
 
-/// DFS helper for cycle detection.
-#[allow(clippy::too_many_arguments)]
-fn detect_cycles_dfs<'a>(
+/// DFS helper for cycle detection with visited set and recursion stack.
+fn dfs_detect_cycles<'a>(
     node: &'a str,
-    adj: &HashMap<&'a str, Vec<&'a str>>,
-    name_to_file: &HashMap<&'a str, &'a str>,
+    adjacency: &HashMap<&'a str, Vec<&'a str>>,
     visited: &mut HashSet<&'a str>,
     in_stack: &mut HashSet<&'a str>,
+    cycle_participants: &mut HashSet<&'a str>,
     path: &mut Vec<&'a str>,
-    reported_cycles: &mut HashSet<String>,
-    config: &CheckConfig,
-    diags: &mut Vec<CheckDiagnostic>,
 ) {
     visited.insert(node);
     in_stack.insert(node);
     path.push(node);
 
-    if let Some(deps) = adj.get(node) {
-        for &dep in deps {
-            if !visited.contains(dep) {
-                detect_cycles_dfs(
-                    dep,
-                    adj,
-                    name_to_file,
+    if let Some(neighbors) = adjacency.get(node) {
+        for &neighbor in neighbors {
+            if !visited.contains(neighbor) {
+                dfs_detect_cycles(
+                    neighbor,
+                    adjacency,
                     visited,
                     in_stack,
+                    cycle_participants,
                     path,
-                    reported_cycles,
-                    config,
-                    diags,
                 );
-            } else if in_stack.contains(dep) {
-                // Cycle found — build the cycle path
-                let cycle_start = path.iter().position(|&n| n == dep).unwrap_or(0);
-                let mut cycle: Vec<&str> = path[cycle_start..].to_vec();
-                cycle.push(dep);
-
-                // Deduplicate: normalize the cycle to a canonical form
-                let cycle_key = {
-                    let mut key_parts = cycle.clone();
-                    key_parts.sort();
-                    key_parts.join(" -> ")
-                };
-
-                if !reported_cycles.contains(&cycle_key) {
-                    reported_cycles.insert(cycle_key);
-
-                    let file_path = name_to_file.get(node).copied().unwrap_or("");
-                    let cycle_str = cycle.join(" -> ");
-
-                    diags.push(CheckDiagnostic {
-                        rule_id: "REF002".to_owned(),
-                        message: format!(
-                            "Circular ref dependency detected: {}. \
-                             Models must not form dependency cycles.",
-                            cycle_str
-                        ),
-                        severity: config.effective_severity_for_path(
-                            "REF002",
-                            file_path,
-                            Severity::Warning,
-                        ),
-                        category: CheckCategory::RefResolution,
-                        file_path: file_path.to_owned(),
-                        line: 0,
-                        column: 0,
-                        snippet: None,
-                        suggestion: Some(
-                            "Break the cycle by removing one of the ref() dependencies.".to_owned(),
-                        ),
-                        doc_url: doc_url("REF002"),
-                    });
+            } else if in_stack.contains(neighbor) {
+                // Found a cycle: mark all nodes from neighbor to end of path
+                if let Some(start_idx) = path.iter().position(|&n| n == neighbor) {
+                    for &cycle_node in &path[start_idx..] {
+                        cycle_participants.insert(cycle_node);
+                    }
+                    cycle_participants.insert(neighbor);
                 }
             }
         }
@@ -378,94 +451,112 @@ fn detect_cycles_dfs<'a>(
 }
 
 // ---------------------------------------------------------------------------
-// REF003: Self-referential ref (model references itself)
+// REF003: Self-referential ref (check_file)
 // ---------------------------------------------------------------------------
 
+/// REF003: A model references itself via `{{ ref('own_name') }}`.
 fn check_ref003(
-    models: &[DiscoveredModel],
+    file_path: &str,
+    content: &str,
+    model: Option<&DiscoveredModel>,
     config: &CheckConfig,
     diags: &mut Vec<CheckDiagnostic>,
 ) {
-    for model in models {
-        if !config.is_rule_enabled_for_path("REF003", &model.file_path, true) {
-            continue;
-        }
+    let model = match model {
+        Some(m) => m,
+        None => return,
+    };
 
-        let refs_with_lines = extract_refs_with_lines(&model.content);
+    for ref_name in &model.ref_names {
+        let is_self_ref = ref_name == &model.name
+            || model
+                .name
+                .rfind('.')
+                .map(|pos| &model.name[pos + 1..] == ref_name.as_str())
+                .unwrap_or(false);
 
-        for (ref_name, line) in &refs_with_lines {
-            if ref_name == &model.name {
-                diags.push(CheckDiagnostic {
-                    rule_id: "REF003".to_owned(),
-                    message: format!(
-                        "Model '{}' references itself via {{{{ ref('{}') }}}}. \
-                         Self-referential refs create infinite loops.",
-                        model.name, ref_name
-                    ),
-                    severity: config.effective_severity_for_path(
-                        "REF003",
-                        &model.file_path,
-                        Severity::Warning,
-                    ),
-                    category: CheckCategory::RefResolution,
-                    file_path: model.file_path.clone(),
-                    line: *line,
-                    column: 0,
-                    snippet: Some(format!("{{{{ ref('{}') }}}}", ref_name)),
-                    suggestion: Some(
-                        "Remove the self-reference or use a different model name.".to_owned(),
-                    ),
-                    doc_url: doc_url("REF003"),
-                });
-            }
+        if is_self_ref {
+            let severity =
+                config.effective_severity_for_path("REF003", file_path, Severity::Warning);
+            let line = find_ref_line(content, ref_name);
+
+            diags.push(CheckDiagnostic {
+                rule_id: "REF003".to_owned(),
+                message: format!(
+                    "Self-referential ref: model '{}' references itself via \
+                     {{{{ ref('{}') }}}}. A model cannot depend on its own output.",
+                    model.name, ref_name
+                ),
+                severity,
+                category: CheckCategory::RefResolution,
+                file_path: file_path.to_owned(),
+                line,
+                column: 0,
+                snippet: Some(format!("{{{{ ref('{ref_name}') }}}}")),
+                suggestion: Some(
+                    "Remove the self-referential ref() call. If you need to \
+                     reference the model's own data, consider using a CTE or \
+                     a separate staging model."
+                        .to_owned(),
+                ),
+                doc_url: Some("https://docs.ironlayer.app/check/rules/REF003".to_owned()),
+            });
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// REF004: Ref uses fully-qualified name where short name would suffice
+// REF004: Fully-qualified ref (check_project)
 // ---------------------------------------------------------------------------
 
+/// REF004: A ref uses a fully-qualified name (e.g., `schema.model`) where
+/// the short name alone would uniquely resolve.
 fn check_ref004(
-    file_path: &str,
-    content: &str,
+    models: &[&DiscoveredModel],
+    registry: &ModelRegistry,
     config: &CheckConfig,
     diags: &mut Vec<CheckDiagnostic>,
 ) {
-    if !config.is_rule_enabled_for_path("REF004", file_path, true) {
-        return;
-    }
+    for model in models {
+        if !config.is_rule_enabled_for_path("REF004", &model.file_path, true) {
+            continue;
+        }
 
-    let refs_with_lines = extract_refs_with_lines(content);
-
-    for (ref_name, line) in &refs_with_lines {
-        // A fully-qualified name contains a dot (e.g., "schema.model_name")
-        if ref_name.contains('.') {
+        for ref_name in &model.ref_names {
             if let Some(dot_pos) = ref_name.rfind('.') {
                 let short_name = &ref_name[dot_pos + 1..];
-                if !short_name.is_empty() {
+                if short_name.is_empty() {
+                    continue;
+                }
+
+                // Only fire if the short name uniquely resolves
+                if unique_canonical_count(registry, short_name) == 1 {
+                    let severity = config.effective_severity_for_path(
+                        "REF004",
+                        &model.file_path,
+                        Severity::Info,
+                    );
+                    let line = find_ref_line(&model.content, ref_name);
+
                     diags.push(CheckDiagnostic {
                         rule_id: "REF004".to_owned(),
                         message: format!(
-                            "Ref '{}' uses a fully-qualified name. \
-                             Consider using the short name '{}' if it's unambiguous.",
+                            "Fully-qualified ref '{}' can be simplified to \
+                             '{}'. The short name uniquely resolves to a \
+                             single model.",
                             ref_name, short_name
                         ),
-                        severity: config.effective_severity_for_path(
-                            "REF004",
-                            file_path,
-                            Severity::Info,
-                        ),
+                        severity,
                         category: CheckCategory::RefResolution,
-                        file_path: file_path.to_owned(),
-                        line: *line,
+                        file_path: model.file_path.clone(),
+                        line,
                         column: 0,
-                        snippet: Some(format!("{{{{ ref('{}') }}}}", ref_name)),
+                        snippet: Some(format!("{{{{ ref('{ref_name}') }}}}")),
                         suggestion: Some(format!(
-                            "Replace with {{{{ ref('{}') }}}} if the short name is unambiguous.",
-                            short_name
+                            "Replace {{{{ ref('{ref_name}') }}}} with \
+                             {{{{ ref('{short_name}') }}}}."
                         )),
-                        doc_url: doc_url("REF004"),
+                        doc_url: Some("https://docs.ironlayer.app/check/rules/REF004".to_owned()),
                     });
                 }
             }
@@ -474,90 +565,209 @@ fn check_ref004(
 }
 
 // ---------------------------------------------------------------------------
-// REF005: Ambiguous short name — two models share the same short name
+// REF005: Ambiguous short name (check_project)
 // ---------------------------------------------------------------------------
 
+/// REF005: Two or more models share the same short name but have different
+/// fully-qualified (canonical) names.
 fn check_ref005(
-    models: &[DiscoveredModel],
+    models: &[&DiscoveredModel],
     config: &CheckConfig,
     diags: &mut Vec<CheckDiagnostic>,
 ) {
-    // Group models by short name (part after last dot, or entire name)
-    let mut short_name_groups: HashMap<String, Vec<&DiscoveredModel>> = HashMap::new();
+    // Group by short name -> (canonical_name, file_path)
+    let mut short_to_models: HashMap<String, Vec<(&str, &str)>> = HashMap::new();
 
     for model in models {
         let short_name = if let Some(dot_pos) = model.name.rfind('.') {
-            model.name[dot_pos + 1..].to_owned()
+            &model.name[dot_pos + 1..]
         } else {
-            model.name.clone()
+            model.name.as_str()
         };
-        short_name_groups.entry(short_name).or_default().push(model);
+
+        if !short_name.is_empty() {
+            short_to_models
+                .entry(short_name.to_owned())
+                .or_default()
+                .push((model.name.as_str(), model.file_path.as_str()));
+        }
     }
 
-    for (short_name, group) in &short_name_groups {
-        if group.len() > 1 {
-            for model in group {
-                if !config.is_rule_enabled_for_path("REF005", &model.file_path, true) {
-                    continue;
-                }
+    for (short_name, model_list) in &short_to_models {
+        let unique_canonicals: HashSet<&str> = model_list.iter().map(|(name, _)| *name).collect();
 
-                let other_names: Vec<&str> = group
-                    .iter()
-                    .filter(|m| m.name != model.name)
-                    .map(|m| m.name.as_str())
-                    .collect();
+        if unique_canonicals.len() < 2 {
+            continue;
+        }
 
-                diags.push(CheckDiagnostic {
-                    rule_id: "REF005".to_owned(),
-                    message: format!(
-                        "Ambiguous short name '{}': model '{}' shares this short name with: {}. \
-                         Use fully-qualified names to disambiguate.",
-                        short_name,
-                        model.name,
-                        other_names.join(", ")
-                    ),
-                    severity: config.effective_severity_for_path(
-                        "REF005",
-                        &model.file_path,
-                        Severity::Warning,
-                    ),
-                    category: CheckCategory::RefResolution,
-                    file_path: model.file_path.clone(),
-                    line: 0,
-                    column: 0,
-                    snippet: None,
-                    suggestion: Some(format!(
-                        "Rename one of the models or use fully-qualified refs like {{{{ ref('{}') }}}}.",
-                        model.name
-                    )),
-                    doc_url: doc_url("REF005"),
-                });
+        for &(canonical_name, file_path) in model_list {
+            if !config.is_rule_enabled_for_path("REF005", file_path, true) {
+                continue;
             }
+
+            let severity =
+                config.effective_severity_for_path("REF005", file_path, Severity::Warning);
+
+            let other_canonicals: Vec<&str> = unique_canonicals
+                .iter()
+                .filter(|&&n| n != canonical_name)
+                .copied()
+                .collect();
+
+            diags.push(CheckDiagnostic {
+                rule_id: "REF005".to_owned(),
+                message: format!(
+                    "Ambiguous short name: '{}' resolves to multiple models: \
+                     {}. Use fully-qualified names to avoid ambiguity.",
+                    short_name,
+                    unique_canonicals
+                        .iter()
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                severity,
+                category: CheckCategory::RefResolution,
+                file_path: file_path.to_owned(),
+                line: 1,
+                column: 0,
+                snippet: None,
+                suggestion: Some(format!(
+                    "Use the fully-qualified name (e.g., \
+                     {{{{ ref('{}') }}}}) instead of the short name '{}'. \
+                     Other models with this name: {}.",
+                    canonical_name,
+                    short_name,
+                    other_canonicals.join(", ")
+                )),
+                doc_url: Some("https://docs.ironlayer.app/check/rules/REF005".to_owned()),
+            });
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// REF006: Direct table reference instead of ref() (disabled by default)
+// REF006: Hardcoded table reference (check_file, disabled by default)
 // ---------------------------------------------------------------------------
 
+/// REF006: A SQL file uses a direct table reference (`FROM schema.table` or
+/// `JOIN schema.table`) instead of `{{ ref('...') }}`.
+///
+/// Uses the SQL lexer to detect `FROM`/`JOIN` followed by
+/// `Identifier.Identifier` outside of Jinja `{{ }}` blocks.
 fn check_ref006(
     file_path: &str,
-    _content: &str,
+    content: &str,
     config: &CheckConfig,
-    _diags: &mut Vec<CheckDiagnostic>,
+    diags: &mut Vec<CheckDiagnostic>,
 ) {
-    // Disabled by default — detecting hardcoded table names without full AST
-    // analysis would produce too many false positives. This rule is a placeholder
-    // for Phase 3 when Python-side AST analysis is available.
-    if !config.is_rule_enabled_for_path("REF006", file_path, false) {
-        // Early exit: rule disabled
-    }
+    let tokens = tokenize(content);
+    let significant: Vec<_> = tokens
+        .iter()
+        .filter(|t| {
+            t.kind != TokenKind::Whitespace
+                && t.kind != TokenKind::Newline
+                && t.kind != TokenKind::LineComment
+                && t.kind != TokenKind::BlockComment
+        })
+        .collect();
 
-    // REF006 implementation requires full AST analysis via Python's sql_toolkit
-    // to distinguish between table references and column references. The Rust
-    // lexer alone cannot reliably detect this pattern. When enabled, this rule
-    // will be backed by the Python callback in Phase 3.
+    let mut jinja_depth: u32 = 0;
+    let mut i = 0;
+
+    while i < significant.len() {
+        let tok = significant[i];
+
+        if tok.kind == TokenKind::JinjaOpen {
+            jinja_depth += 1;
+            i += 1;
+            continue;
+        }
+        if tok.kind == TokenKind::JinjaClose {
+            jinja_depth = jinja_depth.saturating_sub(1);
+            i += 1;
+            continue;
+        }
+
+        if jinja_depth > 0 {
+            i += 1;
+            continue;
+        }
+
+        // Detect FROM/JOIN keyword followed by Ident.Ident
+        if tok.kind == TokenKind::Keyword {
+            let upper = tok.text.to_ascii_uppercase();
+            let is_table_source = upper == "FROM" || upper == "JOIN";
+
+            // For INNER/LEFT/RIGHT/FULL/CROSS, look ahead for JOIN
+            let join_offset = if !is_table_source
+                && (upper == "INNER"
+                    || upper == "LEFT"
+                    || upper == "RIGHT"
+                    || upper == "FULL"
+                    || upper == "CROSS")
+            {
+                find_join_after(i, &significant)
+            } else {
+                None
+            };
+
+            let source_idx = if is_table_source {
+                Some(i)
+            } else {
+                join_offset
+            };
+
+            if let Some(src) = source_idx {
+                let after = src + 1;
+                if after + 2 < significant.len()
+                    && significant[after].kind == TokenKind::Identifier
+                    && significant[after + 1].kind == TokenKind::Dot
+                    && significant[after + 2].kind == TokenKind::Identifier
+                {
+                    let schema = significant[after].text;
+                    let table = significant[after + 2].text;
+                    let severity =
+                        config.effective_severity_for_path("REF006", file_path, Severity::Info);
+
+                    diags.push(CheckDiagnostic {
+                        rule_id: "REF006".to_owned(),
+                        message: format!(
+                            "Hardcoded table reference '{schema}.{table}' \
+                             found. Consider using {{{{ ref('{table}') }}}} \
+                             instead for dependency tracking and environment \
+                             portability."
+                        ),
+                        severity,
+                        category: CheckCategory::RefResolution,
+                        file_path: file_path.to_owned(),
+                        line: significant[after].line,
+                        column: significant[after].column,
+                        snippet: Some(format!("{schema}.{table}")),
+                        suggestion: Some(format!(
+                            "Replace '{schema}.{table}' with \
+                             {{{{ ref('{table}') }}}}."
+                        )),
+                        doc_url: Some("https://docs.ironlayer.app/check/rules/REF006".to_owned()),
+                    });
+                }
+            }
+        }
+
+        i += 1;
+    }
+}
+
+/// Look ahead from position `i` (which is INNER/LEFT/etc.) for a JOIN keyword
+/// within the next 3 tokens.
+fn find_join_after(i: usize, tokens: &[&crate::sql_lexer::Token<'_>]) -> Option<usize> {
+    let start = i + 1;
+    let end = tokens.len().min(i + 4);
+    tokens[start..end]
+        .iter()
+        .enumerate()
+        .find(|(_, t)| t.kind == TokenKind::Keyword && t.text.eq_ignore_ascii_case("JOIN"))
+        .map(|(offset, _)| start + offset)
 }
 
 // ---------------------------------------------------------------------------
@@ -567,25 +777,37 @@ fn check_ref006(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::CheckConfig;
+    use crate::config::RuleSeverityOverride;
+    use crate::discovery::compute_sha256;
     use std::collections::HashMap;
+
+    fn make_model(
+        name: &str,
+        file_path: &str,
+        content: &str,
+        refs: Vec<&str>,
+        header: HashMap<&str, &str>,
+    ) -> DiscoveredModel {
+        DiscoveredModel {
+            name: name.to_owned(),
+            file_path: file_path.to_owned(),
+            content_hash: compute_sha256(content),
+            ref_names: refs.into_iter().map(|s| s.to_owned()).collect(),
+            header: header
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
+            content: content.to_owned(),
+        }
+    }
 
     fn default_config() -> CheckConfig {
         CheckConfig::default()
     }
 
-    fn make_model(name: &str, file_path: &str, content: &str, refs: &[&str]) -> DiscoveredModel {
-        DiscoveredModel {
-            name: name.to_owned(),
-            file_path: file_path.to_owned(),
-            content_hash: "sha256:test".to_owned(),
-            ref_names: refs.iter().map(|r| (*r).to_owned()).collect(),
-            header: HashMap::new(),
-            content: content.to_owned(),
-        }
-    }
-
-    // ── Levenshtein tests ──────────────────────────────────────────────────
+    // -------------------------------------------------------------------
+    // Levenshtein tests
+    // -------------------------------------------------------------------
 
     #[test]
     fn test_levenshtein_identical() {
@@ -593,250 +815,806 @@ mod tests {
     }
 
     #[test]
-    fn test_levenshtein_one_edit() {
-        assert_eq!(levenshtein("hello", "helo"), 1);
-        assert_eq!(levenshtein("hello", "hellp"), 1);
-        assert_eq!(levenshtein("hello", "helloo"), 1);
-    }
-
-    #[test]
-    fn test_levenshtein_two_edits() {
-        assert_eq!(levenshtein("hello", "help"), 2);
-    }
-
-    #[test]
     fn test_levenshtein_empty() {
-        assert_eq!(levenshtein("", "hello"), 5);
-        assert_eq!(levenshtein("hello", ""), 5);
+        assert_eq!(levenshtein("", "abc"), 3);
+        assert_eq!(levenshtein("abc", ""), 3);
         assert_eq!(levenshtein("", ""), 0);
     }
 
     #[test]
-    fn test_levenshtein_completely_different() {
-        assert_eq!(levenshtein("abc", "xyz"), 3);
+    fn test_levenshtein_substitution() {
+        assert_eq!(levenshtein("cat", "bat"), 1);
     }
 
-    // ── REF001 tests ───────────────────────────────────────────────────────
+    #[test]
+    fn test_levenshtein_insertion() {
+        assert_eq!(levenshtein("cat", "cats"), 1);
+    }
 
     #[test]
-    fn test_ref001_undefined_ref() {
-        let models = vec![make_model(
-            "stg_orders",
-            "models/stg_orders.sql",
-            "SELECT * FROM {{ ref('nonexistent') }}",
-            &["nonexistent"],
-        )];
+    fn test_levenshtein_deletion() {
+        assert_eq!(levenshtein("cats", "cat"), 1);
+    }
+
+    #[test]
+    fn test_levenshtein_complex() {
+        assert_eq!(levenshtein("kitten", "sitting"), 3);
+    }
+
+    // -------------------------------------------------------------------
+    // REF001: Undefined ref
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref001_undefined_ref_fires() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
-        assert!(diags.iter().any(|d| d.rule_id == "REF001"));
-    }
+        let config = default_config();
 
-    #[test]
-    fn test_ref001_valid_ref() {
         let models = vec![
-            make_model("raw_orders", "models/raw_orders.sql", "SELECT 1", &[]),
             make_model(
                 "stg_orders",
                 "models/stg_orders.sql",
-                "SELECT * FROM {{ ref('raw_orders') }}",
-                &["raw_orders"],
+                "-- name: stg_orders\nSELECT 1",
+                vec![],
+                HashMap::from([("name", "stg_orders")]),
+            ),
+            make_model(
+                "fct_revenue",
+                "models/fct_revenue.sql",
+                "-- name: fct_revenue\nSELECT * FROM {{ ref('nonexistent_model') }}",
+                vec!["nonexistent_model"],
+                HashMap::from([("name", "fct_revenue")]),
             ),
         ];
+
+        let diags = checker.check_project(&models, &config);
+        let ref001: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF001").collect();
+        assert_eq!(ref001.len(), 1);
+        assert!(ref001[0].message.contains("nonexistent_model"));
+        assert_eq!(ref001[0].severity, Severity::Error);
+        assert_eq!(ref001[0].category, CheckCategory::RefResolution);
+    }
+
+    #[test]
+    fn test_ref001_valid_ref_passes() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "stg_orders",
+                "models/stg_orders.sql",
+                "-- name: stg_orders\nSELECT 1",
+                vec![],
+                HashMap::from([("name", "stg_orders")]),
+            ),
+            make_model(
+                "fct_revenue",
+                "models/fct_revenue.sql",
+                "-- name: fct_revenue\nSELECT * FROM {{ ref('stg_orders') }}",
+                vec!["stg_orders"],
+                HashMap::from([("name", "fct_revenue")]),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
         assert!(!diags.iter().any(|d| d.rule_id == "REF001"));
     }
 
     #[test]
-    fn test_ref001_suggestion() {
+    fn test_ref001_fuzzy_suggestion() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
         let models = vec![
-            make_model("stg_orders", "models/stg_orders.sql", "SELECT 1", &[]),
+            make_model(
+                "stg_orders",
+                "models/stg_orders.sql",
+                "-- name: stg_orders\nSELECT 1",
+                vec![],
+                HashMap::from([("name", "stg_orders")]),
+            ),
             make_model(
                 "fct_revenue",
                 "models/fct_revenue.sql",
-                "SELECT * FROM {{ ref('stg_orderz') }}",
-                &["stg_orderz"],
+                "-- name: fct_revenue\nSELECT * FROM {{ ref('stg_orderz') }}",
+                vec!["stg_orderz"],
+                HashMap::from([("name", "fct_revenue")]),
             ),
         ];
-        let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
-        let ref001 = diags.iter().find(|d| d.rule_id == "REF001").unwrap();
-        assert!(ref001.suggestion.as_ref().unwrap().contains("stg_orders"));
+
+        let diags = checker.check_project(&models, &config);
+        let ref001: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF001").collect();
+        assert_eq!(ref001.len(), 1);
+        let suggestion = ref001[0]
+            .suggestion
+            .as_ref()
+            .expect("should have suggestion");
+        assert!(
+            suggestion.contains("stg_orders"),
+            "Suggestion should suggest 'stg_orders', got: {suggestion}"
+        );
     }
 
-    // ── REF002 tests ───────────────────────────────────────────────────────
+    #[test]
+    fn test_ref001_disabled_via_config() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF001".to_owned(), RuleSeverityOverride::Off);
+
+        let models = vec![make_model(
+            "fct",
+            "models/fct.sql",
+            "SELECT * FROM {{ ref('missing') }}",
+            vec!["missing"],
+            HashMap::new(),
+        )];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF001"));
+    }
 
     #[test]
-    fn test_ref002_circular_dependency() {
+    fn test_ref001_short_name_resolves_to_qualified() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "analytics.orders_daily",
+                "models/orders_daily.sql",
+                "-- name: analytics.orders_daily\nSELECT 1",
+                vec![],
+                HashMap::from([("name", "analytics.orders_daily")]),
+            ),
+            make_model(
+                "fct_summary",
+                "models/fct_summary.sql",
+                "-- name: fct_summary\nSELECT * FROM {{ ref('orders_daily') }}",
+                vec!["orders_daily"],
+                HashMap::from([("name", "fct_summary")]),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(
+            !diags.iter().any(|d| d.rule_id == "REF001"),
+            "Short name should resolve to the qualified model"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // REF002: Circular dependency
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref002_ab_cycle_detected() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
         let models = vec![
             make_model(
                 "model_a",
                 "models/model_a.sql",
                 "SELECT * FROM {{ ref('model_b') }}",
-                &["model_b"],
+                vec!["model_b"],
+                HashMap::new(),
             ),
             make_model(
                 "model_b",
                 "models/model_b.sql",
                 "SELECT * FROM {{ ref('model_a') }}",
-                &["model_a"],
+                vec!["model_a"],
+                HashMap::new(),
             ),
         ];
-        let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
-        assert!(diags.iter().any(|d| d.rule_id == "REF002"));
+
+        let diags = checker.check_project(&models, &config);
+        let ref002: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF002").collect();
+        assert_eq!(ref002.len(), 2, "Both models in cycle should be flagged");
+        assert!(ref002.iter().any(|d| d.message.contains("model_a")));
+        assert!(ref002.iter().any(|d| d.message.contains("model_b")));
+        assert_eq!(ref002[0].severity, Severity::Warning);
     }
 
     #[test]
-    fn test_ref002_no_circular() {
+    fn test_ref002_no_cycle_passes() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
         let models = vec![
-            make_model("model_a", "models/model_a.sql", "SELECT 1", &[]),
             make_model(
-                "model_b",
-                "models/model_b.sql",
-                "SELECT * FROM {{ ref('model_a') }}",
-                &["model_a"],
+                "stg_users",
+                "models/stg_users.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "fct_users",
+                "models/fct_users.sql",
+                "SELECT * FROM {{ ref('stg_users') }}",
+                vec!["stg_users"],
+                HashMap::new(),
             ),
         ];
-        let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
+
+        let diags = checker.check_project(&models, &config);
         assert!(!diags.iter().any(|d| d.rule_id == "REF002"));
     }
 
-    // ── REF003 tests ───────────────────────────────────────────────────────
-
     #[test]
-    fn test_ref003_self_reference() {
-        let models = vec![make_model(
-            "model_a",
-            "models/model_a.sql",
-            "SELECT * FROM {{ ref('model_a') }}",
-            &["model_a"],
-        )];
+    fn test_ref002_three_node_cycle() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
-        assert!(diags.iter().any(|d| d.rule_id == "REF003"));
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "model_a",
+                "models/model_a.sql",
+                "SELECT * FROM {{ ref('model_b') }}",
+                vec!["model_b"],
+                HashMap::new(),
+            ),
+            make_model(
+                "model_b",
+                "models/model_b.sql",
+                "SELECT * FROM {{ ref('model_c') }}",
+                vec!["model_c"],
+                HashMap::new(),
+            ),
+            make_model(
+                "model_c",
+                "models/model_c.sql",
+                "SELECT * FROM {{ ref('model_a') }}",
+                vec!["model_a"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        let ref002: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF002").collect();
+        assert_eq!(ref002.len(), 3, "All 3 models in cycle should be flagged");
     }
 
     #[test]
-    fn test_ref003_no_self_reference() {
-        let models = vec![make_model(
-            "model_a",
-            "models/model_a.sql",
-            "SELECT * FROM {{ ref('model_b') }}",
-            &["model_b"],
-        )];
+    fn test_ref002_disabled_via_config() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF002".to_owned(), RuleSeverityOverride::Off);
+
+        let models = vec![
+            make_model(
+                "a",
+                "models/a.sql",
+                "SELECT * FROM {{ ref('b') }}",
+                vec!["b"],
+                HashMap::new(),
+            ),
+            make_model(
+                "b",
+                "models/b.sql",
+                "SELECT * FROM {{ ref('a') }}",
+                vec!["a"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF002"));
+    }
+
+    // -------------------------------------------------------------------
+    // REF003: Self-referential ref
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref003_self_ref_fires() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+        let content = "-- name: stg_orders\nSELECT * FROM {{ ref('stg_orders') }}";
+        let model = make_model(
+            "stg_orders",
+            "models/stg_orders.sql",
+            content,
+            vec!["stg_orders"],
+            HashMap::from([("name", "stg_orders")]),
+        );
+
+        let diags = checker.check_file("models/stg_orders.sql", content, Some(&model), &config);
+        let ref003: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF003").collect();
+        assert_eq!(ref003.len(), 1);
+        assert_eq!(ref003[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_ref003_non_self_ref_passes() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+        let content = "-- name: fct_revenue\nSELECT * FROM {{ ref('stg_orders') }}";
+        let model = make_model(
+            "fct_revenue",
+            "models/fct_revenue.sql",
+            content,
+            vec!["stg_orders"],
+            HashMap::from([("name", "fct_revenue")]),
+        );
+
+        let diags = checker.check_file("models/fct_revenue.sql", content, Some(&model), &config);
         assert!(!diags.iter().any(|d| d.rule_id == "REF003"));
     }
 
-    // ── REF004 tests ───────────────────────────────────────────────────────
-
     #[test]
-    fn test_ref004_fully_qualified_ref() {
+    fn test_ref003_qualified_name_self_ref() {
         let checker = RefResolverChecker;
-        let diags = checker.check_file(
-            "test.sql",
-            "SELECT * FROM {{ ref('schema.stg_orders') }}",
-            None,
-            &default_config(),
+        let config = default_config();
+        let content = "-- name: analytics.orders\nSELECT * FROM {{ ref('orders') }}";
+        let model = make_model(
+            "analytics.orders",
+            "models/orders.sql",
+            content,
+            vec!["orders"],
+            HashMap::from([("name", "analytics.orders")]),
         );
-        assert!(diags.iter().any(|d| d.rule_id == "REF004"));
+
+        let diags = checker.check_file("models/orders.sql", content, Some(&model), &config);
+        let ref003: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF003").collect();
+        assert_eq!(
+            ref003.len(),
+            1,
+            "Short name matching qualified model should fire"
+        );
     }
 
     #[test]
-    fn test_ref004_short_name_ref() {
+    fn test_ref003_no_model_no_diagnostic() {
         let checker = RefResolverChecker;
-        let diags = checker.check_file(
-            "test.sql",
-            "SELECT * FROM {{ ref('stg_orders') }}",
-            None,
-            &default_config(),
+        let config = default_config();
+        let content = "SELECT * FROM {{ ref('stg_orders') }}";
+
+        let diags = checker.check_file("models/unknown.sql", content, None, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF003"));
+    }
+
+    #[test]
+    fn test_ref003_disabled_via_config() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF003".to_owned(), RuleSeverityOverride::Off);
+        let content = "-- name: stg_orders\nSELECT * FROM {{ ref('stg_orders') }}";
+        let model = make_model(
+            "stg_orders",
+            "models/stg_orders.sql",
+            content,
+            vec!["stg_orders"],
+            HashMap::from([("name", "stg_orders")]),
         );
+
+        let diags = checker.check_file("models/stg_orders.sql", content, Some(&model), &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF003"));
+    }
+
+    // -------------------------------------------------------------------
+    // REF004: Fully-qualified ref
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref004_fully_qualified_fires() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "analytics.orders_daily",
+                "models/orders_daily.sql",
+                "-- name: analytics.orders_daily\nSELECT 1",
+                vec![],
+                HashMap::from([("name", "analytics.orders_daily")]),
+            ),
+            make_model(
+                "fct_summary",
+                "models/fct_summary.sql",
+                "-- name: fct_summary\nSELECT * FROM {{ ref('analytics.orders_daily') }}",
+                vec!["analytics.orders_daily"],
+                HashMap::from([("name", "fct_summary")]),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        let ref004: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF004").collect();
+        assert_eq!(ref004.len(), 1);
+        assert_eq!(ref004[0].severity, Severity::Info);
+        assert!(ref004[0].message.contains("orders_daily"));
+    }
+
+    #[test]
+    fn test_ref004_short_name_passes() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "stg_orders",
+                "models/stg_orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "fct_revenue",
+                "models/fct_revenue.sql",
+                "SELECT * FROM {{ ref('stg_orders') }}",
+                vec!["stg_orders"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
         assert!(!diags.iter().any(|d| d.rule_id == "REF004"));
     }
 
     #[test]
-    fn test_ref004_severity_is_info() {
+    fn test_ref004_ambiguous_short_no_fire() {
         let checker = RefResolverChecker;
-        let diags = checker.check_file(
-            "test.sql",
-            "SELECT * FROM {{ ref('s.t') }}",
-            None,
-            &default_config(),
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "analytics.orders",
+                "models/analytics/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "staging.orders",
+                "models/staging/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "fct_summary",
+                "models/fct_summary.sql",
+                "SELECT * FROM {{ ref('analytics.orders') }}",
+                vec!["analytics.orders"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(
+            !diags.iter().any(|d| d.rule_id == "REF004"),
+            "REF004 should not fire when short name is ambiguous"
         );
-        let d = diags.iter().find(|d| d.rule_id == "REF004").unwrap();
-        assert_eq!(d.severity, Severity::Info);
-    }
-
-    // ── REF005 tests ───────────────────────────────────────────────────────
-
-    #[test]
-    fn test_ref005_ambiguous_short_name() {
-        let models = vec![
-            make_model("schema_a.orders", "models/a/orders.sql", "SELECT 1", &[]),
-            make_model("schema_b.orders", "models/b/orders.sql", "SELECT 1", &[]),
-        ];
-        let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
-        assert!(diags.iter().any(|d| d.rule_id == "REF005"));
     }
 
     #[test]
-    fn test_ref005_unique_short_names() {
-        let models = vec![
-            make_model("stg_orders", "models/stg_orders.sql", "SELECT 1", &[]),
-            make_model("stg_customers", "models/stg_customers.sql", "SELECT 1", &[]),
-        ];
+    fn test_ref004_disabled_via_config() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&models, &default_config());
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF004".to_owned(), RuleSeverityOverride::Off);
+
+        let models = vec![
+            make_model(
+                "analytics.orders",
+                "models/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "fct",
+                "models/fct.sql",
+                "SELECT * FROM {{ ref('analytics.orders') }}",
+                vec!["analytics.orders"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF004"));
+    }
+
+    // -------------------------------------------------------------------
+    // REF005: Ambiguous short name
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref005_ambiguous_names_detected() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "analytics.orders",
+                "models/analytics/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "staging.orders",
+                "models/staging/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        let ref005: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF005").collect();
+        assert_eq!(
+            ref005.len(),
+            2,
+            "Both models with ambiguous name should fire"
+        );
+        assert_eq!(ref005[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_ref005_unique_names_pass() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "stg_orders",
+                "models/stg_orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "fct_revenue",
+                "models/fct_revenue.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
         assert!(!diags.iter().any(|d| d.rule_id == "REF005"));
     }
 
-    // ── REF006 tests ───────────────────────────────────────────────────────
+    #[test]
+    fn test_ref005_same_canonical_not_ambiguous() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        // Same canonical names => CON001's job, not REF005
+        let models = vec![
+            make_model(
+                "orders",
+                "models/v1/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "orders",
+                "models/v2/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(
+            !diags.iter().any(|d| d.rule_id == "REF005"),
+            "Same canonical name is not REF005"
+        );
+    }
+
+    #[test]
+    fn test_ref005_disabled_via_config() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF005".to_owned(), RuleSeverityOverride::Off);
+
+        let models = vec![
+            make_model(
+                "analytics.orders",
+                "models/analytics/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+            make_model(
+                "staging.orders",
+                "models/staging/orders.sql",
+                "SELECT 1",
+                vec![],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF005"));
+    }
+
+    // -------------------------------------------------------------------
+    // REF006: Hardcoded table reference
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_ref006_hardcoded_table_fires_when_enabled() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF006".to_owned(), RuleSeverityOverride::Info);
+
+        let content = "SELECT * FROM staging.orders WHERE 1=1";
+
+        let diags = checker.check_file("models/fct.sql", content, None, &config);
+        let ref006: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF006").collect();
+        assert_eq!(ref006.len(), 1);
+        assert!(ref006[0].message.contains("staging.orders"));
+        assert_eq!(ref006[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn test_ref006_ref_usage_passes() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF006".to_owned(), RuleSeverityOverride::Info);
+
+        let content = "SELECT * FROM {{ ref('orders') }} WHERE 1=1";
+
+        let diags = checker.check_file("models/fct.sql", content, None, &config);
+        assert!(!diags.iter().any(|d| d.rule_id == "REF006"));
+    }
 
     #[test]
     fn test_ref006_disabled_by_default() {
         let checker = RefResolverChecker;
-        let diags = checker.check_file(
-            "test.sql",
-            "SELECT * FROM raw_orders",
-            None,
-            &default_config(),
+        let config = default_config();
+
+        let content = "SELECT * FROM staging.orders WHERE 1=1";
+
+        let diags = checker.check_file("models/fct.sql", content, None, &config);
+        assert!(
+            !diags.iter().any(|d| d.rule_id == "REF006"),
+            "REF006 should not fire with default config"
         );
-        assert!(!diags.iter().any(|d| d.rule_id == "REF006"));
     }
 
-    // ── Non-SQL file test ──────────────────────────────────────────────────
-
     #[test]
-    fn test_non_sql_file_ignored() {
+    fn test_ref006_join_hardcoded() {
         let checker = RefResolverChecker;
-        let diags = checker.check_file("schema.yml", "ref content", None, &default_config());
-        assert!(diags.is_empty());
-    }
-
-    // ── Config override test ───────────────────────────────────────────────
-
-    #[test]
-    fn test_rule_disabled_via_config() {
         let mut config = default_config();
-        config.rules.insert(
-            "REF004".to_owned(),
-            crate::config::RuleSeverityOverride::Off,
-        );
-        let checker = RefResolverChecker;
-        let diags = checker.check_file("test.sql", "SELECT * FROM {{ ref('s.t') }}", None, &config);
-        assert!(!diags.iter().any(|d| d.rule_id == "REF004"));
+        config
+            .rules
+            .insert("REF006".to_owned(), RuleSeverityOverride::Info);
+
+        let content = "SELECT * FROM {{ ref('orders') }} JOIN analytics.customers ON 1=1";
+
+        let diags = checker.check_file("models/fct.sql", content, None, &config);
+        let ref006: Vec<_> = diags.iter().filter(|d| d.rule_id == "REF006").collect();
+        assert_eq!(ref006.len(), 1);
+        assert!(ref006[0].message.contains("analytics.customers"));
     }
 
-    // ── Empty models ───────────────────────────────────────────────────────
+    #[test]
+    fn test_ref006_non_sql_file_skipped() {
+        let checker = RefResolverChecker;
+        let mut config = default_config();
+        config
+            .rules
+            .insert("REF006".to_owned(), RuleSeverityOverride::Info);
+
+        let content = "SELECT * FROM staging.orders WHERE 1=1";
+
+        let diags = checker.check_file("models/schema.yml", content, None, &config);
+        assert!(diags.is_empty());
+    }
+
+    // -------------------------------------------------------------------
+    // Integration tests
+    // -------------------------------------------------------------------
 
     #[test]
-    fn test_empty_models_no_errors() {
+    fn test_empty_project_no_diagnostics() {
         let checker = RefResolverChecker;
-        let diags = checker.check_project(&[], &default_config());
+        let config = default_config();
+        let models: Vec<DiscoveredModel> = Vec::new();
+
+        let diags = checker.check_project(&models, &config);
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_yaml_files_excluded() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![make_model(
+            "schema",
+            "models/schema.yml",
+            "version: 2",
+            vec!["nonexistent"],
+            HashMap::new(),
+        )];
+
+        let diags = checker.check_project(&models, &config);
+        assert!(
+            !diags.iter().any(|d| d.rule_id == "REF001"),
+            "YAML files should be excluded from ref resolution"
+        );
+    }
+
+    #[test]
+    fn test_all_diagnostics_have_doc_url() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![
+            make_model(
+                "model_a",
+                "models/model_a.sql",
+                "SELECT * FROM {{ ref('model_b') }}",
+                vec!["model_b"],
+                HashMap::new(),
+            ),
+            make_model(
+                "model_b",
+                "models/model_b.sql",
+                "SELECT * FROM {{ ref('model_a') }}",
+                vec!["model_a"],
+                HashMap::new(),
+            ),
+        ];
+
+        let diags = checker.check_project(&models, &config);
+        for d in &diags {
+            assert!(
+                d.doc_url.is_some(),
+                "Diagnostic {} should have a doc_url",
+                d.rule_id
+            );
+            let url = d.doc_url.as_ref().expect("doc_url missing");
+            assert!(
+                url.starts_with("https://docs.ironlayer.app/check/rules/"),
+                "doc_url format mismatch: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_diagnostics_have_category() {
+        let checker = RefResolverChecker;
+        let config = default_config();
+
+        let models = vec![make_model(
+            "model_a",
+            "models/model_a.sql",
+            "SELECT * FROM {{ ref('missing') }}",
+            vec!["missing"],
+            HashMap::new(),
+        )];
+
+        let diags = checker.check_project(&models, &config);
+        for d in &diags {
+            assert_eq!(
+                d.category,
+                CheckCategory::RefResolution,
+                "All ref_resolver diagnostics should be RefResolution"
+            );
+        }
     }
 }
