@@ -4,7 +4,10 @@ version = "0.3.0"
 edition = "2021"
 rust-version = "1.75.0"
 license = "Apache-2.0"
-description = "Rust-powered validation engine for IronLayer"
+description = "Rust-powered validation engine for IronLayer — 90 rules across 12 categories"
+homepage = "https://ironlayer.app"
+repository = "https://github.com/ironlayer/ironlayer"
+documentation = "https://docs.ironlayer.app"
 
 [lib]
 name = "ironlayer_check_engine"
