@@ -18,6 +18,8 @@ pub mod config;
 pub mod discovery;
 pub mod engine;
 pub mod pyo3_bindings;
+pub mod reporter;
+pub mod sql_lexer;
 pub mod types;
 
 use pyo3::prelude::*;

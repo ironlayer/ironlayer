@@ -208,14 +208,25 @@ pub struct CheckResult {
 
 #[pymethods]
 impl CheckResult {
-    /// Serialize the result to JSON.
+    /// Serialize the result to JSON using the spec §8.2 format.
     ///
     /// # Errors
     ///
     /// Returns a `PyErr` if serialization fails (should not happen for valid data).
     fn to_json(&self) -> PyResult<String> {
-        serde_json::to_string_pretty(self).map_err(|e| {
+        crate::reporter::to_json(self).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("JSON serialization failed: {e}"))
+        })
+    }
+
+    /// Serialize the result to SARIF v2.1.0 JSON using the spec §8.3 format.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `PyErr` if serialization fails (should not happen for valid data).
+    fn to_sarif_json(&self) -> PyResult<String> {
+        crate::reporter::to_sarif_json(self).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("SARIF serialization failed: {e}"))
         })
     }
 
