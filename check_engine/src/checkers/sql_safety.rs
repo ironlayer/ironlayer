@@ -92,40 +92,56 @@ fn check_saf001(
         return;
     }
 
-    for (i, tok) in meaningful.iter().enumerate() {
-        if is_kw(tok, "DROP") {
-            if let Some(next) = meaningful.get(i + 1) {
-                if is_kw(next, "TABLE") {
-                    let line = header_lines + tok.line;
-                    diags.push(CheckDiagnostic {
-                        rule_id: "SAF001".to_owned(),
-                        message: format!(
-                            "DROP TABLE detected at line {}. \
-                             This is a destructive operation that permanently removes a table.",
-                            line
-                        ),
-                        severity: config.effective_severity_for_path(
-                            "SAF001",
-                            file_path,
-                            Severity::Error,
-                        ),
-                        category: CheckCategory::SqlSafety,
-                        file_path: file_path.to_owned(),
-                        line,
-                        column: tok.column,
-                        snippet: Some(format!(
-                            "DROP TABLE {}",
-                            meaningful.get(i + 2).map_or("...", |t| t.text)
-                        )),
-                        suggestion: Some(
-                            "Remove the DROP TABLE statement or use --force-unsafe if intentional."
-                                .to_owned(),
-                        ),
-                        doc_url: doc_url("SAF001"),
-                    });
+    let mut i = 0;
+    while i < meaningful.len() {
+        if is_kw(meaningful[i], "DROP") {
+            // Look ahead: optional IF EXISTS, then TABLE
+            let mut j = i + 1;
+            if j < meaningful.len() && is_kw(meaningful[j], "IF") {
+                j += 1;
+                if j < meaningful.len() && is_kw(meaningful[j], "EXISTS") {
+                    j += 1;
                 }
             }
+            if j < meaningful.len() && is_kw(meaningful[j], "TABLE") {
+                let line = header_lines + meaningful[i].line;
+                let name_text = meaningful.get(j + 1).map_or("...", |t| t.text);
+                let snippet = if j == i + 1 {
+                    format!("DROP TABLE {}", name_text)
+                } else {
+                    // Reconstruct e.g. "DROP IF EXISTS TABLE my_table"
+                    let middle: Vec<&str> =
+                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    format!("{} {}", middle.join(" "), name_text)
+                };
+                diags.push(CheckDiagnostic {
+                    rule_id: "SAF001".to_owned(),
+                    message: format!(
+                        "DROP TABLE detected at line {}. \
+                         This is a destructive operation that permanently removes a table.",
+                        line
+                    ),
+                    severity: config.effective_severity_for_path(
+                        "SAF001",
+                        file_path,
+                        Severity::Error,
+                    ),
+                    category: CheckCategory::SqlSafety,
+                    file_path: file_path.to_owned(),
+                    line,
+                    column: meaningful[i].column,
+                    snippet: Some(snippet),
+                    suggestion: Some(
+                        "Remove the DROP TABLE statement or use --force-unsafe if intentional."
+                            .to_owned(),
+                    ),
+                    doc_url: doc_url("SAF001"),
+                });
+                i = j + 1;
+                continue;
+            }
         }
+        i += 1;
     }
 }
 
@@ -144,40 +160,55 @@ fn check_saf002(
         return;
     }
 
-    for (i, tok) in meaningful.iter().enumerate() {
-        if is_kw(tok, "DROP") {
-            if let Some(next) = meaningful.get(i + 1) {
-                if is_kw(next, "VIEW") {
-                    let line = header_lines + tok.line;
-                    diags.push(CheckDiagnostic {
-                        rule_id: "SAF002".to_owned(),
-                        message: format!(
-                            "DROP VIEW detected at line {}. \
-                             This is a destructive operation that permanently removes a view.",
-                            line
-                        ),
-                        severity: config.effective_severity_for_path(
-                            "SAF002",
-                            file_path,
-                            Severity::Error,
-                        ),
-                        category: CheckCategory::SqlSafety,
-                        file_path: file_path.to_owned(),
-                        line,
-                        column: tok.column,
-                        snippet: Some(format!(
-                            "DROP VIEW {}",
-                            meaningful.get(i + 2).map_or("...", |t| t.text)
-                        )),
-                        suggestion: Some(
-                            "Remove the DROP VIEW statement or use --force-unsafe if intentional."
-                                .to_owned(),
-                        ),
-                        doc_url: doc_url("SAF002"),
-                    });
+    let mut i = 0;
+    while i < meaningful.len() {
+        if is_kw(meaningful[i], "DROP") {
+            // Look ahead: optional IF EXISTS, then VIEW
+            let mut j = i + 1;
+            if j < meaningful.len() && is_kw(meaningful[j], "IF") {
+                j += 1;
+                if j < meaningful.len() && is_kw(meaningful[j], "EXISTS") {
+                    j += 1;
                 }
             }
+            if j < meaningful.len() && is_kw(meaningful[j], "VIEW") {
+                let line = header_lines + meaningful[i].line;
+                let name_text = meaningful.get(j + 1).map_or("...", |t| t.text);
+                let snippet = if j == i + 1 {
+                    format!("DROP VIEW {}", name_text)
+                } else {
+                    let middle: Vec<&str> =
+                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    format!("{} {}", middle.join(" "), name_text)
+                };
+                diags.push(CheckDiagnostic {
+                    rule_id: "SAF002".to_owned(),
+                    message: format!(
+                        "DROP VIEW detected at line {}. \
+                         This is a destructive operation that permanently removes a view.",
+                        line
+                    ),
+                    severity: config.effective_severity_for_path(
+                        "SAF002",
+                        file_path,
+                        Severity::Error,
+                    ),
+                    category: CheckCategory::SqlSafety,
+                    file_path: file_path.to_owned(),
+                    line,
+                    column: meaningful[i].column,
+                    snippet: Some(snippet),
+                    suggestion: Some(
+                        "Remove the DROP VIEW statement or use --force-unsafe if intentional."
+                            .to_owned(),
+                    ),
+                    doc_url: doc_url("SAF002"),
+                });
+                i = j + 1;
+                continue;
+            }
         }
+        i += 1;
     }
 }
 
@@ -196,38 +227,57 @@ fn check_saf003(
         return;
     }
 
-    for (i, tok) in meaningful.iter().enumerate() {
-        if is_kw(tok, "DROP") {
-            if let Some(next) = meaningful.get(i + 1) {
-                if is_kw(next, "SCHEMA") || is_kw(next, "DATABASE") {
-                    let line = header_lines + tok.line;
-                    let target = next.text.to_uppercase();
-                    diags.push(CheckDiagnostic {
-                        rule_id: "SAF003".to_owned(),
-                        message: format!(
-                            "DROP {} detected at line {}. \
-                             This is a destructive operation that removes an entire schema/database.",
-                            target, line
-                        ),
-                        severity: config.effective_severity_for_path(
-                            "SAF003",
-                            file_path,
-                            Severity::Error,
-                        ),
-                        category: CheckCategory::SqlSafety,
-                        file_path: file_path.to_owned(),
-                        line,
-                        column: tok.column,
-                        snippet: Some(format!("DROP {}", target)),
-                        suggestion: Some(
-                            "Remove the DROP SCHEMA/DATABASE statement or use --force-unsafe if intentional."
-                                .to_owned(),
-                        ),
-                        doc_url: doc_url("SAF003"),
-                    });
+    let mut i = 0;
+    while i < meaningful.len() {
+        if is_kw(meaningful[i], "DROP") {
+            // Look ahead: optional IF EXISTS, then SCHEMA or DATABASE
+            let mut j = i + 1;
+            if j < meaningful.len() && is_kw(meaningful[j], "IF") {
+                j += 1;
+                if j < meaningful.len() && is_kw(meaningful[j], "EXISTS") {
+                    j += 1;
                 }
             }
+            if j < meaningful.len()
+                && (is_kw(meaningful[j], "SCHEMA") || is_kw(meaningful[j], "DATABASE"))
+            {
+                let line = header_lines + meaningful[i].line;
+                let target = meaningful[j].text.to_uppercase();
+                let snippet = if j == i + 1 {
+                    format!("DROP {}", target)
+                } else {
+                    let middle: Vec<&str> =
+                        meaningful[i..=j].iter().map(|t| t.text).collect();
+                    middle.join(" ")
+                };
+                diags.push(CheckDiagnostic {
+                    rule_id: "SAF003".to_owned(),
+                    message: format!(
+                        "DROP {} detected at line {}. \
+                         This is a destructive operation that removes an entire schema/database.",
+                        target, line
+                    ),
+                    severity: config.effective_severity_for_path(
+                        "SAF003",
+                        file_path,
+                        Severity::Error,
+                    ),
+                    category: CheckCategory::SqlSafety,
+                    file_path: file_path.to_owned(),
+                    line,
+                    column: meaningful[i].column,
+                    snippet: Some(snippet),
+                    suggestion: Some(
+                        "Remove the DROP SCHEMA/DATABASE statement or use --force-unsafe if intentional."
+                            .to_owned(),
+                    ),
+                    doc_url: doc_url("SAF003"),
+                });
+                i = j + 1;
+                continue;
+            }
         }
+        i += 1;
     }
 }
 
@@ -350,53 +400,58 @@ fn check_saf006(
         return;
     }
 
-    for (i, tok) in meaningful.iter().enumerate() {
-        if is_kw(tok, "ALTER") {
-            if let Some(next) = meaningful.get(i + 1) {
-                if is_kw(next, "TABLE") {
-                    // Scan forward for DROP COLUMN within a reasonable window
-                    let window_end = meaningful.len().min(i + 10);
-                    let window = &meaningful[i + 2..window_end];
-                    for (k, t) in window.iter().enumerate() {
-                        if is_kw(t, "DROP") {
-                            if let Some(after_drop) = window.get(k + 1) {
-                                if is_kw(after_drop, "COLUMN") {
-                                    let line = header_lines + tok.line;
-                                    diags.push(CheckDiagnostic {
-                                        rule_id: "SAF006".to_owned(),
-                                        message: format!(
-                                            "ALTER TABLE ... DROP COLUMN detected at line {}. \
-                                             Dropping columns can break downstream dependencies.",
-                                            line
-                                        ),
-                                        severity: config.effective_severity_for_path(
-                                            "SAF006",
-                                            file_path,
-                                            Severity::Warning,
-                                        ),
-                                        category: CheckCategory::SqlSafety,
-                                        file_path: file_path.to_owned(),
-                                        line,
-                                        column: tok.column,
-                                        snippet: Some("ALTER TABLE ... DROP COLUMN".to_owned()),
-                                        suggestion: Some(
-                                            "Consider deprecating the column first before dropping it."
-                                                .to_owned(),
-                                        ),
-                                        doc_url: doc_url("SAF006"),
-                                    });
-                                    break;
-                                }
-                            }
-                        }
-                        // Stop scanning if we hit a semicolon
-                        if t.kind == TokenKind::Semicolon {
-                            break;
-                        }
+    let mut i = 0;
+    while i < meaningful.len() {
+        if is_kw(meaningful[i], "ALTER") {
+            if i + 1 < meaningful.len() && is_kw(meaningful[i + 1], "TABLE") {
+                let alter_idx = i;
+                // Scan forward within this statement for DROP COLUMN
+                let mut j = i + 2;
+                while j < meaningful.len() {
+                    if meaningful[j].kind == TokenKind::Semicolon {
+                        break;
                     }
+                    if is_kw(meaningful[j], "DROP")
+                        && j + 1 < meaningful.len()
+                        && is_kw(meaningful[j + 1], "COLUMN")
+                    {
+                        let line = header_lines + meaningful[alter_idx].line;
+                        diags.push(CheckDiagnostic {
+                            rule_id: "SAF006".to_owned(),
+                            message: format!(
+                                "ALTER TABLE ... DROP COLUMN detected at line {}. \
+                                 Dropping columns can break downstream dependencies.",
+                                line
+                            ),
+                            severity: config.effective_severity_for_path(
+                                "SAF006",
+                                file_path,
+                                Severity::Warning,
+                            ),
+                            category: CheckCategory::SqlSafety,
+                            file_path: file_path.to_owned(),
+                            line,
+                            column: meaningful[alter_idx].column,
+                            snippet: Some(format!(
+                                "ALTER TABLE ... DROP COLUMN {}",
+                                meaningful.get(j + 2).map_or("...", |t| t.text)
+                            )),
+                            suggestion: Some(
+                                "Consider deprecating the column first before dropping it."
+                                    .to_owned(),
+                            ),
+                            doc_url: doc_url("SAF006"),
+                        });
+                        j += 2;
+                        continue;
+                    }
+                    j += 1;
                 }
+                i = j.max(i + 2);
+                continue;
             }
         }
+        i += 1;
     }
 }
 

@@ -100,21 +100,26 @@ impl CheckEngine {
             .map(discover_model)
             .collect();
 
-        // 5. Run per-file checks in parallel via rayon
+        // 5. Run per-file checks on uncached files (parallel via rayon)
         let max_diags = self.config.max_diagnostics;
 
-        let per_file_results: Vec<(String, String, Vec<CheckDiagnostic>)> = uncached_files
+        // Build a model lookup map for O(1) per-file model resolution
+        let model_map: HashMap<&str, &DiscoveredModel> =
+            models.iter().map(|m| (m.file_path.as_str(), m)).collect();
+
+        // Run per-file checks in parallel using rayon
+        let file_results: Vec<(String, String, Vec<CheckDiagnostic>)> = uncached_files
             .par_iter()
             .map(|file| {
-                let model = models.iter().find(|m| m.file_path == file.rel_path);
+                let model = model_map.get(file.rel_path.as_str()).copied();
                 let file_diags = self.run_per_file_checks(file, model, &project_type);
                 (file.rel_path.clone(), file.content_hash.clone(), file_diags)
             })
             .collect();
 
-        // Collect results and update cache sequentially (cache is not thread-safe)
+        // Sequentially update cache and collect diagnostics (cache is not thread-safe)
         let mut all_diags: Vec<CheckDiagnostic> = Vec::new();
-        for (rel_path, content_hash, file_diags) in per_file_results {
+        for (rel_path, content_hash, file_diags) in file_results {
             cache.update(&rel_path, &content_hash, &file_diags);
             all_diags.extend(file_diags);
 
