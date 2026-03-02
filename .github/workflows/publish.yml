@@ -10,104 +10,32 @@ permissions:
   contents: read
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build platform-specific wheels with maturin (Rust + Python)
-  # ---------------------------------------------------------------------------
-  build-wheels:
-    name: Build wheel (${{ matrix.os }}-${{ matrix.target }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64
-            manylinux: "2014"
-          - os: ubuntu-latest
-            target: aarch64
-            manylinux: "2014"
-          - os: macos-latest
-            target: x86_64
-          - os: macos-latest
-            target: aarch64
-          - os: windows-latest
-            target: x86_64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build ironlayer-core wheel with maturin
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist
-          manylinux: ${{ matrix.manylinux || 'auto' }}
-          working-directory: core_engine
-
-      - name: Upload wheel
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.os }}-${{ matrix.target }}
-          path: core_engine/dist/*.whl
-          if-no-files-found: error
-
-  # ---------------------------------------------------------------------------
-  # Build sdist for source installs
-  # ---------------------------------------------------------------------------
-  build-sdist:
-    name: Build sdist
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build sdist with maturin
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
-          working-directory: core_engine
-
-      - name: Upload sdist
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: core_engine/dist/*.tar.gz
-          if-no-files-found: error
-
-  # ---------------------------------------------------------------------------
-  # Publish ironlayer-core (with Rust extension) to PyPI
-  # ---------------------------------------------------------------------------
   publish-core:
     name: Publish ironlayer-core
     runs-on: ubuntu-latest
-    needs: [build-wheels, build-sdist]
     environment:
       name: pypi
       url: https://pypi.org/project/ironlayer-core/
     steps:
-      - name: Download all wheel artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: wheel-*
-          path: dist/
-          merge-multiple: true
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Download sdist
-        uses: actions/download-artifact@v4
-        with:
-          name: sdist
-          path: dist/
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Publish to PyPI
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Build core engine
+        working-directory: core_engine
+        run: uv build
+
+      - name: Publish core engine to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/
+          packages-dir: core_engine/dist/
           skip-existing: true
 
-  # ---------------------------------------------------------------------------
-  # Publish ironlayer CLI to PyPI (pure Python, depends on ironlayer-core)
-  # ---------------------------------------------------------------------------
   publish-cli:
     name: Publish ironlayer
     runs-on: ubuntu-latest
@@ -131,7 +59,7 @@ jobs:
         run: |
           # In the workspace, ironlayer-core is bare (resolved via [tool.uv.sources]).
           # For PyPI, we need a version constraint.
-          sed -i 's|"ironlayer-core",|"ironlayer-core>=0.3.0",|' pyproject.toml
+          sed -i 's|"ironlayer-core",|"ironlayer-core>=0.2.0",|' pyproject.toml
 
       - name: Build CLI
         working-directory: cli

@@ -11,10 +11,12 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.services.environment_service import EnvironmentService
 
 # ---------------------------------------------------------------------------
@@ -24,7 +26,7 @@ from api.services.environment_service import EnvironmentService
 
 def _mock_env_row(
     *,
-    id_: int = 1,
+    id: int = 1,
     name: str = "staging",
     catalog: str = "dev_catalog",
     schema_prefix: str = "stg",
@@ -41,7 +43,7 @@ def _mock_env_row(
 ) -> MagicMock:
     """Build a mock EnvironmentTable row."""
     row = MagicMock()
-    row.id = id_
+    row.id = id
     row.name = name
     row.catalog = catalog
     row.schema_prefix = schema_prefix
@@ -53,14 +55,14 @@ def _mock_env_row(
     row.expires_at = expires_at
     row.created_by = created_by
     row.deleted_at = deleted_at
-    row.created_at = created_at or datetime(2024, 6, 1, tzinfo=UTC)
-    row.updated_at = updated_at or datetime(2024, 6, 1, tzinfo=UTC)
+    row.created_at = created_at or datetime(2024, 6, 1, tzinfo=timezone.utc)
+    row.updated_at = updated_at or datetime(2024, 6, 1, tzinfo=timezone.utc)
     return row
 
 
 def _mock_promotion_row(
     *,
-    id_: int = 1,
+    id: int = 1,
     source_environment: str = "staging",
     target_environment: str = "production",
     source_snapshot_id: str = "snap-abc",
@@ -71,13 +73,13 @@ def _mock_promotion_row(
 ) -> MagicMock:
     """Build a mock EnvironmentPromotionTable row."""
     row = MagicMock()
-    row.id = id_
+    row.id = id
     row.source_environment = source_environment
     row.target_environment = target_environment
     row.source_snapshot_id = source_snapshot_id
     row.target_snapshot_id = target_snapshot_id
     row.promoted_by = promoted_by
-    row.promoted_at = promoted_at or datetime(2024, 6, 15, tzinfo=UTC)
+    row.promoted_at = promoted_at or datetime(2024, 6, 15, tzinfo=timezone.utc)
     row.metadata_json = metadata_json
     return row
 
@@ -143,7 +145,7 @@ class TestCreateEphemeralEnvironment:
     @pytest.mark.asyncio
     async def test_create_ephemeral_with_ttl(self) -> None:
         session = AsyncMock()
-        expires = datetime.now(UTC) + timedelta(hours=48)
+        expires = datetime.now(timezone.utc) + timedelta(hours=48)
         env_row = _mock_env_row(
             name="pr-42",
             is_ephemeral=True,
@@ -181,7 +183,7 @@ class TestCreateEphemeralEnvironment:
             instance.create = AsyncMock(return_value=env_row)
 
             service = EnvironmentService(session, tenant_id="t1")
-            _result = await service.create_ephemeral_environment(
+            result = await service.create_ephemeral_environment(
                 pr_number=99,
                 branch_name="fix/bug",
                 catalog="dev",
@@ -234,9 +236,9 @@ class TestGetListDelete:
     async def test_list_returns_sorted(self) -> None:
         session = AsyncMock()
         envs = [
-            _mock_env_row(id_=1, name="alpha"),
-            _mock_env_row(id_=2, name="beta"),
-            _mock_env_row(id_=3, name="gamma"),
+            _mock_env_row(id=1, name="alpha"),
+            _mock_env_row(id=2, name="beta"),
+            _mock_env_row(id=3, name="gamma"),
         ]
 
         with patch("api.services.environment_service.EnvironmentRepository") as MockRepo:
@@ -446,8 +448,8 @@ class TestPromotionHistory:
     async def test_returns_list(self) -> None:
         session = AsyncMock()
         promotions = [
-            _mock_promotion_row(id_=1, source_environment="staging", target_environment="production"),
-            _mock_promotion_row(id_=2, source_environment="dev", target_environment="staging"),
+            _mock_promotion_row(id=1, source_environment="staging", target_environment="production"),
+            _mock_promotion_row(id=2, source_environment="dev", target_environment="staging"),
         ]
 
         with patch("api.services.environment_service.EnvironmentRepository") as MockRepo:

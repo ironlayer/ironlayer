@@ -17,7 +17,6 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import typer
 from rich.console import Console
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
-def _render_template(template_name: str, context: dict[str, Any]) -> str:
+def _render_template(template_name: str, context: dict) -> str:
     """Render a Jinja2-style template using simple string substitution.
 
     We use Python's built-in ``string.Template``-style rendering via a
@@ -62,79 +61,6 @@ def _render_template(template_name: str, context: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Example model content
 # ---------------------------------------------------------------------------
-
-_CHECK_TOML_TEMPLATE = """\
-# IronLayer Check Engine configuration.
-#
-# This file configures the Rust-powered check engine that validates SQL models,
-# YAML schemas, naming conventions, ref() integrity, and project structure.
-#
-# Resolution order:
-#   1. ironlayer.check.toml (this file)
-#   2. [tool.ironlayer.check] in pyproject.toml
-#   3. [check] in ironlayer.yaml
-#   4. Built-in defaults
-
-[check]
-# SQL dialect for dialect-aware checks.
-dialect = "databricks"
-
-# Maximum number of diagnostics to report (0 = unlimited).
-max_diagnostics = 500
-
-# Whether warnings should cause a non-zero exit code.
-fail_on_warnings = false
-
-# File/directory patterns to exclude (beyond .gitignore).
-exclude = [
-    "target/",
-    "dbt_packages/",
-    "logs/",
-    "macros/",
-    ".venv/",
-]
-
-# Per-rule severity overrides.
-# Set any rule to "off" to disable it, or override its severity.
-# [check.rules]
-# HDR007 = "off"       # Unrecognised header fields (disabled by default)
-# SQL004 = "warning"   # Override SELECT * severity
-# NAME001 = "info"     # Downgrade staging prefix check
-
-# Cache configuration.
-[check.cache]
-enabled = true
-path = ".ironlayer/check_cache.json"
-
-# Naming convention patterns.
-[check.naming]
-model_pattern = "^[a-z][a-z0-9_]*$"
-
-[check.naming.layers]
-staging = "^(stg|staging)_"
-stg = "^(stg|staging)_"
-intermediate = "^(int|intermediate)_"
-int = "^(int|intermediate)_"
-marts = "^(fct|fact|dim|dimension)_"
-mart = "^(fct|fact|dim|dimension)_"
-
-# dbt-specific configuration (only applies to dbt projects).
-# [check.dbt]
-# require_model_docs = false
-# min_tests_per_model = 0
-
-# Per-path rule overrides (most specific path wins).
-# [[check.per_path]]
-# path = "models/staging/**"
-# [check.per_path.rules]
-# SQL004 = "off"       # Allow SELECT * in staging models
-
-# [[check.per_path]]
-# path = "models/marts/**"
-# [check.per_path.rules]
-# NAME003 = "error"    # Strict naming in marts
-"""
-
 
 _EXAMPLE_MODELS: dict[str, str] = {
     "raw/source_orders.sql": """\
@@ -432,16 +358,7 @@ def init_command(
     steps_completed += 1
     console.print("  [green]\u2713[/green] Updated .gitignore")
 
-    # 5. Create ironlayer.check.toml template.
-    check_config_path = target_dir / "ironlayer.check.toml"
-    if not check_config_path.exists():
-        check_config_path.write_text(_CHECK_TOML_TEMPLATE, encoding="utf-8")
-        console.print("  [green]\u2713[/green] Created ironlayer.check.toml")
-    else:
-        console.print("  [dim]\u2713 ironlayer.check.toml already exists[/dim]")
-    steps_completed += 1
-
-    # 6. Git init (if not already in a repo and not disabled).
+    # 5. Git init (if not already in a repo and not disabled).
     if not no_git:
         if _is_git_repo(target_dir):
             console.print("  [dim]\u2713 Already inside a git repository[/dim]")
@@ -453,7 +370,7 @@ def init_command(
 
     steps_completed += 1
 
-    # 7. Verify: try loading models to confirm scaffold is valid.
+    # 6. Verify: try loading models to confirm scaffold is valid.
     try:
         from core_engine.loader import load_models_from_directory
 
@@ -470,10 +387,9 @@ def init_command(
         Panel(
             "[bold green]Project initialised successfully![/bold green]\n\n"
             "Next steps:\n"
-            "  1. [bold]ironlayer check .[/bold]   -- Validate your SQL models\n"
-            "  2. [bold]ironlayer dev[/bold]       -- Start local development server\n"
-            "  3. [bold]ironlayer models .[/bold]  -- List discovered models\n"
-            "  4. [bold]ironlayer plan . HEAD~1 HEAD[/bold]  -- Generate your first plan\n\n"
+            "  1. [bold]ironlayer dev[/bold]       -- Start local development server\n"
+            "  2. [bold]ironlayer models .[/bold]  -- List discovered models\n"
+            "  3. [bold]ironlayer plan . HEAD~1 HEAD[/bold]  -- Generate your first plan\n\n"
             "[dim]Edit models/ to add your SQL models. "
             "See docs/quickstart.md for the full walkthrough.[/dim]",
             title="Done",

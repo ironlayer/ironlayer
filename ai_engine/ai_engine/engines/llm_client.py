@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ai_engine.engines.budget_guard import BudgetExceededError, BudgetGuard
 from ai_engine.engines.pii_scrubber import (
@@ -106,7 +106,7 @@ class LLMClient:
         *,
         llm_enabled: bool = True,
         api_key: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict | None:
         """Ask the LLM to classify a SQL change.
 
         Returns a dict with keys ``change_type``, ``confidence``,
@@ -137,7 +137,7 @@ class LLMClient:
 
         try:
             raw = self._call_llm(prompt.content, user, api_key=api_key, call_type="classify_change")
-            return cast("dict[Any, Any] | None", self._parse_json(raw))
+            return self._parse_json(raw)
         except BudgetExceededError:
             logger.warning("LLM classify_change blocked by budget guard")
             return None
@@ -152,7 +152,7 @@ class LLMClient:
         *,
         llm_enabled: bool = True,
         api_key: str | None = None,
-    ) -> list[dict[str, Any]] | None:
+    ) -> list[dict] | None:
         """Ask the LLM for SQL optimisation suggestions.
 
         Returns a list of dicts with keys ``suggestion_type``,
@@ -306,7 +306,7 @@ class LLMClient:
                 input_tokens = getattr(usage, "input_tokens", 0)
                 output_tokens = getattr(usage, "output_tokens", 0)
 
-            return cast(str, response.content[0].text)
+            return response.content[0].text
         except BudgetExceededError:
             raise
         except Exception as exc:

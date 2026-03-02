@@ -56,10 +56,10 @@ async def ironlayer_plan(
     Loads models, computes the DAG, detects changed models via git
     diff + content hashing, and produces a deterministic plan.
     """
-    from core_engine.diff.change_detector import detect_changes  # type: ignore[import-not-found]
+    from core_engine.diff.change_detector import detect_changes
     from core_engine.graph import build_dag, topological_sort
     from core_engine.loader import load_models_from_directory
-    from core_engine.planner.planner import build_plan  # type: ignore[import-not-found]
+    from core_engine.planner.planner import build_plan
 
     models_dir = _resolve_models_dir(repo_path)
 
@@ -75,7 +75,7 @@ async def ironlayer_plan(
         dag=dag,
         base_ref=base_ref,
         target_ref=target_ref,
-        repo_path=repo_path,
+        repo_path=str(repo),
     )
 
     if not changes.changed_models:
@@ -526,75 +526,6 @@ async def ironlayer_transpile(
 
 
 # ---------------------------------------------------------------------------
-# Tool: ironlayer_check
-# ---------------------------------------------------------------------------
-
-
-async def ironlayer_check(
-    repo_path: str,
-    *,
-    fix: bool = False,
-    changed_only: bool = False,
-    select: str | None = None,
-    exclude: str | None = None,
-) -> dict[str, Any]:
-    """Run IronLayer check engine on a project directory.
-
-    Uses the fast Rust-powered check engine to validate SQL models,
-    YAML schemas, naming conventions, ref() integrity, and project
-    structure.  Falls back gracefully if the Rust extension is not
-    available.
-
-    Returns structured check results including all diagnostics.
-    """
-    try:
-        from ironlayer_check_engine import CheckConfig, CheckEngine
-
-        config = CheckConfig()
-        if fix:
-            config.fix = True
-        if changed_only:
-            config.changed_only = True
-        if select is not None:
-            config.select = select
-        if exclude is not None:
-            config.exclude_rules = exclude
-
-        engine = CheckEngine(config)
-        result = engine.check(repo_path)
-
-        return {
-            "passed": result.passed,
-            "project_type": result.project_type,
-            "total_files_checked": result.total_files_checked,
-            "total_files_skipped_cache": result.total_files_skipped_cache,
-            "total_errors": result.total_errors,
-            "total_warnings": result.total_warnings,
-            "total_infos": result.total_infos,
-            "elapsed_ms": result.elapsed_ms,
-            "diagnostics": [
-                {
-                    "rule_id": d.rule_id,
-                    "message": d.message,
-                    "severity": str(d.severity),
-                    "file_path": d.file_path,
-                    "line": d.line,
-                    "column": d.column,
-                    "suggestion": d.suggestion,
-                }
-                for d in result.diagnostics
-            ],
-        }
-    except ImportError:
-        return {
-            "error": "Rust check engine not available. Install ironlayer-core with Rust extension.",
-            "fallback": True,
-        }
-    except Exception as exc:
-        return {"error": f"Check engine error: {exc}"}
-
-
-# ---------------------------------------------------------------------------
 # Tool Definitions (JSON Schema for MCP registration)
 # ---------------------------------------------------------------------------
 
@@ -840,54 +771,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "required": ["sql"],
         },
     },
-    {
-        "name": "ironlayer_check",
-        "description": (
-            "Run the IronLayer check engine on a project directory. "
-            "Validates SQL headers, syntax, safety, ref integrity, "
-            "naming conventions, YAML schemas, project structure, "
-            "Databricks-specific SQL patterns, incremental model logic, "
-            "performance anti-patterns, and test adequacy. "
-            "90 rules across 12 categories (HDR, SQL, SAF, REF, NAME, "
-            "YML, DBT, CON, DBK, INC, PERF, TST). "
-            "Returns structured diagnostics with rule IDs, severity, "
-            "file locations, and fix suggestions."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "repo_path": {
-                    "type": "string",
-                    "description": "Path to the project root directory.",
-                },
-                "fix": {
-                    "type": "boolean",
-                    "description": "Auto-fix fixable rule violations in place. Default: false.",
-                    "default": False,
-                },
-                "changed_only": {
-                    "type": "boolean",
-                    "description": "Only check files modified in the current git working tree. Default: false.",
-                    "default": False,
-                },
-                "select": {
-                    "type": "string",
-                    "description": (
-                        "Comma-separated rule IDs or categories to include "
-                        "(e.g. 'HDR,SQL001,SAF,DBK,PERF')."
-                    ),
-                },
-                "exclude": {
-                    "type": "string",
-                    "description": (
-                        "Comma-separated rule IDs or categories to exclude "
-                        "(e.g. 'NAME,DBT,TST')."
-                    ),
-                },
-            },
-            "required": ["repo_path"],
-        },
-    },
 ]
 
 
@@ -904,5 +787,4 @@ TOOL_DISPATCH: dict[str, Any] = {
     "ironlayer_validate": ironlayer_validate,
     "ironlayer_models": ironlayer_models,
     "ironlayer_transpile": ironlayer_transpile,
-    "ironlayer_check": ironlayer_check,
 }

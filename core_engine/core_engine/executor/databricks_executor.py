@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 from databricks.sdk import WorkspaceClient
@@ -88,12 +87,12 @@ class _TokenRedactionFilter(logging.Filter):
         if self._token and isinstance(record.msg, str):
             record.msg = record.msg.replace(self._token, "***REDACTED***")
         if record.args:
-            sanitised: list[object] = []
-            for arg in record.args:
+            sanitised = []
+            for arg in record.args:  # type: ignore[union-attr]
                 if isinstance(arg, str) and self._token:
                     sanitised.append(arg.replace(self._token, "***REDACTED***"))
                 else:
-                    sanitised.append(arg)
+                    sanitised.append(arg)  # type: ignore[arg-type]
             record.args = tuple(sanitised)
         return True
 
@@ -411,7 +410,7 @@ class DatabricksExecutor:
         step: PlanStep,
         sql: str,
         params: dict[str, str],
-        cluster_spec: dict[str, Any],
+        cluster_spec: dict,
     ) -> SubmitTask:
         """Construct a :class:`SubmitTask` for a single plan step.
 

@@ -20,12 +20,13 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
 from api.config import APISettings
 from api.dependencies import get_ai_client, get_db_session, get_metering_collector, get_settings, get_tenant_session
 from api.main import create_app
 from api.security import CredentialVault
 from api.services.ai_client import AIServiceClient
-from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -347,23 +348,21 @@ class TestWebhookHMACValidation:
 
         mock_sf = _mock_session_factory_returning(mock_session)
 
-        with (
-            patch("api.dependencies.get_session_factory", return_value=mock_sf),
-            patch("api.dependencies.get_settings") as mock_get_settings,
-        ):
-            settings = MagicMock()
-            settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
-            mock_get_settings.return_value = settings
+        with patch("api.dependencies.get_session_factory", return_value=mock_sf):
+            with patch("api.dependencies.get_settings") as mock_get_settings:
+                settings = MagicMock()
+                settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
+                mock_get_settings.return_value = settings
 
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                resp = await ac.post(
-                    "/api/v1/webhooks/github",
-                    content=body,
-                    headers={
-                        "x-github-event": "push",
-                        "x-hub-signature-256": sig,
-                    },
-                )
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    resp = await ac.post(
+                        "/api/v1/webhooks/github",
+                        content=body,
+                        headers={
+                            "x-github-event": "push",
+                            "x-hub-signature-256": sig,
+                        },
+                    )
 
         assert resp.status_code == 200
         data = resp.json()
@@ -398,23 +397,21 @@ class TestWebhookHMACValidation:
 
         mock_sf = _mock_session_factory_returning(mock_session)
 
-        with (
-            patch("api.dependencies.get_session_factory", return_value=mock_sf),
-            patch("api.dependencies.get_settings") as mock_get_settings,
-        ):
-            settings = MagicMock()
-            settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
-            mock_get_settings.return_value = settings
+        with patch("api.dependencies.get_session_factory", return_value=mock_sf):
+            with patch("api.dependencies.get_settings") as mock_get_settings:
+                settings = MagicMock()
+                settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
+                mock_get_settings.return_value = settings
 
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                resp = await ac.post(
-                    "/api/v1/webhooks/github",
-                    content=body,
-                    headers={
-                        "x-github-event": "push",
-                        "x-hub-signature-256": bad_sig,
-                    },
-                )
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    resp = await ac.post(
+                        "/api/v1/webhooks/github",
+                        content=body,
+                        headers={
+                            "x-github-event": "push",
+                            "x-hub-signature-256": bad_sig,
+                        },
+                    )
 
         assert resp.status_code == 403
         assert "Signature verification failed" in resp.json()["detail"]
@@ -445,24 +442,22 @@ class TestWebhookHMACValidation:
 
         mock_sf = _mock_session_factory_returning(mock_session)
 
-        with (
-            patch("api.dependencies.get_session_factory", return_value=mock_sf),
-            patch("api.dependencies.get_settings") as mock_get_settings,
-        ):
-            settings = MagicMock()
-            settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
-            mock_get_settings.return_value = settings
+        with patch("api.dependencies.get_session_factory", return_value=mock_sf):
+            with patch("api.dependencies.get_settings") as mock_get_settings:
+                settings = MagicMock()
+                settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
+                mock_get_settings.return_value = settings
 
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                resp = await ac.post(
-                    "/api/v1/webhooks/github",
-                    content=body,
-                    headers={
-                        "x-github-event": "push",
-                        # Previously this would pass -- now properly rejected.
-                        "x-hub-signature-256": "sha256=anything",
-                    },
-                )
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    resp = await ac.post(
+                        "/api/v1/webhooks/github",
+                        content=body,
+                        headers={
+                            "x-github-event": "push",
+                            # Previously this would pass -- now properly rejected.
+                            "x-hub-signature-256": "sha256=anything",
+                        },
+                    )
 
         assert resp.status_code == 403
         assert "Signature verification failed" in resp.json()["detail"]
@@ -529,23 +524,21 @@ class TestWebhookHMACValidation:
 
         mock_sf = _mock_session_factory_returning(mock_session)
 
-        with (
-            patch("api.dependencies.get_session_factory", return_value=mock_sf),
-            patch("api.dependencies.get_settings") as mock_get_settings,
-        ):
-            settings = MagicMock()
-            settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
-            mock_get_settings.return_value = settings
+        with patch("api.dependencies.get_session_factory", return_value=mock_sf):
+            with patch("api.dependencies.get_settings") as mock_get_settings:
+                settings = MagicMock()
+                settings.credential_encryption_key.get_secret_value.return_value = _CREDENTIAL_KEY
+                mock_get_settings.return_value = settings
 
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                resp = await ac.post(
-                    "/api/v1/webhooks/github",
-                    content=body,
-                    headers={
-                        "x-github-event": "push",
-                        "x-hub-signature-256": "sha256=abc123",
-                    },
-                )
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    resp = await ac.post(
+                        "/api/v1/webhooks/github",
+                        content=body,
+                        headers={
+                            "x-github-event": "push",
+                            "x-hub-signature-256": "sha256=abc123",
+                        },
+                    )
 
         assert resp.status_code == 500
         assert "decryption failed" in resp.json()["detail"].lower()

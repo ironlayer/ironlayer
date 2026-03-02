@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
@@ -54,7 +54,7 @@ async def predict_cost(
         )
         cached = _cache.get(cache_key)
         if cached is not None:
-            return cast(CostPredictResponse, cached)
+            return cached
 
     logger.info("Predicting cost for model=%s partitions=%d", request.model_name, request.partition_count)
     result = predictor.predict(request)

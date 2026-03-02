@@ -14,10 +14,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
 from api.config import APISettings
 from api.dependencies import get_db_session, get_metering_collector, get_settings, get_tenant_session
 from api.main import create_app
-from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Fixtures

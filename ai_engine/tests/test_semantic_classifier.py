@@ -7,7 +7,10 @@ and edge cases (empty SQL, identical SQL).
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, PropertyMock
+
 import pytest
+
 from ai_engine.engines.semantic_classifier import SemanticClassifier
 from ai_engine.models.requests import SemanticClassifyRequest
 from ai_engine.models.responses import SemanticClassifyResponse
@@ -464,7 +467,7 @@ class TestEdgeCases:
         classifier = SemanticClassifier(llm_client=mock_llm_enabled, confidence_threshold=0.95)
         schema_diff = {"added": ["col_x"], "removed": []}
         lineage = {"col_x": "source.col_a"}
-        _result = classifier.classify(
+        result = classifier.classify(
             _req(
                 old_sql="SELECT id, name, amount FROM orders",
                 new_sql="SELECT id, amount FROM orders",

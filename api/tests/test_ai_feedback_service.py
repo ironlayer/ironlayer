@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from api.services.ai_feedback_service import (
     AIFeedbackService,
     _compute_cost_accuracy,
@@ -305,8 +305,8 @@ class TestRecordExecutionOutcome:
         run_dict = {
             "status": "SUCCESS",
             "cost_usd": 1.5,
-            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
-            "finished_at": datetime(2026, 1, 1, 0, 5, 0, tzinfo=UTC),
+            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 1, 1, 0, 5, 0, tzinfo=timezone.utc),
             "error_message": None,
         }
 
@@ -338,8 +338,8 @@ class TestRecordExecutionOutcome:
         run_dict = {
             "status": "SUCCESS",
             "cost_usd": 1.5,
-            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
-            "finished_at": datetime(2026, 1, 1, 0, 5, 0, tzinfo=UTC),
+            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 1, 1, 0, 5, 0, tzinfo=timezone.utc),
             "error_message": None,
         }
 
@@ -372,8 +372,8 @@ class TestRecordExecutionOutcome:
         run_dict = {
             "status": "SUCCESS",
             "cost_usd": None,
-            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
-            "finished_at": datetime(2026, 1, 1, 0, 1, 0, tzinfo=UTC),
+            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 1, 1, 0, 1, 0, tzinfo=timezone.utc),
             "error_message": None,
         }
 
@@ -402,8 +402,8 @@ class TestRecordExecutionOutcome:
         run_dict = {
             "status": "FAIL",
             "cost_usd": None,
-            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
-            "finished_at": datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC),
+            "started_at": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 1, 1, 0, 0, 30, tzinfo=timezone.utc),
             "error_message": "SQL syntax error",
         }
 

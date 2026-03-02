@@ -12,11 +12,12 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
+
 from api.config import APISettings
 from api.middleware.rbac import Role
 from api.services.execution_service import ExecutionService
@@ -64,7 +65,7 @@ def _make_plan_row(
     row.plan_json = json.dumps(plan_json_data)
     row.approvals_json = approvals_json
     row.auto_approved = False
-    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
     return row
 
 

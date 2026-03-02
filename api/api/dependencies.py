@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncGenerator, Callable
-from typing import Annotated, cast
+from typing import Annotated
 
 from core_engine.license.feature_flags import Feature
 from core_engine.metering.collector import MeteringCollector
@@ -288,7 +288,7 @@ def get_tenant_id(request: Request) -> str:
     tenant_id = getattr(request.state, "tenant_id", None)
     if tenant_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    return cast(str, tenant_id)
+    return tenant_id
 
 
 TenantDep = Annotated[str, Depends(get_tenant_id)]

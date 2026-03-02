@@ -7,9 +7,11 @@ comparison — all using mock engines to isolate harness logic.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+
 from ai_engine.evaluation.gold_dataset import GoldDataset, GoldDatasetEntry
 from ai_engine.evaluation.harness import EvaluationHarness, EvaluationReport
 from ai_engine.evaluation.metrics import (
@@ -23,8 +25,8 @@ from ai_engine.models.responses import (
     CostPredictResponse,
     OptimizeSQLResponse,
     RiskScoreResponse,
-    SemanticClassifyResponse,
     SQLSuggestion,
+    SemanticClassifyResponse,
 )
 
 # ---------------------------------------------------------------------------

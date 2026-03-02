@@ -242,7 +242,7 @@ async def stripe_webhook(
         import stripe
 
         stripe.api_key = settings.stripe_secret_key.get_secret_value()
-        event = stripe.Webhook.construct_event(  # type: ignore[no-untyped-call]
+        event = stripe.Webhook.construct_event(
             payload=body,
             sig_header=sig_header,
             secret=settings.stripe_webhook_secret.get_secret_value(),

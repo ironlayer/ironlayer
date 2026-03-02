@@ -9,10 +9,13 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import threading
+from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.config import APISettings
 from api.services.billing_service import BillingService, StripeUsageReporter
 
@@ -83,8 +86,8 @@ class TestGetOrCreateCustomer:
         row.stripe_customer_id = "cus_existing"
         row.stripe_subscription_id = "sub_existing"
         row.plan_tier = "team"
-        row.period_start = datetime(2024, 6, 1, tzinfo=UTC)
-        row.period_end = datetime(2024, 7, 1, tzinfo=UTC)
+        row.period_start = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        row.period_end = datetime(2024, 7, 1, tzinfo=timezone.utc)
 
         result_mock = MagicMock()
         result_mock.scalar_one_or_none.return_value = row
@@ -171,8 +174,8 @@ class TestGetSubscriptionInfo:
         row = MagicMock()
         row.plan_tier = "team"
         row.stripe_subscription_id = "sub_live"
-        row.period_start = datetime(2024, 6, 1, tzinfo=UTC)
-        row.period_end = datetime(2024, 7, 1, tzinfo=UTC)
+        row.period_start = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        row.period_end = datetime(2024, 7, 1, tzinfo=timezone.utc)
 
         result_mock = MagicMock()
         result_mock.scalar_one_or_none.return_value = row

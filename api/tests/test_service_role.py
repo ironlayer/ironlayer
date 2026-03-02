@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import pytest
+
 from api.middleware.rbac import (
-    ROLE_PERMISSIONS,
     Permission,
     Role,
+    ROLE_PERMISSIONS,
     parse_role,
     role_has_permission,
 )
@@ -107,8 +108,9 @@ class TestGenerateTokenWithIdentityKind:
     """Verify TokenManager.generate_token() passes identity_kind."""
 
     def test_generate_user_token(self) -> None:
-        from api.security import TokenConfig, TokenManager
         from pydantic import SecretStr
+
+        from api.security import TokenConfig, TokenManager
 
         mgr = TokenManager(TokenConfig(jwt_secret=SecretStr("test-secret-key")))
         token = mgr.generate_token("user1", "t1")
@@ -116,8 +118,9 @@ class TestGenerateTokenWithIdentityKind:
         assert claims.identity_kind == "user"
 
     def test_generate_service_token(self) -> None:
-        from api.security import TokenConfig, TokenManager
         from pydantic import SecretStr
+
+        from api.security import TokenConfig, TokenManager
 
         mgr = TokenManager(TokenConfig(jwt_secret=SecretStr("test-secret-key")))
         token = mgr.generate_token("svc1", "t1", identity_kind="service")

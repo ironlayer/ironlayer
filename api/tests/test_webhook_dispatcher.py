@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+
 from api.services.event_bus import EventPayload, EventType
 from api.services.webhook_dispatcher import WebhookDispatcher
 

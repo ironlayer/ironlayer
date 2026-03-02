@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
+from typer.testing import CliRunner
 
 from cli.app import app
-from cli.commands.dev import _build_services_table, _load_dotenv, _setup_local_env
-from typer.testing import CliRunner
+from cli.commands.dev import _setup_local_env, _load_dotenv, _build_services_table
 
 runner = CliRunner()
 
@@ -22,7 +25,7 @@ class TestConfigDetection:
 
     def test_no_config_exits_with_error(self, tmp_path: Path) -> None:
         """Running dev in a directory without a IronLayer project should fail."""
-        _result = runner.invoke(app, ["dev"], catch_exceptions=True)
+        result = runner.invoke(app, ["dev"], catch_exceptions=True)
         # The test runner's cwd might have .env, so we test via the setup function instead.
         # Direct CLI invocation depends on cwd which is tricky in tests.
 

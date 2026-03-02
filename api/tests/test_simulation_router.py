@@ -6,13 +6,16 @@ endpoints including RBAC enforcement and error handling.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
+
 from core_engine.simulation.impact_analyzer import (
+    AffectedModel,
     ImpactReport,
     ModelRemovalReport,
+    ReferenceSeverity,
 )
 
 # ---------------------------------------------------------------------------
@@ -32,10 +35,10 @@ def _mock_simulation_service():
 @pytest.fixture()
 def _app():
     """Minimal app with the simulation router and auth middleware bypassed."""
-    from api.dependencies import get_tenant_id, get_tenant_session
-    from api.middleware.rbac import Role, get_user_role
-    from api.routers.simulation import router
     from fastapi import FastAPI
+    from api.routers.simulation import router
+    from api.dependencies import get_tenant_session, get_tenant_id
+    from api.middleware.rbac import get_user_role, Role
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")

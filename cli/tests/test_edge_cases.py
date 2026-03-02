@@ -16,21 +16,24 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from click.exceptions import Exit as ClickExit
+from typer.testing import CliRunner
+
+from core_engine.models.model_definition import (
+    Materialization,
+    ModelDefinition,
+    ModelKind,
+)
+
 from cli.app import (
     _emit_metrics,
     _extract_sql_table_refs,
     _generate_ironlayer_file,
     app,
 )
-from core_engine.models.model_definition import (
-    Materialization,
-    ModelDefinition,
-    ModelKind,
-)
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -92,12 +95,10 @@ class TestEmitMetrics:
         metrics_file = tmp_path / "metrics.jsonl"
 
         # Create a mock that raises PermissionError on open.
-        with (
-            patch("cli.app._metrics_file", metrics_file),
-            patch.object(Path, "open", side_effect=PermissionError("no write")),
-        ):
-            # Should NOT raise.
-            _emit_metrics("test.event", {"safe": True})
+        with patch("cli.app._metrics_file", metrics_file):
+            with patch.object(Path, "open", side_effect=PermissionError("no write")):
+                # Should NOT raise.
+                _emit_metrics("test.event", {"safe": True})
 
 
 # ---------------------------------------------------------------------------

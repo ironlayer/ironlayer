@@ -11,8 +11,10 @@ unit test runs via ``pytest -m "not slow"``.
 from __future__ import annotations
 
 import pytest
-from ai_engine.evaluation.gold_dataset import GoldDataset
+
+from ai_engine.evaluation.gold_dataset import GoldDataset, GoldDatasetEntry
 from ai_engine.evaluation.harness import EvaluationHarness, EvaluationReport
+from ai_engine.evaluation.metrics import accuracy, precision_recall_f1
 
 # ---------------------------------------------------------------------------
 # Engine instantiation (rule-based, no LLM, fully deterministic)
@@ -33,9 +35,9 @@ def _build_engines() -> tuple:
 
     Returns (classifier, cost_predictor, risk_scorer, optimizer).
     """
+    from ai_engine.engines.semantic_classifier import SemanticClassifier
     from ai_engine.engines.cost_predictor import CostPredictor
     from ai_engine.engines.risk_scorer import RiskScorer
-    from ai_engine.engines.semantic_classifier import SemanticClassifier
     from ai_engine.engines.sql_optimizer import SQLOptimizer
 
     classifier = SemanticClassifier(llm_client=None)
@@ -61,7 +63,7 @@ class TestGoldDatasetIntegrity:
     def test_all_entries_have_required_fields(self) -> None:
         ds = GoldDataset()
         for entry in ds.get_all():
-            assert entry.id, "Entry missing id"
+            assert entry.id, f"Entry missing id"
             assert entry.category, f"Entry {entry.id} missing category"
             assert entry.new_sql, f"Entry {entry.id} missing new_sql"
             assert entry.expected_change_type in _CHANGE_TYPE_LABELS, (

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
@@ -55,7 +55,7 @@ async def optimize_sql(
         )
         cached = _cache.get(cache_key)
         if cached is not None:
-            return cast(OptimizeSQLResponse, cached)
+            return cached
 
     logger.info("Optimising SQL (length=%d)", len(request.sql))
     result = optimizer.optimize(request)

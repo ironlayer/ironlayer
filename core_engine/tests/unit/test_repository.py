@@ -12,17 +12,18 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from core_engine.state.repository import RunRepository
-from core_engine.state.tables import Base
 from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.types import TypeDecorator
+
+from core_engine.state.repository import RunRepository
+from core_engine.state.tables import Base, RunTable
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -46,7 +47,7 @@ def _patch_columns_for_sqlite() -> None:
 
         def process_result_value(self, value, dialect):  # type: ignore[override]
             if value is not None and value.tzinfo is None:
-                return value.replace(tzinfo=UTC)
+                return value.replace(tzinfo=timezone.utc)
             return value
 
     for table in Base.metadata.tables.values():
@@ -98,7 +99,7 @@ def _make_run_record(
     finished_at: datetime | None = None,
 ) -> dict:
     """Build a minimal run record dict for test insertion."""
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     return {
         "run_id": uuid4().hex,
         "plan_id": plan_id,
@@ -160,7 +161,7 @@ class TestHistoricalStatsWithCost:
 
         # Create three runs with known costs: 1.0, 2.0, 3.0 -> avg = 2.0.
         for cost in [1.0, 2.0, 3.0]:
-            now = datetime.now(UTC)
+            now = datetime.now(timezone.utc)
             record = _make_run_record(
                 model_name=model,
                 cost_usd=cost,
@@ -183,7 +184,7 @@ class TestHistoricalStatsWithCost:
 
         # Create runs without cost.
         for _ in range(2):
-            now = datetime.now(UTC)
+            now = datetime.now(timezone.utc)
             record = _make_run_record(
                 model_name=model,
                 cost_usd=None,
@@ -202,7 +203,7 @@ class TestHistoricalStatsWithCost:
         model = "analytics.mixed"
 
         # One run with cost, one without.  avg should be over the non-null value only.
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         record_with = _make_run_record(
             model_name=model,
             cost_usd=4.0,

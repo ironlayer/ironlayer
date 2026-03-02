@@ -1,6 +1,6 @@
 [project]
 name = "ironlayer-core"
-version = "0.3.0"
+version = "0.2.0"
 description = "IronLayer Core Engine — deterministic SQL transformation planning and execution"
 requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
@@ -16,10 +16,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
-    "Programming Language :: Rust",
 ]
 dependencies = [
-    "sqlglot>=25.34,<27",  # Range: sqlglot is still MIT-licensed post-Fivetran; cap at <27 for API stability
+    "sqlglot==25.34.1",  # Pinned: last MIT-licensed version before Fivetran acquisition risk
     "networkx>=3.2,<4.0",
     "sqlalchemy[asyncio]>=2.0,<3.0",
     "alembic>=1.13,<2.0",
@@ -51,20 +50,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.maturin]
-# Path to the Rust crate for the check engine extension module.
-manifest-path = "../check_engine/Cargo.toml"
-# Python packages to include alongside the compiled Rust extension.
-python-packages = ["core_engine"]
-# Module name matches the Rust crate lib name.
-module-name = "ironlayer_check_engine"
-# Bindings type.
-bindings = "pyo3"
-# Use stable ABI for a single wheel per platform.
-features = ["pyo3/abi3-py311", "extension-module"]
+[tool.hatch.build.targets.wheel]
+packages = ["core_engine"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -79,6 +69,3 @@ warn_return_any = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--cov=core_engine --cov-report=term-missing"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["N806", "N803"]

@@ -18,9 +18,6 @@ That's it. The `ironlayer` package pulls in `ironlayer-core` automatically.
 # Initialize a new IronLayer project
 ironlayer init my-project
 
-# Run quality checks (90 rules, Rust-powered, <500ms for 500+ models)
-ironlayer check ./my-project
-
 # List all discovered models
 ironlayer models ./my-project
 
@@ -125,12 +122,10 @@ IronLayer is a dual-engine system:
 
 ## Features
 
-- **Rust-powered check engine** -- 90 rules across 12 categories: SQL headers, syntax, safety, ref integrity, naming, YAML schemas, dbt structure, model consistency, Databricks-specific SQL, incremental logic, performance anti-patterns, and test adequacy. 500+ models in <500ms.
 - **Deterministic planning** -- Git diff to execution plan with zero ambiguity
 - **Incremental state** -- Watermark tracking for time-range partitions
 - **Multi-tenant** -- Row-level security, per-tenant isolation from day 1
 - **AI advisory** -- Cost prediction, risk scoring, SQL optimization (non-mutating)
-- **MCP server** -- Model Context Protocol integration for AI assistants (Claude Code, Cursor)
 - **Auth & billing** -- Email/password signup, JWT tokens, Stripe subscriptions
 - **Per-tenant LLM keys** -- Customers bring their own Anthropic key, encrypted at rest
 - **Onboarding wizard** -- Databricks connection, plan selection, environment setup
@@ -144,10 +139,9 @@ IronLayer is a dual-engine system:
 ```
 ironlayer/
   core_engine/    # Deterministic core (models, loader, parser, graph, planner, executor)
-  check_engine/   # Rust check engine (PyO3, 90 rules, rayon parallelism, SHA-256 cache)
   ai_engine/      # AI advisory service (classifier, cost predictor, risk scorer, optimizer)
   api/            # FastAPI control plane (routers, services, middleware, security, billing)
-  cli/            # Typer CLI (check, plan, show, apply, backfill, models, lineage, mcp)
+  cli/            # Typer CLI (login, plan, show, apply, backfill, models, lineage)
   frontend/       # React + TypeScript + Tailwind SPA
   infra/          # Docker, Terraform (Azure), CI/CD pipeline
   examples/       # Demo project and example models
@@ -162,10 +156,10 @@ ironlayer/
 - [API Reference](docs/api-reference.md) -- REST API authentication and endpoints
 - [Deployment Guide](docs/deployment.md) -- Docker Compose, Terraform (Azure Container Apps)
 - [Azure VM Setup](docs/azure-vm-setup.md) -- OpenClaw deployment VM
+- [Release & Deployment Verification](docs/release-verification.md) -- How to verify PyPI, Cloudflare, and docs are live
 
 ## Tech Stack
 
-- **Rust** (check engine) -- PyO3/maturin, rayon parallelism, abi3-py311 stable ABI
 - **Python 3.11+** with uv package management
 - **SQLAlchemy 2.0** async with Alembic migrations (15 versioned)
 - **FastAPI** + Pydantic v2

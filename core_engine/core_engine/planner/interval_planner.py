@@ -22,14 +22,14 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import date, timedelta
-from typing import Any
 
 import networkx as nx
+from core_engine.sql_toolkit import Dialect, get_sql_toolkit
 from pydantic import BaseModel, Field
 
 from core_engine.contracts.schema_validator import ContractValidationResult
 from core_engine.graph.dag_builder import topological_sort
-from core_engine.models.diff import ASTDiffDetail, DiffResult
+from core_engine.models.diff import DiffResult
 from core_engine.models.model_definition import ModelDefinition, ModelKind
 from core_engine.models.plan import (
     DateRange,
@@ -37,9 +37,7 @@ from core_engine.models.plan import (
     PlanStep,
     PlanSummary,
     RunType,
-    StepDiffDetail,
 )
-from core_engine.sql_toolkit import Dialect, get_sql_toolkit
 from core_engine.telemetry.profiling import profile_operation
 
 logger = logging.getLogger(__name__)
@@ -97,7 +95,7 @@ def generate_plan(
     diff_result: DiffResult,
     dag: nx.DiGraph,
     watermarks: dict[str, tuple[date, date]],
-    run_stats: dict[str, dict[str, Any]],
+    run_stats: dict[str, dict],
     config: PlannerConfig | None = None,
     *,
     base: str = "",
@@ -105,7 +103,6 @@ def generate_plan(
     as_of_date: date | None = None,
     base_sql: dict[str, str] | None = None,
     contract_results: ContractValidationResult | None = None,
-    ast_diffs: dict[str, ASTDiffDetail] | None = None,
 ) -> Plan:
     """Generate a deterministic execution plan.
 
@@ -144,10 +141,6 @@ def generate_plan(
         Optional schema contract validation result.  When provided,
         violations are embedded into the corresponding plan steps and
         summarised in the plan summary.
-    ast_diffs:
-        Mapping of ``model_name -> ASTDiffDetail`` for directly changed
-        models.  When provided, column-level diff detail is embedded into
-        the corresponding plan steps for PR comment rendering.
 
     Returns
     -------
@@ -227,7 +220,7 @@ def generate_plan(
         depends_on_step_ids: list[str] = [step_id_map[dep] for dep in depends_on_models]
 
         # Embed contract violations for this model if available.
-        step_violations: list[dict[str, Any]] = []
+        step_violations: list[dict] = []
         if contract_results is not None:
             model_violations = contract_results.violations_for_model(model_name)
             step_violations = [
@@ -242,17 +235,6 @@ def generate_plan(
                 for v in model_violations
             ]
 
-        # Attach AST diff detail for directly changed models.
-        step_diff: StepDiffDetail | None = None
-        if ast_diffs and model_name in ast_diffs:
-            detail = ast_diffs[model_name]
-            step_diff = StepDiffDetail(
-                change_type=detail.change_type.value,
-                columns_added=detail.added_columns,
-                columns_removed=detail.removed_columns,
-                columns_modified=detail.changed_columns,
-            )
-
         steps.append(
             PlanStep(
                 step_id=step_id_map[model_name],
@@ -265,7 +247,6 @@ def generate_plan(
                 estimated_compute_seconds=est_seconds,
                 estimated_cost_usd=est_usd,
                 contract_violations=step_violations,
-                diff_detail=step_diff,
             )
         )
 
@@ -475,7 +456,7 @@ def _assign_parallel_groups(
 
 def _estimate_cost(
     model_name: str,
-    run_stats: dict[str, dict[str, Any]],
+    run_stats: dict[str, dict],
     config: PlannerConfig,
 ) -> tuple[float, float]:
     """Estimate compute time and USD cost for a single model step.

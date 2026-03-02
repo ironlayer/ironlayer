@@ -11,8 +11,6 @@ without any LLM involvement.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 
@@ -23,7 +21,7 @@ class GoldDatasetEntry(BaseModel):
     category: str = Field(..., description="Category grouping for analysis.")
     old_sql: str = Field(..., description="SQL before the change (empty for new models).")
     new_sql: str = Field(..., description="SQL after the change.")
-    schema_diff: dict[str, Any] | None = Field(default=None, description="Optional column-level diff.")
+    schema_diff: dict | None = Field(default=None, description="Optional column-level diff.")
     expected_change_type: str = Field(..., description="Expected classification from the rule-based classifier.")
     expected_confidence_min: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum expected confidence.")
     expected_confidence_max: float = Field(default=1.0, ge=0.0, le=1.0, description="Maximum expected confidence.")

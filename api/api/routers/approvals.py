@@ -117,7 +117,7 @@ async def approve_plan(
     # Reload the plan to return updated state.
     plan_row = await repo.get_plan(plan_id)
     assert plan_row is not None, f"Plan {plan_id} disappeared after approval"
-    plan_data: dict[str, Any] = json.loads(plan_row.plan_json)  # type: ignore[arg-type]
+    plan_data = json.loads(plan_row.plan_json)  # type: ignore[arg-type]
     plan_data["approvals"] = json.loads(plan_row.approvals_json) if plan_row.approvals_json else []  # type: ignore[arg-type]
     plan_data["auto_approved"] = plan_row.auto_approved
     plan_data["created_at"] = plan_row.created_at.isoformat() if plan_row.created_at else None
@@ -191,7 +191,7 @@ async def reject_plan(
     # Return updated plan.
     plan_row = await repo.get_plan(plan_id)
     assert plan_row is not None, f"Plan {plan_id} disappeared after rejection"
-    plan_data: dict[str, Any] = json.loads(plan_row.plan_json)  # type: ignore[arg-type]
+    plan_data = json.loads(plan_row.plan_json)  # type: ignore[arg-type]
     plan_data["approvals"] = approvals
     plan_data["auto_approved"] = False
     plan_data["rejected"] = True

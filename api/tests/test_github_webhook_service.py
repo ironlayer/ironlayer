@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from api.services.github_webhook_service import GitHubWebhookService
 
 # ---------------------------------------------------------------------------
@@ -371,8 +373,8 @@ class TestConfigCRUD:
         row1.branch = "main"
         row1.auto_plan = True
         row1.auto_apply = False
-        row1.created_at = datetime(2024, 6, 1, tzinfo=UTC)
-        row1.updated_at = datetime(2024, 6, 1, tzinfo=UTC)
+        row1.created_at = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        row1.updated_at = datetime(2024, 6, 1, tzinfo=timezone.utc)
 
         row2 = MagicMock()
         row2.id = 2
@@ -381,8 +383,8 @@ class TestConfigCRUD:
         row2.branch = "develop"
         row2.auto_plan = True
         row2.auto_apply = True
-        row2.created_at = datetime(2024, 6, 2, tzinfo=UTC)
-        row2.updated_at = datetime(2024, 6, 2, tzinfo=UTC)
+        row2.created_at = datetime(2024, 6, 2, tzinfo=timezone.utc)
+        row2.updated_at = datetime(2024, 6, 2, tzinfo=timezone.utc)
 
         result_mock = MagicMock()
         result_mock.scalars.return_value.all.return_value = [row1, row2]

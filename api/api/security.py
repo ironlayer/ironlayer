@@ -23,7 +23,7 @@ import socket
 import time
 import uuid
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, SecretStr
@@ -245,7 +245,7 @@ class OIDCProvider:
             raise PermissionError(f"OIDC discovery document missing required fields: {sorted(missing)}")
 
         self._discovery = data
-        return cast("dict[str, Any]", data)
+        return data
 
     def _fetch_jwks(self) -> dict[str, Any]:
         """Fetch JSON Web Key Set from the provider's JWKS endpoint.
@@ -279,7 +279,7 @@ class OIDCProvider:
 
         self._jwks = data
         self._jwks_fetched_at = time.time()
-        return cast("dict[str, Any]", data)
+        return data
 
     def _get_signing_key(self, kid: str) -> Any:
         """Retrieve the signing key matching the token's key ID.
@@ -533,7 +533,7 @@ class AzureKeyVaultProvider:
 
         client = self._get_client()
         result = client.wrap_key(KeyWrapAlgorithm.rsa_oaep_256, plaintext_key)
-        return cast(bytes, result.encrypted_key)
+        return result.encrypted_key
 
     def unwrap_key(self, wrapped_key: bytes) -> bytes:
         """Unwrap (decrypt) a data key using the Key Vault RSA key.
@@ -552,7 +552,7 @@ class AzureKeyVaultProvider:
 
         client = self._get_client()
         result = client.unwrap_key(KeyWrapAlgorithm.rsa_oaep_256, wrapped_key)
-        return cast(bytes, result.key)
+        return result.key
 
     def close(self) -> None:
         """Close the underlying HTTP client."""

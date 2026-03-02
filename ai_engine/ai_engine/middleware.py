@@ -11,7 +11,6 @@ from collections import defaultdict
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class SharedSecretMiddleware(BaseHTTPMiddleware):
     raises RuntimeError at init time if it is missing.
     """
 
-    def __init__(self, app: ASGIApp, *, platform_env: str = "development") -> None:
+    def __init__(self, app, *, platform_env: str = "development") -> None:
         super().__init__(app)
         raw_secret = os.environ.get("AI_ENGINE_SHARED_SECRET", "")
         if raw_secret:
@@ -124,7 +123,7 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app: ASGIApp,
+        app,
         *,
         max_requests: int = 60,
         window_seconds: float = 60.0,
@@ -170,7 +169,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     Default limit: 1 MiB (1 048 576 bytes).
     """
 
-    def __init__(self, app: ASGIApp, *, max_body_size: int = 1_048_576) -> None:
+    def __init__(self, app, *, max_body_size: int = 1_048_576) -> None:
         super().__init__(app)
         self._max_size = max_body_size
 

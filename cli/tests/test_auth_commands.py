@@ -13,22 +13,23 @@ from __future__ import annotations
 import json
 import os
 import stat
-from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from click.exceptions import Exit as ClickExit
+from typer.testing import CliRunner
+
 from cli.app import (
     _api_request,
     _credentials_path,
     _format_input_range,
+    _load_model_sql_map,
     _load_stored_token,
     _resolve_model_sql,
     _save_credentials,
     app,
 )
-from click.exceptions import Exit as ClickExit
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -147,6 +148,7 @@ class TestApiRequest:
     @patch("cli.app._load_stored_token", return_value=None)
     def test_get_request_success(self, mock_token: MagicMock) -> None:
         """Successful GET should return parsed JSON."""
+        import httpx
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"status": "ok"}
@@ -168,6 +170,7 @@ class TestApiRequest:
     @patch("cli.app._load_stored_token", return_value="stored-jwt")
     def test_uses_stored_token(self, mock_token: MagicMock) -> None:
         """Should use stored token when IRONLAYER_API_TOKEN is not set."""
+        import httpx
 
         mock_response = MagicMock()
         mock_response.json.return_value = {}
@@ -192,6 +195,7 @@ class TestApiRequest:
     @patch("cli.app._load_stored_token", return_value=None)
     def test_uses_env_token_over_stored(self, mock_token: MagicMock) -> None:
         """IRONLAYER_API_TOKEN env var should take precedence."""
+        import httpx
 
         mock_response = MagicMock()
         mock_response.json.return_value = {}
@@ -217,6 +221,7 @@ class TestApiRequest:
     def test_http_error_exits_with_code_3(self, mock_token: MagicMock) -> None:
         """HTTP 4xx/5xx should call typer.Exit(code=3)."""
         import httpx
+        import typer
 
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -260,6 +265,7 @@ class TestApiRequest:
     @patch("cli.app._load_stored_token", return_value=None)
     def test_passes_body_and_params(self, mock_token: MagicMock) -> None:
         """body and params should be forwarded to the HTTP client."""
+        import httpx
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": True}
@@ -290,6 +296,7 @@ class TestApiRequest:
     @patch("cli.app._load_stored_token", return_value=None)
     def test_strips_trailing_slash_from_api_url(self, mock_token: MagicMock) -> None:
         """Trailing slash on api_url should be stripped."""
+        import httpx
 
         mock_response = MagicMock()
         mock_response.json.return_value = {}
@@ -596,6 +603,7 @@ class TestResolveModelSql:
 
     def test_missing_model_exits(self) -> None:
         """Should exit with code 3 when model is not found."""
+        import typer
 
         sql_map = {"orders": "SELECT 1", "customers": "SELECT 2"}
         with pytest.raises(ClickExit):
@@ -869,9 +877,8 @@ class TestBackfillChunkedEdge:
         tmp_path: Path,
     ) -> None:
         """A single-day range should produce exactly one chunk."""
-        from datetime import datetime
-
         from core_engine.models.run import RunRecord, RunStatus
+        from datetime import datetime, timezone
 
         mock_load_settings.return_value = MagicMock(local_db_path=Path("/tmp/test.duckdb"))
         mock_load_sql.return_value = {"my_model": "SELECT 1"}
@@ -882,8 +889,8 @@ class TestBackfillChunkedEdge:
             step_id="step-1",
             model_name="my_model",
             status=RunStatus.SUCCESS,
-            started_at=datetime(2025, 1, 1, tzinfo=UTC),
-            finished_at=datetime(2025, 1, 1, 0, 0, 5, tzinfo=UTC),
+            started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            finished_at=datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
             executor_version="local",
             retry_count=0,
         )

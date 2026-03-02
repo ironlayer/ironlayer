@@ -10,9 +10,11 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import threading
+from unittest.mock import MagicMock, patch
 
 import pytest
+
 from core_engine.metering.collector import MeteringCollector
 from core_engine.metering.events import UsageEvent, UsageEventType
 

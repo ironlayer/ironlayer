@@ -94,10 +94,6 @@ class Permission(str, Enum):
     RUN_TESTS = "run:tests"
     READ_TEST_RESULTS = "read:test_results"
 
-    # Checks (unified check engine)
-    RUN_CHECKS = "run:checks"
-    READ_CHECK_RESULTS = "read:check_results"
-
     # Environments
     MANAGE_ENVIRONMENTS = "manage:environments"
     CREATE_EPHEMERAL_ENVS = "create:ephemeral_environments"
@@ -120,7 +116,6 @@ _VIEWER_PERMS: frozenset[Permission] = frozenset(
         Permission.READ_MODELS,
         Permission.READ_RUNS,
         Permission.READ_TEST_RESULTS,
-        Permission.READ_CHECK_RESULTS,
     }
 )
 
@@ -139,7 +134,6 @@ _ENGINEER_PERMS: frozenset[Permission] = _OPERATOR_PERMS | frozenset(
         Permission.WRITE_MODELS,
         Permission.CREATE_EPHEMERAL_ENVS,
         Permission.RUN_TESTS,
-        Permission.RUN_CHECKS,
     }
 )
 

@@ -8,7 +8,12 @@ silently, SuggestionValidator three-gate integration, and edge cases
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, PropertyMock, patch
+
+import pytest
+
 from ai_engine.engines.sql_optimizer import SQLOptimizer
+from ai_engine.engines.suggestion_validator import SuggestionValidator, ValidationResult
 from ai_engine.models.requests import OptimizeSQLRequest
 from ai_engine.models.responses import OptimizeSQLResponse, SQLSuggestion
 
@@ -155,7 +160,7 @@ class TestLLMSuggestions:
         # The LLM suggestion has rewritten_sql so it goes through validation.
         # Whether it passes depends on the validator. Advisory-only (no rewritten_sql)
         # are kept regardless. With rewritten_sql, it must pass the three gates.
-        _llm_types = [s for s in result.suggestions if s.suggestion_type == "index_hint"]
+        llm_types = [s for s in result.suggestions if s.suggestion_type == "index_hint"]
         # If validation passes, it will be included; if not, it will be dropped.
         # The important thing is no exception is raised.
         assert isinstance(result, OptimizeSQLResponse)

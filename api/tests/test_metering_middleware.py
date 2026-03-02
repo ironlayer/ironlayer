@@ -10,14 +10,15 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from api.config import APISettings
+from httpx import ASGITransport, AsyncClient
+
 from api.dependencies import get_ai_client, get_db_session, get_metering_collector, get_settings, get_tenant_session
 from api.main import create_app
+from api.config import APISettings
 from api.services.ai_client import AIServiceClient
-from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -125,7 +126,7 @@ class TestMeteringMiddlewareRecording:
         headers = _make_auth_headers()
 
         async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
-            _resp = await ac.get("/api/v1/health")
+            resp = await ac.get("/api/v1/health")
 
         # /api/v1/health is in _SKIP_PATHS, so no metering event
         # Check that no event was recorded for health
@@ -153,7 +154,7 @@ class TestMeteringMiddlewareRecording:
         try:
             deps._metering_collector = mock_collector
             async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
-                _resp = await ac.get("/api/v1/plans")
+                resp = await ac.get("/api/v1/plans")
         finally:
             deps._metering_collector = original
 

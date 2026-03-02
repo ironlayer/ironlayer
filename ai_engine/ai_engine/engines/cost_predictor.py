@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
@@ -102,7 +101,7 @@ class CostPredictor:
             return self._model_predict(request)
         return self._heuristic_predict(request)
 
-    def train(self, telemetry_data: list[dict[str, Any]]) -> None:
+    def train(self, telemetry_data: list[dict]) -> None:
         """Train (or retrain) the cost model from historical telemetry.
 
         After training the model is persisted to ``self._model_path``.

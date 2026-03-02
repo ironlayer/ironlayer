@@ -10,11 +10,12 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.config import APISettings
 from api.services.plan_service import PlanService
 
@@ -63,7 +64,7 @@ def _make_plan_row(
     row.plan_json = json.dumps(plan_data)
     row.approvals_json = json.dumps(approvals) if approvals else None
     row.auto_approved = auto_approved
-    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
     row.base_sha = "sha-base"
     row.target_sha = "sha-target"
     return row

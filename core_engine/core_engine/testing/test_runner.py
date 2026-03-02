@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, cast
 
 from pydantic import BaseModel
 
@@ -247,7 +246,7 @@ class ModelTestRunner:
             )
 
     @staticmethod
-    def _execute_duckdb(sql: str, conn: object | None = None) -> list[Any]:
+    def _execute_duckdb(sql: str, conn: object | None = None) -> list:
         """Execute SQL against DuckDB and return result rows.
 
         Parameters
@@ -268,7 +267,7 @@ class ModelTestRunner:
         local_conn = conn or duckdb.connect(":memory:")
         try:
             result = local_conn.execute(sql).fetchall()  # type: ignore[attr-defined]
-            return cast("list[Any]", result)
+            return result
         finally:
             if conn is None:
                 local_conn.close()  # type: ignore[attr-defined]

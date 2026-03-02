@@ -1,5 +1,5 @@
 name: "IronLayer Plan"
-description: "Run ironlayer plan on a PR, post a formatted comment with data impact analysis, and upload the plan artifact."
+description: "Run ironlayer plan on a PR, post a formatted comment with the execution plan, and upload the plan artifact."
 branding:
   icon: "database"
   color: "blue"
@@ -53,18 +53,6 @@ outputs:
   plan-json-path:
     description: "Path to the generated plan.json file."
     value: ${{ steps.plan.outputs.plan_json_path }}
-  columns-added:
-    description: "Total number of columns added across all models."
-    value: ${{ steps.plan.outputs.columns_added }}
-  columns-removed:
-    description: "Total number of columns removed across all models."
-    value: ${{ steps.plan.outputs.columns_removed }}
-  columns-modified:
-    description: "Total number of columns modified across all models."
-    value: ${{ steps.plan.outputs.columns_modified }}
-  risk-level:
-    description: "Risk level: low risk, review, or high risk."
-    value: ${{ steps.plan.outputs.risk_level }}
 
 runs:
   using: "composite"
@@ -130,36 +118,11 @@ runs:
         models = summary.get('models_changed', [])
         plan_id = plan.get('plan_id', 'unknown')
 
-        # Aggregate column-level diff counts.
-        cols_added = cols_removed = cols_modified = 0
-        has_removed = False
-        for step in steps:
-            dd = step.get('diff_detail')
-            if dd:
-                cols_added += len(dd.get('columns_added', []))
-                cols_removed += len(dd.get('columns_removed', []))
-                cols_modified += len(dd.get('columns_modified', []))
-                if dd.get('columns_removed'):
-                    has_removed = True
-
-        # Compute risk level.
-        breaking = summary.get('breaking_contract_violations', 0)
-        if breaking > 0:
-            risk = 'high risk'
-        elif has_removed:
-            risk = 'review'
-        else:
-            risk = 'low risk'
-
         with open(gh_out, 'a') as f:
             f.write(f'plan_id={plan_id}\n')
             f.write(f'total_steps={total}\n')
             f.write(f'estimated_cost={cost:.2f}\n')
             f.write(f'models_changed={chr(44).join(models)}\n')
-            f.write(f'columns_added={cols_added}\n')
-            f.write(f'columns_removed={cols_removed}\n')
-            f.write(f'columns_modified={cols_modified}\n')
-            f.write(f'risk_level={risk}\n')
 
         if total == 0:
             with open(gh_out, 'a') as f:
@@ -171,26 +134,9 @@ runs:
         else
           echo "plan_status=empty" >> "$GITHUB_OUTPUT"
           echo "total_steps=0" >> "$GITHUB_OUTPUT"
-          echo "columns_added=0" >> "$GITHUB_OUTPUT"
-          echo "columns_removed=0" >> "$GITHUB_OUTPUT"
-          echo "columns_modified=0" >> "$GITHUB_OUTPUT"
-          echo "risk_level=low risk" >> "$GITHUB_OUTPUT"
         fi
 
         rm -f "$STDERR_FILE"
-
-    - name: Fetch AI advisory
-      if: inputs.api-url != '' && inputs.api-token != '' && steps.plan.outputs.plan_status == 'success'
-      id: advisory
-      shell: bash
-      run: |
-        ADVISORY_PATH="${{ runner.temp }}/ironlayer-advisory.json"
-        python3 "${{ github.action_path }}/fetch_advisory.py" \
-          --api-url "${{ inputs.api-url }}" \
-          --api-token "${{ inputs.api-token }}" \
-          --plan-json "${{ steps.plan.outputs.plan_json_path }}" \
-          --output "$ADVISORY_PATH" || true
-        echo "advisory_path=$ADVISORY_PATH" >> "$GITHUB_OUTPUT"
 
     - name: Build PR comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
@@ -203,13 +149,6 @@ runs:
         ERROR_MSG="${{ steps.plan.outputs.error_message }}"
         BASE_SHA="${{ github.event.pull_request.base.sha }}"
         HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-        ADVISORY_PATH="${{ steps.advisory.outputs.advisory_path }}"
-
-        # Build advisory flag — only pass if the file exists and is non-empty.
-        ADVISORY_FLAG=""
-        if [ -n "$ADVISORY_PATH" ] && [ -f "$ADVISORY_PATH" ] && [ -s "$ADVISORY_PATH" ]; then
-          ADVISORY_FLAG="--advisory-json $ADVISORY_PATH"
-        fi
 
         python3 "${{ github.action_path }}/format_comment.py" \
           --status "$PLAN_STATUS" \
@@ -217,7 +156,6 @@ runs:
           --base-sha "$BASE_SHA" \
           --head-sha "$HEAD_SHA" \
           --error "$ERROR_MSG" \
-          $ADVISORY_FLAG \
           --output "$COMMENT_FILE"
 
         echo "comment_file=$COMMENT_FILE" >> "$GITHUB_OUTPUT"

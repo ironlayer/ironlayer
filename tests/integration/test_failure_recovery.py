@@ -10,7 +10,11 @@ Run with:
 
 from __future__ import annotations
 
+import asyncio
 import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,8 +27,9 @@ import pytest
 @pytest.fixture
 def token_config():
     """Create a minimal TokenConfig for testing."""
-    from api.security import AuthMode, TokenConfig
     from pydantic import SecretStr
+
+    from api.security import AuthMode, TokenConfig
 
     return TokenConfig(
         auth_mode=AuthMode.DEVELOPMENT,
@@ -289,8 +294,9 @@ class TestKmsProviderDetection:
 
     def test_aws_kms_arn_detected(self):
         """AWS KMS ARN is correctly identified."""
-        from api.security import KmsProvider, TokenConfig
         from pydantic import SecretStr
+
+        from api.security import KmsProvider, TokenConfig
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -300,8 +306,9 @@ class TestKmsProviderDetection:
 
     def test_azure_keyvault_uri_detected(self):
         """Azure Key Vault URI is correctly identified."""
-        from api.security import KmsProvider, TokenConfig
         from pydantic import SecretStr
+
+        from api.security import KmsProvider, TokenConfig
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -311,8 +318,9 @@ class TestKmsProviderDetection:
 
     def test_azure_keyvault_uri_with_version(self):
         """Azure Key Vault URI with version is correctly identified."""
-        from api.security import KmsProvider, TokenConfig
         from pydantic import SecretStr
+
+        from api.security import KmsProvider, TokenConfig
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -322,8 +330,9 @@ class TestKmsProviderDetection:
 
     def test_explicit_provider_override(self):
         """Explicit provider setting overrides auto-detection."""
-        from api.security import KmsProvider, TokenConfig
         from pydantic import SecretStr
+
+        from api.security import KmsProvider, TokenConfig
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -334,8 +343,9 @@ class TestKmsProviderDetection:
 
     def test_unknown_uri_defaults_to_aws(self):
         """Unknown URI format defaults to AWS KMS for backward compatibility."""
-        from api.security import KmsProvider, TokenConfig
         from pydantic import SecretStr
+
+        from api.security import KmsProvider, TokenConfig
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),

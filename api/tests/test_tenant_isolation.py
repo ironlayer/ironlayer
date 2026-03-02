@@ -26,11 +26,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
 from api.config import APISettings
 from api.dependencies import get_ai_client, get_db_session, get_metering_collector, get_settings, get_tenant_session
 from api.main import create_app
 from api.services.ai_client import AIServiceClient
-from httpx import ASGITransport, AsyncClient
 
 pytestmark = pytest.mark.usefixtures("bypass_feature_gate")
 

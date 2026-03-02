@@ -12,28 +12,28 @@ from core_engine.sql_toolkit.impl.sqlglot_impl import SqlGlotToolkit
 class TestFactory:
     """Factory function and singleton lifecycle."""
 
-    def setup_method(self) -> None:
+    def setup_method(self):
         reset_toolkit()
 
-    def teardown_method(self) -> None:
+    def teardown_method(self):
         reset_toolkit()
 
-    def test_default_is_sqlglot(self) -> None:
+    def test_default_is_sqlglot(self):
         tk = get_sql_toolkit()
         assert isinstance(tk, SqlGlotToolkit)
 
-    def test_singleton_identity(self) -> None:
+    def test_singleton_identity(self):
         tk1 = get_sql_toolkit()
         tk2 = get_sql_toolkit()
         assert tk1 is tk2
 
-    def test_reset_clears_singleton(self) -> None:
+    def test_reset_clears_singleton(self):
         tk1 = get_sql_toolkit()
         reset_toolkit()
         tk2 = get_sql_toolkit()
         assert tk1 is not tk2
 
-    def test_register_custom_implementation(self) -> None:
+    def test_register_custom_implementation(self):
         class FakeToolkit:
             parser = None
             renderer = None
@@ -45,11 +45,11 @@ class TestFactory:
             rewriter = None
 
         fake = FakeToolkit()
-        register_implementation(lambda: fake)  # type: ignore[arg-type, return-value]
+        register_implementation(lambda: fake)  # type: ignore[arg-type]
         tk = get_sql_toolkit()
-        assert tk is fake  # type: ignore[comparison-overlap]
+        assert tk is fake
 
-    def test_register_replaces_existing(self) -> None:
+    def test_register_replaces_existing(self):
         tk1 = get_sql_toolkit()
         assert isinstance(tk1, SqlGlotToolkit)
 
@@ -57,12 +57,12 @@ class TestFactory:
         tk2 = get_sql_toolkit()
         assert tk2 is not tk1
 
-    def test_thread_safety(self) -> None:
+    def test_thread_safety(self):
         """Multiple threads calling get_sql_toolkit() get the same instance."""
         results: list[object] = []
         barrier = threading.Barrier(10)
 
-        def _get() -> None:
+        def _get():
             barrier.wait()
             results.append(get_sql_toolkit())
 
@@ -75,7 +75,7 @@ class TestFactory:
         assert len(results) == 10
         assert all(r is results[0] for r in results)
 
-    def test_protocol_compliance(self) -> None:
+    def test_protocol_compliance(self):
         """SqlGlotToolkit satisfies the SqlToolkit protocol at runtime."""
         tk = get_sql_toolkit()
         assert isinstance(tk, SqlToolkit)

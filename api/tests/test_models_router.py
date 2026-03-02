@@ -9,7 +9,8 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,8 +36,8 @@ def _make_model_row(
     row.owner = owner
     row.tags = json.dumps(tags) if tags else None
     row.current_version = version
-    row.created_at = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
-    row.last_modified_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    row.last_modified_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
     row.repo_path = f"models/{name.replace('.', '/')}.sql"
     row.time_column = "created_at"
     row.unique_key = "id"

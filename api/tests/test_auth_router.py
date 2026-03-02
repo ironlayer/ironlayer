@@ -13,9 +13,10 @@ Covers all auth router endpoints:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.services.auth_service import AuthError
 
 # ---------------------------------------------------------------------------

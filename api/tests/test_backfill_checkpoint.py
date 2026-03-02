@@ -14,10 +14,14 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+import json
+from datetime import date, datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
+
 from api.config import APISettings
 from api.services.execution_service import ExecutionService
 
@@ -71,8 +75,8 @@ def _make_checkpoint_row(
     row.error_message = error_message
     row.cluster_size = cluster_size
     row.plan_id = plan_id
-    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
-    row.updated_at = datetime(2024, 6, 15, 12, 5, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    row.updated_at = datetime(2024, 6, 15, 12, 5, 0, tzinfo=timezone.utc)
     return row
 
 
@@ -91,7 +95,7 @@ def _make_audit_entry(
     entry.run_id = run_id
     entry.error_message = error_message
     entry.duration_seconds = duration_seconds
-    entry.executed_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
+    entry.executed_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
     return entry
 
 
@@ -441,7 +445,9 @@ class TestChunkedBackfillFailure:
         async def _lock_side_effect(*args, **kwargs):
             nonlocal lock_call_count
             lock_call_count += 1
-            return lock_call_count != 2
+            if lock_call_count == 2:
+                return False
+            return True
 
         service._lock_repo.acquire_lock = AsyncMock(side_effect=_lock_side_effect)
 

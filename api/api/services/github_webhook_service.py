@@ -286,7 +286,7 @@ class GitHubWebhookService:
                 WebhookConfigTable.tenant_id == self._tenant_id,
             )
         )
-        return bool(result.rowcount > 0)  # type: ignore[attr-defined]
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     async def verify_secret(self, config_id: int, payload: bytes, signature: str) -> bool:
         """Verify a webhook signature against the stored secret hash.

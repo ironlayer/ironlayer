@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_engine.models.requests import (
     CostPredictRequest,
     OptimizeSQLRequest,

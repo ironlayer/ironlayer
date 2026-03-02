@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core_engine.models.model_definition import ModelDefinition
@@ -23,7 +23,7 @@ import typer
 from rich.console import Console
 
 from cli.display import (
-    display_check_results,
+    display_column_lineage,
     display_cross_model_column_lineage,
     display_lineage,
     display_migration_report,
@@ -57,14 +57,12 @@ mcp_app = typer.Typer(
 )
 app.add_typer(mcp_app, name="mcp")
 
-# Register the init, dev, and check commands.
-from cli.commands.check import check_command  # noqa: E402
-from cli.commands.dev import dev_command  # noqa: E402
-from cli.commands.init import init_command  # noqa: E402
+# Register the init and dev commands.
+from cli.commands.dev import dev_command
+from cli.commands.init import init_command
 
 app.command(name="init")(init_command)
 app.command(name="dev")(dev_command)
-app.command(name="check")(check_command)
 
 # Mutable global options populated by the Typer callback.
 _json_output: bool = False
@@ -109,7 +107,7 @@ def _global_options(
 # ---------------------------------------------------------------------------
 
 
-def _emit_metrics(event: str, data: dict[str, Any]) -> None:
+def _emit_metrics(event: str, data: dict) -> None:
     """Append a timestamped metrics event to the metrics file, if configured.
 
     Failures are logged but never propagate — metrics emission must never
@@ -152,7 +150,7 @@ def _load_stored_token() -> str | None:
         return None
     try:
         data = json.loads(cred_path.read_text(encoding="utf-8"))
-        return cast("str | None", data.get("access_token"))
+        return data.get("access_token")
     except Exception:
         return None
 
@@ -302,7 +300,6 @@ def plan(
 
         previous_versions: dict[str, str] = {}
         current_versions: dict[str, str] = {}
-        base_sql_map: dict[str, str] = {}
         for m in models:
             current_versions[m.name] = m.content_hash
 
@@ -310,7 +307,6 @@ def plan(
             m_def = model_map[m_name]
             try:
                 old_sql = get_file_at_commit(repo, m_def.file_path, base)
-                base_sql_map[m_name] = old_sql
                 previous_versions[m_name] = compute_canonical_hash(old_sql)
             except Exception:
                 # File did not exist at base -- it is a new model.
@@ -324,21 +320,6 @@ def plan(
 
         # 6. Compute structural diff.
         diff_result = compute_structural_diff(previous_versions, current_versions)
-
-        # 6b. Compute AST diffs for modified models (column-level impact).
-        from core_engine.diff.ast_diff import compute_ast_diff
-        from core_engine.models.diff import ASTDiffDetail
-
-        ast_diffs: dict[str, ASTDiffDetail] = {}
-        for m_name in sorted(diff_result.modified_models):
-            if m_name in model_map and m_name in base_sql_map:
-                try:
-                    ast_diffs[m_name] = compute_ast_diff(
-                        base_sql_map[m_name],
-                        model_map[m_name].clean_sql,
-                    )
-                except Exception:
-                    pass  # Skip — step will still be included without diff detail.
 
         # 7. Resolve as-of date.
         ref_date = _parse_date(as_of_date, "as-of-date") if as_of_date else date.today()
@@ -360,8 +341,6 @@ def plan(
             base=base,
             target=target,
             as_of_date=ref_date,
-            base_sql=base_sql_map,
-            ast_diffs=ast_diffs,
         )
 
         # 10. Serialize and write.
@@ -548,7 +527,7 @@ def apply_plan(
 
     # Execute each step sequentially, respecting depends_on ordering
     # (steps are already in topological order from the planner).
-    run_records: list[dict[str, Any]] = []
+    run_records: list[dict] = []
     failed = False
 
     with LocalExecutor(db_path=settings.local_db_path) as executor:
@@ -877,7 +856,7 @@ def backfill_chunked(
             },
         )
 
-        run_records: list[dict[str, Any]] = []
+        run_records: list[dict] = []
         failed = False
         completed_through: date | None = None
 
@@ -1254,6 +1233,7 @@ def lineage(
     # ---------------------------------------------------------------
     if column is not None:
         from core_engine.graph import (
+            compute_model_column_lineage,
             trace_column_across_dag,
         )
         from core_engine.sql_toolkit import Dialect

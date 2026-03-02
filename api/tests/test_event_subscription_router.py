@@ -6,13 +6,16 @@ using the standard IronLayer test patterns (mock session, dev tokens).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from conftest import _make_dev_token
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+
+from conftest import _make_dev_token
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -39,8 +42,8 @@ def _make_subscription_row(
     row.active = active
     row.description = description
     row.secret_hash = None
-    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
-    row.updated_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    row.updated_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
     return row
 
 

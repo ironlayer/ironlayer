@@ -12,7 +12,7 @@ import hmac
 import json
 import os
 import time
-from datetime import UTC, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -26,8 +26,8 @@ from httpx import ASGITransport, AsyncClient
 _TEST_JWT_SECRET = "test-secret-key-for-ironlayer-tests"
 os.environ.setdefault("JWT_SECRET", _TEST_JWT_SECRET)
 
-from api.config import APISettings  # noqa: E402
-from api.dependencies import (  # noqa: E402
+from api.config import APISettings
+from api.dependencies import (
     get_admin_session,
     get_ai_client,
     get_db_session,
@@ -35,8 +35,8 @@ from api.dependencies import (  # noqa: E402
     get_settings,
     get_tenant_session,
 )
-from api.main import create_app  # noqa: E402
-from api.services.ai_client import AIServiceClient  # noqa: E402
+from api.main import create_app
+from api.services.ai_client import AIServiceClient
 
 # ---------------------------------------------------------------------------
 # Dev auth token (shared across all tests)
@@ -296,7 +296,7 @@ def sample_plan_row(sample_plan_json: dict[str, Any]) -> MagicMock:
     row.approvals_json = None
     row.advisory_json = None
     row.auto_approved = False
-    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
     return row
 
 
@@ -314,8 +314,8 @@ def sample_model_row() -> MagicMock:
     row.materialization = "incremental"
     row.owner = "data-team"
     row.tags = json.dumps(["staging", "core"])
-    row.created_at = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
-    row.last_modified_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=UTC)
+    row.created_at = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    row.last_modified_at = datetime(2024, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
     return row
 
 
@@ -328,8 +328,8 @@ def sample_run_dict() -> dict[str, Any]:
         "step_id": "step-001",
         "model_name": "staging.orders",
         "status": "SUCCESS",
-        "started_at": datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC),
-        "finished_at": datetime(2024, 6, 15, 12, 1, 30, tzinfo=UTC),
+        "started_at": datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        "finished_at": datetime(2024, 6, 15, 12, 1, 30, tzinfo=timezone.utc),
         "input_range_start": None,
         "input_range_end": None,
         "error_message": None,

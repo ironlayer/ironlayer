@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import pytest
+
 from api.middleware.prometheus import _normalise_path
 
 # ---------------------------------------------------------------------------
@@ -161,12 +162,12 @@ class TestMetricsEndpoint:
     @pytest.mark.asyncio
     async def test_metrics_endpoint_returns_200(self) -> None:
         """GET /metrics returns 200 with Prometheus content."""
-        from unittest.mock import MagicMock
-
-        from api.config import APISettings
-        from api.dependencies import get_metering_collector, get_settings
-        from api.main import create_app
         from httpx import ASGITransport, AsyncClient
+
+        from api.dependencies import get_metering_collector, get_settings
+        from api.config import APISettings
+        from api.main import create_app
+        from unittest.mock import MagicMock
 
         app = create_app()
 

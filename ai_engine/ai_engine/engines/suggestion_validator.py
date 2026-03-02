@@ -309,7 +309,7 @@ class SuggestionValidator:
                 try:
                     # Use EXPLAIN to validate the query plan without needing real data.
                     try:
-                        conn.execute(f"EXPLAIN {duckdb_sql}")
+                        conn.execute(f"EXPLAIN {duckdb_sql}")  # type: ignore[union-attr]
                         result_holder.append((True, None))
                         return
                     except duckdb.Error:
@@ -319,8 +319,8 @@ class SuggestionValidator:
                     # validation: wrap in a CTE that returns nothing and check
                     # if the outer structure is valid.
                     try:
-                        conn.execute(f"PREPARE validation_check AS {duckdb_sql}")
-                        conn.execute("DEALLOCATE validation_check")
+                        conn.execute(f"PREPARE validation_check AS {duckdb_sql}")  # type: ignore[union-attr]
+                        conn.execute("DEALLOCATE validation_check")  # type: ignore[union-attr]
                         result_holder.append((True, None))
                         return
                     except duckdb.Error:
@@ -344,7 +344,7 @@ class SuggestionValidator:
                 # Thread is still running -- query timed out.
                 logger.warning("DuckDB test-run timed out after %.1fs", timeout_seconds)
                 try:
-                    conn.interrupt()
+                    conn.interrupt()  # type: ignore[union-attr]
                 except Exception:
                     pass
                 return False, f"DuckDB test-run timed out after {timeout_seconds}s"

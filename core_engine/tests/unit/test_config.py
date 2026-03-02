@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import SecretStr
+
 from core_engine.config import (
     ClusterSize,
     PlatformEnv,
@@ -10,7 +12,6 @@ from core_engine.config import (
     StateStoreType,
     load_settings,
 )
-from pydantic import SecretStr
 
 # ---------------------------------------------------------------------------
 # Settings - default values

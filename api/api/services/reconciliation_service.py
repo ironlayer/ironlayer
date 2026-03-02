@@ -188,7 +188,7 @@ class ReconciliationService:
 
     # -- Internal helpers -----------------------------------------------
 
-    async def _get_recent_runs(self, hours_back: int) -> list[Any]:
+    async def _get_recent_runs(self, hours_back: int) -> list:
         """Fetch runs from the last N hours.
 
         Uses a broad query approach: fetches recent plans and then their runs.

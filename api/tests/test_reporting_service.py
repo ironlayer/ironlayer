@@ -13,10 +13,11 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.services.reporting_service import ReportingService
 
 # ---------------------------------------------------------------------------

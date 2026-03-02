@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import sqlglot
 from sqlglot import exp as sqlglot_exp
@@ -65,7 +65,7 @@ def _expression_name(expr: sqlglot_exp.Expression) -> str:
 def _expression_body(expr: sqlglot_exp.Expression) -> str:
     """The SQL text of the expression *without* any alias."""
     if isinstance(expr, sqlglot_exp.Alias):
-        return cast(str, expr.this.sql())
+        return expr.this.sql()
     return expr.sql()
 
 
@@ -197,7 +197,7 @@ class SemanticClassifier:
         self,
         old_sql: str,
         new_sql: str,
-        schema_diff: dict[str, Any] | None,
+        schema_diff: dict | None,
     ) -> SemanticClassifyResponse:
         """Pure rule-based classification -- always deterministic."""
 

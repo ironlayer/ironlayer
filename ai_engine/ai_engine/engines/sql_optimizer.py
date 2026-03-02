@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import sqlglot
 from sqlglot import exp as sqlglot_exp
@@ -97,7 +97,7 @@ class SQLOptimizer:
     def _rule_based_suggestions(
         self,
         sql: str,
-        stats: dict[str, Any] | None,
+        stats: dict | None,
     ) -> list[SQLSuggestion]:
         """Apply deterministic pattern-matching rules."""
 

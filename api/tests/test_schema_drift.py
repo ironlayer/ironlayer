@@ -11,7 +11,8 @@ All API test URLs use the /api/v1 prefix since routes are mounted there.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -302,8 +303,8 @@ async def test_get_schedules(
         mock_schedule.schedule_type = "run_reconciliation"
         mock_schedule.cron_expression = "0 * * * *"
         mock_schedule.enabled = True
-        mock_schedule.last_run_at = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
-        mock_schedule.next_run_at = datetime(2026, 2, 21, 13, 0, 0, tzinfo=UTC)
+        mock_schedule.last_run_at = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
+        mock_schedule.next_run_at = datetime(2026, 2, 21, 13, 0, 0, tzinfo=timezone.utc)
 
         instance = MockRepo.return_value
         instance.get_all_enabled = AsyncMock(return_value=[mock_schedule])
@@ -470,7 +471,7 @@ async def test_service_get_schema_drifts(
     mock_drift.expected_columns_json = None
     mock_drift.actual_columns_json = None
     mock_drift.resolved = False
-    mock_drift.checked_at = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
+    mock_drift.checked_at = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
 
     with patch.object(ReconciliationService, "__init__", lambda self, *a, **k: None):
         service = ReconciliationService.__new__(ReconciliationService)
@@ -500,7 +501,7 @@ async def test_service_resolve_schema_drift_success(
     mock_resolved.drift_type = "COLUMN_REMOVED"
     mock_resolved.resolved = True
     mock_resolved.resolved_by = "admin@co.com"
-    mock_resolved.resolved_at = datetime(2026, 2, 21, 15, 0, 0, tzinfo=UTC)
+    mock_resolved.resolved_at = datetime(2026, 2, 21, 15, 0, 0, tzinfo=timezone.utc)
     mock_resolved.resolution_note = "Fixed."
 
     with patch.object(ReconciliationService, "__init__", lambda self, *a, **k: None):

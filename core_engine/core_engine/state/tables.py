@@ -8,7 +8,6 @@ use by Alembic migrations and the repository layer.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -221,9 +220,9 @@ class PlanTable(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
     base_sha: Mapped[str] = mapped_column(String(64), nullable=False)
     target_sha: Mapped[str] = mapped_column(String(64), nullable=False)
-    plan_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=False)
-    approvals_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
-    advisory_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    plan_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=False)
+    approvals_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
+    advisory_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     auto_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
@@ -353,7 +352,7 @@ class AuditLogTable(Base):
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -480,8 +479,8 @@ class AIFeedbackTable(Base):
     step_id: Mapped[str] = mapped_column(String(64), nullable=False)
     model_name: Mapped[str] = mapped_column(String(512), nullable=False)
     feedback_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "cost", "risk", "classification"
-    prediction_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
-    outcome_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    prediction_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
+    outcome_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # None = not yet decided
     accuracy_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0.0-1.0
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -545,7 +544,7 @@ class UsageEventTable(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
@@ -743,10 +742,10 @@ class SchemaDriftCheckTable(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     model_name: Mapped[str] = mapped_column(String(512), nullable=False)
-    expected_columns_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
-    actual_columns_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    expected_columns_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
+    actual_columns_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     drift_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    drift_details_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    drift_details_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     resolved_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -853,7 +852,7 @@ class EnvironmentPromotionTable(Base):
     target_snapshot_id: Mapped[str] = mapped_column(String(128), nullable=False)
     promoted_by: Mapped[str] = mapped_column(String(256), nullable=False)
     promoted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
 
     __table_args__ = (
         Index("ix_promotion_tenant_source", "tenant_id", "source_environment"),
@@ -877,7 +876,7 @@ class ModelTestTable(Base):
     test_id: Mapped[str] = mapped_column(String(64), nullable=False)
     model_name: Mapped[str] = mapped_column(String(512), nullable=False)
     test_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    test_config_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    test_config_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     severity: Mapped[str] = mapped_column(String(32), default="BLOCK", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
@@ -974,7 +973,7 @@ class APIKeyTable(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    scopes: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    scopes: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1037,7 +1036,7 @@ class EventSubscriptionTable(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     secret_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    event_types: Mapped[list[str] | None] = mapped_column(_JsonType, nullable=True)
+    event_types: Mapped[list | None] = mapped_column(_JsonType, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -1071,7 +1070,7 @@ class CustomerHealthTable(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_plan_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ai_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    engagement_metrics_json: Mapped[dict[str, Any] | None] = mapped_column(_JsonType, nullable=True)
+    engagement_metrics_json: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     trend_direction: Mapped[str | None] = mapped_column(String(32), nullable=True)
     previous_score: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -1114,7 +1113,7 @@ class InvoiceTable(Base):
     subtotal_usd: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
     tax_usd: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False, default=0.0)
     total_usd: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
-    line_items_json: Mapped[dict[str, Any]] = mapped_column(_JsonType, nullable=False)
+    line_items_json: Mapped[dict] = mapped_column(_JsonType, nullable=False)
     pdf_storage_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="generated")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
