@@ -2,6 +2,7 @@
 
 from core_engine.models.diff import ASTDiffDetail, ChangeType, DiffResult, HashChange
 from core_engine.models.model_definition import (
+    ExposureRef,
     Materialization,
     ModelDefinition,
     ModelKind,
@@ -21,6 +22,7 @@ __all__ = [
     "ASTDiffDetail",
     "ChangeType",
     "DateRange",
+    "ExposureRef",
     "DiffResult",
     "HashChange",
     "Materialization",

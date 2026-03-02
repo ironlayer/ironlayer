@@ -12,6 +12,7 @@ Typical usage::
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from core_engine.loader.ref_resolver import (
 )
 from core_engine.models.model_definition import (
     ColumnContract,
+    ExposureRef,
     Materialization,
     ModelDefinition,
     ModelKind,
@@ -60,12 +62,17 @@ _KNOWN_FIELDS: frozenset[str] = frozenset(
         "contract_mode",
         "contract_columns",
         "tests",
+        "exposures",
+        "pre_hook_sql",
+        "post_hook_sql",
     }
 )
 
 
 # Fields requiring custom parsing (not simple strings or comma-separated lists).
-_CUSTOM_PARSED_FIELDS: frozenset[str] = frozenset({"contract_columns", "tests"})
+_CUSTOM_PARSED_FIELDS: frozenset[str] = frozenset(
+    {"contract_columns", "tests", "exposures"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +304,38 @@ def _parse_test_declarations(value: str) -> list[ModelTestDefinition]:
     return tests
 
 
+def _parse_exposures(value: str) -> list[ExposureRef]:
+    """Parse an ``exposures`` header value (JSON array) into list of ExposureRef.
+
+    Expected format: [{"name":"...","type":"...","url":"...","label":"..."}, ...]
+    """
+    value = value.strip()
+    if not value:
+        return []
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise HeaderParseError(f"Invalid exposures JSON: {exc}") from exc
+    if not isinstance(data, list):
+        raise HeaderParseError("exposures value must be a JSON array.")
+    result: list[ExposureRef] = []
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise HeaderParseError(f"exposures[{i}] must be an object.")
+        name = item.get("name")
+        if not name or not str(name).strip():
+            continue
+        result.append(
+            ExposureRef(
+                name=str(name).strip(),
+                type=str(item.get("type", "dashboard")).strip() or "dashboard",
+                url=str(item["url"]).strip() if item.get("url") else None,
+                label=str(item["label"]).strip() if item.get("label") else None,
+            )
+        )
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -368,6 +407,8 @@ def parse_yaml_header(sql_content: str) -> dict[str, Any]:
                             header[key] = _parse_contract_columns(value)
                         elif key == "tests":
                             header[key] = _parse_test_declarations(value)
+                        elif key == "exposures":
+                            header[key] = _parse_exposures(value)
                     elif key in _LIST_FIELDS:
                         header[key] = [item.strip() for item in value.split(",") if item.strip()]
                     else:
@@ -496,6 +537,15 @@ def parse_model_file(
             valid = ", ".join(m.value for m in SchemaContractMode)
             raise HeaderParseError(f"Invalid contract_mode '{header['contract_mode']}'. Valid options: {valid}.")
 
+    def _parse_hook_sql(raw: str) -> list[str]:
+        if not raw or not raw.strip():
+            return []
+        unescaped = raw.replace("\\n", "\n").replace("\\\\", "\\")
+        return [line for line in unescaped.split("\n") if line.strip()]
+
+    pre_hooks = _parse_hook_sql(header.get("pre_hook_sql", ""))
+    post_hooks = _parse_hook_sql(header.get("post_hook_sql", ""))
+
     return ModelDefinition(
         name=header["name"],
         kind=ModelKind(header["kind"]),
@@ -509,6 +559,9 @@ def parse_model_file(
         owner=header.get("owner"),
         tags=header.get("tags", []),
         dependencies=header.get("dependencies", []),
+        exposures=header.get("exposures", []),
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
         file_path=str(file_path),
         raw_sql=raw_sql,
         clean_sql=clean_sql,

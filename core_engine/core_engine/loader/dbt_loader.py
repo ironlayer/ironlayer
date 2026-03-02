@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from core_engine.models.model_definition import (
+    ExposureRef,
     Materialization,
     ModelDefinition,
     ModelKind,
@@ -290,6 +291,81 @@ def _extract_tags(config: dict[str, Any], node: dict[str, Any]) -> list[str]:
     return sorted(all_tags)
 
 
+def _extract_hooks(config: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Extract pre-hook and post-hook SQL from a dbt node config.
+
+    dbt stores hooks as "pre-hook" / "post-hook" or "pre_hook" / "post_hook".
+    Values can be a single SQL string or a list of strings. Returns normalized
+    lists (empty list if absent).
+    """
+    pre: list[str] = []
+    post: list[str] = []
+
+    for key_pre, key_post in (("pre-hook", "post-hook"), ("pre_hook", "post_hook")):
+        raw_pre = config.get(key_pre)
+        raw_post = config.get(key_post)
+        if raw_pre is not None:
+            if isinstance(raw_pre, str) and raw_pre.strip():
+                pre.append(raw_pre.strip())
+            elif isinstance(raw_pre, list):
+                for s in raw_pre:
+                    if isinstance(s, str) and s.strip():
+                        pre.append(s.strip())
+        if raw_post is not None:
+            if isinstance(raw_post, str) and raw_post.strip():
+                post.append(raw_post.strip())
+            elif isinstance(raw_post, list):
+                for s in raw_post:
+                    if isinstance(s, str) and s.strip():
+                        post.append(s.strip())
+
+    return (pre, post)
+
+
+def _get_exposures_for_node(node_id: str, manifest: dict[str, Any]) -> list[ExposureRef]:
+    """Return exposure refs for exposures that depend on the given node.
+
+    dbt manifest has top-level "exposures" dict. Each exposure has
+    depends_on.nodes; if node_id is in that list, the exposure consumes
+    this model. We return ExposureRef(name, type, url, label) for each.
+    """
+    exposures_data = manifest.get("exposures") or {}
+    if not isinstance(exposures_data, dict):
+        return []
+
+    refs: list[ExposureRef] = []
+    for _eid, exp in exposures_data.items():
+        if not isinstance(exp, dict):
+            continue
+        depends_on = exp.get("depends_on") or {}
+        if not isinstance(depends_on, dict):
+            continue
+        nodes = depends_on.get("nodes") or []
+        if node_id not in nodes:
+            continue
+
+        name = (exp.get("name") or "").strip()
+        if not name:
+            continue
+        exp_type = (exp.get("type") or "dashboard").strip() or "dashboard"
+        url = exp.get("url")
+        url = url.strip() if isinstance(url, str) and url.strip() else None
+        label = exp.get("label")
+        label = label.strip() if isinstance(label, str) and label.strip() else None
+
+        refs.append(
+            ExposureRef(
+                name=name,
+                type=exp_type,
+                url=url,
+                label=label,
+            )
+        )
+
+    refs.sort(key=lambda e: (e.name, e.type))
+    return refs
+
+
 def _extract_owner(node: dict[str, Any]) -> str | None:
     """Extract the model owner from a dbt node's meta config.
 
@@ -423,6 +499,7 @@ def parse_dbt_node(
     owner = _extract_owner(node)
     tags = _extract_tags(config, node)
     output_columns = _extract_columns(node)
+    pre_hooks, post_hooks = _extract_hooks(config)
 
     # Resolve dependencies.
     depends_on = node.get("depends_on", {})
@@ -457,6 +534,8 @@ def parse_dbt_node(
         owner=owner,
         tags=tags,
         dependencies=dependencies,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
         file_path=file_path,
         raw_sql=effective_raw_sql,
         clean_sql=clean_sql,
@@ -575,6 +654,9 @@ def load_models_from_dbt_manifest(
 
         model = parse_dbt_node(node, manifest)
         if model is not None:
+            exposures = _get_exposures_for_node(node_id, manifest)
+            if exposures:
+                model = model.model_copy(update={"exposures": exposures})
             models.append(model)
         else:
             skipped_parse += 1

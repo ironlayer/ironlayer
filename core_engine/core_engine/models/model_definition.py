@@ -67,6 +67,23 @@ class SchemaContractMode(str, Enum):
     STRICT = "STRICT"
 
 
+class ExposureRef(BaseModel):
+    """Reference to a downstream consumer (e.g. from dbt exposures).
+
+    Used when migrating from dbt: exposures that depend on this model are
+    preserved for lineage and documentation. IronLayer does not run or
+    resolve exposures; they are metadata only.
+    """
+
+    name: str = Field(..., min_length=1, description="Exposure name (e.g. from dbt).")
+    type: str = Field(
+        default="dashboard",
+        description="Exposure type: dashboard, notebook, analysis, ml, application.",
+    )
+    url: str | None = Field(default=None, description="Optional link to the exposure.")
+    label: str | None = Field(default=None, description="Optional human-readable label.")
+
+
 class ColumnContract(BaseModel):
     """A declared type contract for a single output column.
 
@@ -147,6 +164,18 @@ class ModelDefinition(BaseModel):
     dependencies: list[str] = Field(
         default_factory=list,
         description="Explicit upstream dependencies declared in the SQL header.",
+    )
+    exposures: list[ExposureRef] = Field(
+        default_factory=list,
+        description="Downstream consumers (e.g. from dbt exposures). Metadata only.",
+    )
+    pre_hooks: list[str] = Field(
+        default_factory=list,
+        description="SQL to run before the model (e.g. from dbt). Not executed by ironlayer apply.",
+    )
+    post_hooks: list[str] = Field(
+        default_factory=list,
+        description="SQL to run after the model (e.g. from dbt). Not executed by ironlayer apply.",
     )
 
     # -- File information --

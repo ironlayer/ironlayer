@@ -1596,6 +1596,21 @@ def _generate_ironlayer_file(
         header_lines.append(f"-- tags: {', '.join(model.tags)}")
     if model.dependencies:
         header_lines.append(f"-- dependencies: {', '.join(model.dependencies)}")
+    if model.exposures:
+        # JSON array for round-trip parsing in model_loader.
+        exp_data = [
+            {"name": e.name, "type": e.type, "url": e.url, "label": e.label}
+            for e in model.exposures
+        ]
+        header_lines.append("-- exposures: " + json.dumps(exp_data, ensure_ascii=False))
+    if model.pre_hooks:
+        raw = "\n".join(model.pre_hooks)
+        escaped = raw.replace("\\", "\\\\").replace("\n", "\\n")
+        header_lines.append("-- pre_hook_sql: " + escaped)
+    if model.post_hooks:
+        raw = "\n".join(model.post_hooks)
+        escaped = raw.replace("\\", "\\\\").replace("\n", "\\n")
+        header_lines.append("-- post_hook_sql: " + escaped)
 
     # Determine the SQL body.
     sql_body = original_sql or model.clean_sql or model.raw_sql
@@ -1647,8 +1662,9 @@ def migrate_from_dbt(
     """Migrate dbt models into IronLayer format.
 
     Converts dbt models (table, view, incremental) to IronLayer SQL files with
-    headers. Does not migrate tests, seeds, snapshots, ephemeral models,
-    metrics, or hooks — see docs for full scope and limitations.
+    headers. Exposures and pre/post-hooks are preserved as metadata (hooks are
+    not executed by ironlayer apply). Does not migrate tests, seeds, snapshots,
+    or ephemeral models — see docs for full scope and limitations.
     """
     from core_engine.loader.dbt_loader import (
         DbtManifestError,
@@ -1670,9 +1686,9 @@ def migrate_from_dbt(
         console.print(f"Found manifest at [bold]{manifest_path}[/bold]")
         if not _json_output:
             console.print(
-                "[dim]Scope: dbt models only (table/view/incremental). "
-                "Tests, seeds, snapshots, ephemeral models, and hooks are not migrated. "
-                "See docs for full scope and limitations.[/dim]"
+                "[dim]Scope: dbt models (table/view/incremental). Exposures and hooks are "
+                "preserved as metadata; hooks are not executed by ironlayer apply. "
+                "Tests, seeds, snapshots, and ephemeral models are not migrated. See docs.[/dim]"
             )
 
         # 2. Load models from the manifest.

@@ -306,6 +306,8 @@ ironlayer migrate from-dbt PROJECT_PATH [OPTIONS]
 - **Models** with materializations: `table`, `view`, `incremental` (merge, insert_overwrite, delete+insert, append). Each model becomes an IronLayer `.sql` file with a YAML header (name, kind, materialization, time_column, unique_key where applicable).
 - **Dependencies** from `ref()` and `source()` are resolved to canonical names in the manifest; the compiled SQL is used so refs are already expanded.
 - **Metadata** such as schema/name, partition_by, tags, and owner (from meta) are carried over where supported.
+- **Exposures** — dbt exposures that depend on a model are written into the model header (name, type, url, label) for lineage and documentation. IronLayer does not run or resolve exposures; they are metadata only.
+- **Hooks** — pre-hook and post-hook SQL from dbt are extracted and written into the model header. They are **not executed** by `ironlayer apply`; they are preserved so you can run them manually or via your own automation.
 
 **What is not migrated (dbt features IronLayer does not cover):**
 
@@ -314,8 +316,6 @@ ironlayer migrate from-dbt PROJECT_PATH [OPTIONS]
 - **Seeds** — CSV/seed data and seed-based models are not migrated.
 - **Snapshots** — dbt snapshot models (SCD Type 2) are not migrated.
 - **Metrics / semantic layer** — dbt metrics and the metrics layer are not supported.
-- **Exposures** — not migrated.
-- **Hooks** — pre-hook and post-hook SQL are not extracted into IronLayer model files.
 - **Custom materializations** — only built-in table, view, and incremental (with the strategies above) are mapped; custom materializations are skipped or may error.
 
 Use `migrate from-dbt` to bring your **transformation SQL and dependency graph** into IronLayer so you can plan and execute with IronLayer’s engine. For testing, data quality, and other dbt features, continue using dbt where needed or adopt IronLayer’s check engine and workflows for the parts you run in IronLayer.
