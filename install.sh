@@ -245,6 +245,7 @@ main() {
   echo "  Get started:"
   echo ""
   echo "    ironlayer init my-project    # scaffold a new project"
+  echo "    ironlayer check .            # validate SQL models (90 rules)"
   echo "    ironlayer plan . HEAD~1 HEAD # generate a plan from git diff"
   echo "    ironlayer --help             # see all commands"
   echo ""

@@ -1644,7 +1644,12 @@ def migrate_from_dbt(
         help="Show what would be migrated without writing files.",
     ),
 ) -> None:
-    """Migrate models from a dbt project into IronLayer format."""
+    """Migrate dbt models into IronLayer format.
+
+    Converts dbt models (table, view, incremental) to IronLayer SQL files with
+    headers. Does not migrate tests, seeds, snapshots, ephemeral models,
+    metrics, or hooks — see docs for full scope and limitations.
+    """
     from core_engine.loader.dbt_loader import (
         DbtManifestError,
         discover_dbt_manifest,
@@ -1663,6 +1668,12 @@ def migrate_from_dbt(
             raise typer.Exit(code=3)
 
         console.print(f"Found manifest at [bold]{manifest_path}[/bold]")
+        if not _json_output:
+            console.print(
+                "[dim]Scope: dbt models only (table/view/incremental). "
+                "Tests, seeds, snapshots, ephemeral models, and hooks are not migrated. "
+                "See docs for full scope and limitations.[/dim]"
+            )
 
         # 2. Load models from the manifest.
         tag_filter_list: list[str] | None = None
