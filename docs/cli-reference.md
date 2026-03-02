@@ -43,6 +43,83 @@ ironlayer init [OPTIONS] [DIRECTORY]
 
 ---
 
+### `ironlayer check`
+
+Run the Rust-powered check engine against SQL models, YAML schemas, and project structure.
+
+```bash
+ironlayer check REPO [OPTIONS]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `REPO` | Path to the project root directory |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config, -c PATH` | None | Path to `ironlayer.check.toml` config file |
+| `--fix` | False | Auto-fix fixable rule violations in place |
+| `--changed-only` | False | Only check files modified in the current git working tree |
+| `--no-cache` | False | Disable the content-addressable check cache |
+| `--max-diagnostics INT` | None | Maximum number of diagnostics to report (0 = unlimited) |
+| `--select, -s TEXT` | None | Comma-separated rule IDs or categories to include |
+| `--exclude, -e TEXT` | None | Comma-separated rule IDs or categories to exclude |
+| `--fail-on-warn` | False | Treat warnings as failures (exit code 1) |
+| `--format, -f TEXT` | `text` | Output format: `text`, `json`, or `sarif` |
+
+**What it checks (90 rules across 12 categories):**
+
+| Category | Prefix | Count | Description |
+|----------|--------|-------|-------------|
+| SQL Header | HDR | 13 | Model header validation (`-- name:`, `-- kind:`, etc.) |
+| SQL Syntax | SQL | 9 | Balanced parentheses, unterminated strings, trailing commas |
+| SQL Safety | SAF | 10 | Dangerous operations (DROP, TRUNCATE, DELETE without WHERE) |
+| Ref Resolution | REF | 6 | `{{ ref('...') }}` integrity and resolution |
+| Naming | NAME | 8 | File and model naming conventions (snake_case, prefixes) |
+| YAML Schema | YML | 9 | YAML structure and schema validation |
+| dbt Project | DBT | 6 | dbt project structure (for dbt projects) |
+| Model Consistency | CON | 5 | Cross-model consistency checks |
+| Databricks SQL | DBK | 7 | Hardcoded catalogs, non-deterministic MERGE, dialect functions |
+| Incremental Logic | INC | 5 | time_column in WHERE, unique_key in MERGE ON |
+| Performance | PERF | 7 | CROSS JOIN, ORDER BY in subquery, SELECT *, NOT IN |
+| Test Adequacy | TST | 5 | unique/not_null tests on keys, contract test coverage |
+
+**Examples:**
+
+```bash
+# Check the current project
+ironlayer check .
+
+# Auto-fix fixable issues
+ironlayer check ./my-project --fix
+
+# Only check files changed in git
+ironlayer check . --changed-only
+
+# JSON output for CI pipelines
+ironlayer check . --format json
+
+# SARIF for GitHub Code Scanning
+ironlayer check . --format sarif
+
+# Select specific categories
+ironlayer check . --select HDR,SQL,SAF --fail-on-warn
+
+# Exclude categories
+ironlayer check . --exclude TST,PERF
+```
+
+**Performance:** Checks 500+ models in under 500ms (cold) or under 50ms (warm cache). Uses content-addressable SHA-256 caching and rayon parallelism.
+
+**Fallback:** If the Rust check engine is unavailable (unsupported platform), falls back to a limited Python implementation using existing core_engine modules.
+
+**Exit codes:**
+- `0` -- All checks passed
+- `1` -- Check failures found (or warnings with `--fail-on-warn`)
+- `3` -- Internal error (config error, engine failure)
+
+---
+
 ### `ironlayer dev`
 
 Start a local development server with zero external dependencies.
@@ -287,4 +364,5 @@ Supports both SQL MODEL headers and Python `@model` decorators.
 | Code | Meaning |
 |------|---------|
 | `0` | Success |
+| `1` | Check failures found (used by `ironlayer check`) |
 | `3` | Error (invalid input, execution failure, missing configuration) |

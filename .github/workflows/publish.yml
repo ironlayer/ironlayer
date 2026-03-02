@@ -36,18 +36,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build wheel with maturin
+      - name: Build ironlayer-core wheel with maturin
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -m check_engine/Cargo.toml
+          args: --release --out dist
           manylinux: ${{ matrix.manylinux || 'auto' }}
+          working-directory: core_engine
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
-          path: dist/*.whl
+          path: core_engine/dist/*.whl
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -64,13 +65,14 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist -m check_engine/Cargo.toml
+          args: --out dist
+          working-directory: core_engine
 
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: dist/*.tar.gz
+          path: core_engine/dist/*.tar.gz
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------

@@ -36,9 +36,30 @@ The three-gate validation for AI suggestions:
 2. **Explainable diff gate** -- Diff original and suggested SQL, reject if changes are unexplainable
 3. **DuckDB test-run gate** -- Execute against a local DuckDB instance to verify correctness
 
+### Check Engine (`check_engine/`)
+
+The check engine is a Rust-powered validation layer compiled into a native Python extension via PyO3/maturin. It validates SQL models, YAML schemas, naming conventions, ref integrity, and project structure -- 90 rules across 12 categories:
+
+- **SQL Header** (HDR001-HDR013) -- Model header validation
+- **SQL Syntax** (SQL001-SQL009) -- Balanced parens, unterminated strings, trailing commas
+- **SQL Safety** (SAF001-SAF010) -- Dangerous operations (DROP, TRUNCATE, etc.)
+- **Ref Resolution** (REF001-REF006) -- `{{ ref() }}` integrity
+- **Naming** (NAME001-NAME008) -- snake_case, prefixes, conventions
+- **YAML Schema** (YML001-YML009) -- Schema structure validation
+- **dbt Project** (DBT001-DBT006) -- dbt project structure
+- **Model Consistency** (CON001-CON005) -- Cross-model checks
+- **Databricks SQL** (DBK001-DBK007) -- Hardcoded catalogs, non-deterministic MERGE
+- **Incremental Logic** (INC001-INC005) -- time_column in WHERE, unique_key usage
+- **Performance** (PERF001-PERF007) -- CROSS JOIN, ORDER BY in subquery, SELECT *
+- **Test Adequacy** (TST001-TST005) -- Test coverage for keys and contracts
+
+**Performance:** 500+ models in <500ms (cold), <50ms (warm cache). Uses rayon data parallelism, SHA-256 content caching with mtime fast-path, and a lightweight SQL lexer (no full AST).
+
+**Rust owns the hot path:** File I/O, SQL lexing, header parsing, ref extraction, parallel validation, caching. **Python keeps the complex path:** Full AST analysis (SQLGlot), DAG building (NetworkX), Rich console formatting.
+
 ### Separation Boundary
 
-Layer A and Layer B communicate through the API layer. The AI engine is an optional separate FastAPI service (port 8001). Disabling AI (`--no-ai`) has zero impact on plan generation, execution, or state management.
+Layer A and Layer B communicate through the API layer. The AI engine is an optional separate FastAPI service (port 8001). Disabling AI (`--no-ai`) has zero impact on plan generation, execution, or state management. The check engine operates independently of both layers -- it reads files directly and produces structured diagnostics.
 
 ## Multi-Tenant Model
 

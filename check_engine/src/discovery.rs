@@ -16,7 +16,7 @@ use ignore::WalkBuilder;
 use sha2::{Digest, Sha256};
 
 use crate::config::CheckConfig;
-use crate::types::{DiscoveredFile, ProjectType};
+use crate::types::{DiscoveredFile, DiscoveredFileMeta, ProjectType};
 
 /// Hardcoded directory names that are always excluded from file walking.
 const HARDCODED_EXCLUDES: &[&str] = &[
@@ -192,6 +192,166 @@ pub fn walk_files(root: &Path, config: &CheckConfig) -> Vec<DiscoveredFile> {
     }
 
     files
+}
+
+/// Walk the project directory collecting only file metadata (no content reads).
+///
+/// This is the fast-path entry point for warm cache runs. It calls `stat()` on
+/// each file to get mtime and size, but never reads file content. The caller
+/// uses the returned metadata to check the cache, and only reads content for
+/// files that are cache misses.
+///
+/// # Arguments
+///
+/// * `root` — Project root directory.
+/// * `config` — Check configuration (for `exclude` and `extra_extensions`).
+///
+/// # Returns
+///
+/// A vector of [`DiscoveredFileMeta`] with relative paths, sizes, and mtimes.
+pub fn walk_file_metadata(root: &Path, config: &CheckConfig) -> Vec<DiscoveredFileMeta> {
+    let mut builder = WalkBuilder::new(root);
+
+    builder.git_ignore(true);
+    builder.git_global(false);
+    builder.git_exclude(false);
+
+    let ironlayer_ignore = root.join(".ironlayerignore");
+    if ironlayer_ignore.is_file() {
+        builder.add_ignore(&ironlayer_ignore);
+    }
+
+    let mut extensions: Vec<&str> = DEFAULT_EXTENSIONS.to_vec();
+    for ext in &config.extra_extensions {
+        extensions.push(ext.as_str());
+    }
+
+    let mut metas = Vec::new();
+
+    for entry in builder.build().flatten() {
+        let path = entry.path();
+
+        if !path.is_file() {
+            continue;
+        }
+
+        if is_in_excluded_dir(root, path) {
+            continue;
+        }
+
+        if is_config_excluded(root, path, config) {
+            continue;
+        }
+
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if !extensions.contains(&ext) {
+            continue;
+        }
+
+        // stat() only — no read
+        let metadata = match std::fs::metadata(path) {
+            Ok(m) => m,
+            Err(e) => {
+                log::warn!("Skipping file {} — stat error: {}", path.display(), e);
+                continue;
+            }
+        };
+
+        let rel_path = match path.strip_prefix(root) {
+            Ok(rel) => rel.to_string_lossy().replace('\\', "/"),
+            Err(_) => path.to_string_lossy().replace('\\', "/"),
+        };
+
+        let mtime_secs = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        metas.push(DiscoveredFileMeta {
+            rel_path,
+            size: metadata.len(),
+            mtime_secs,
+        });
+    }
+
+    metas
+}
+
+/// Read a single file's content and compute its SHA-256 hash.
+///
+/// Used to materialize a [`DiscoveredFile`] from a [`DiscoveredFileMeta`] when
+/// the file is a cache miss and needs to be checked.
+///
+/// # Arguments
+///
+/// * `root` — Project root directory.
+/// * `meta` — File metadata from [`walk_file_metadata`].
+///
+/// # Returns
+///
+/// `Some(DiscoveredFile)` if the file was read successfully, `None` on I/O error.
+pub fn read_file_content(root: &Path, meta: &DiscoveredFileMeta) -> Option<DiscoveredFile> {
+    let abs_path = root.join(&meta.rel_path);
+    let content = match std::fs::read_to_string(&abs_path) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Skipping file {} — read error: {}", meta.rel_path, e);
+            return None;
+        }
+    };
+
+    let content_hash = compute_sha256(&content);
+
+    Some(DiscoveredFile {
+        rel_path: meta.rel_path.clone(),
+        content,
+        content_hash,
+    })
+}
+
+/// Stat a specific set of known file paths, returning their metadata.
+///
+/// This is the warm-cache fast path: instead of walking the entire directory
+/// tree, we stat only the files we already know about from the cache. This
+/// reduces warm-cache overhead from O(walk entire tree) to O(stat N files).
+///
+/// Files that no longer exist are silently omitted from the result.
+///
+/// # Arguments
+///
+/// * `root` — Project root directory.
+/// * `rel_paths` — Relative paths of files to stat.
+///
+/// # Returns
+///
+/// A vector of [`DiscoveredFileMeta`] for files that still exist.
+pub fn stat_known_files(root: &Path, rel_paths: &[&str]) -> Vec<DiscoveredFileMeta> {
+    let mut metas = Vec::with_capacity(rel_paths.len());
+
+    for rel_path in rel_paths {
+        let abs_path = root.join(rel_path);
+        let metadata = match std::fs::metadata(&abs_path) {
+            Ok(m) if m.is_file() => m,
+            _ => continue, // File deleted or inaccessible — treat as cache miss
+        };
+
+        let mtime_secs = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        metas.push(DiscoveredFileMeta {
+            rel_path: rel_path.to_string(),
+            size: metadata.len(),
+            mtime_secs,
+        });
+    }
+
+    metas
 }
 
 /// Check if a path is inside a hardcoded-excluded directory.

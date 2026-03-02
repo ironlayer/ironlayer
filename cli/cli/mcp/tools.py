@@ -845,7 +845,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "description": (
             "Run the IronLayer check engine on a project directory. "
             "Validates SQL headers, syntax, safety, ref integrity, "
-            "naming conventions, YAML schemas, and project structure. "
+            "naming conventions, YAML schemas, project structure, "
+            "Databricks-specific SQL patterns, incremental model logic, "
+            "performance anti-patterns, and test adequacy. "
+            "90 rules across 12 categories (HDR, SQL, SAF, REF, NAME, "
+            "YML, DBT, CON, DBK, INC, PERF, TST). "
             "Returns structured diagnostics with rule IDs, severity, "
             "file locations, and fix suggestions."
         ),
@@ -870,14 +874,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Comma-separated rule IDs or categories to include "
-                        "(e.g. 'HDR,SQL001,SAF')."
+                        "(e.g. 'HDR,SQL001,SAF,DBK,PERF')."
                     ),
                 },
                 "exclude": {
                     "type": "string",
                     "description": (
                         "Comma-separated rule IDs or categories to exclude "
-                        "(e.g. 'NAME,DBT')."
+                        "(e.g. 'NAME,DBT,TST')."
                     ),
                 },
             },

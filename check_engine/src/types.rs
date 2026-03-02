@@ -100,6 +100,14 @@ pub enum CheckCategory {
     ModelConsistency,
     /// File/directory organization issues.
     FileStructure,
+    /// Databricks-specific SQL validation (DBK001-DBK007).
+    DatabricksSql,
+    /// Incremental model logic validation (INC001-INC005).
+    IncrementalLogic,
+    /// Performance anti-pattern detection (PERF001-PERF007).
+    Performance,
+    /// Test adequacy validation (TST001-TST005).
+    TestAdequacy,
 }
 
 impl std::fmt::Display for CheckCategory {
@@ -115,6 +123,10 @@ impl std::fmt::Display for CheckCategory {
             Self::DbtProject => write!(f, "DbtProject"),
             Self::ModelConsistency => write!(f, "ModelConsistency"),
             Self::FileStructure => write!(f, "FileStructure"),
+            Self::DatabricksSql => write!(f, "DatabricksSql"),
+            Self::IncrementalLogic => write!(f, "IncrementalLogic"),
+            Self::Performance => write!(f, "Performance"),
+            Self::TestAdequacy => write!(f, "TestAdequacy"),
         }
     }
 }
@@ -289,6 +301,23 @@ impl std::fmt::Display for ProjectType {
             Self::RawSql => write!(f, "raw_sql"),
         }
     }
+}
+
+/// Lightweight file metadata collected by a stat-only directory walk.
+///
+/// Used for the fast-path cache check: if the file's mtime and size match
+/// the cached entry, the file content is never read. This makes warm cache
+/// runs O(stat) instead of O(read + SHA-256).
+#[derive(Debug, Clone)]
+pub struct DiscoveredFileMeta {
+    /// Relative path from project root (forward slashes).
+    pub rel_path: String,
+
+    /// File size in bytes from `fs::metadata`.
+    pub size: u64,
+
+    /// File modification time as seconds since the Unix epoch.
+    pub mtime_secs: i64,
 }
 
 /// A discovered file with its content and metadata, ready for checking.

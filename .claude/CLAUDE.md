@@ -418,6 +418,89 @@ Atomic writes via temp file + rename. Last-writer-wins (no locking). Corrupt cac
 ### YML006 GIL (§5.5)
 YML006 calls Python via `Python::with_gil()` for column extraction. Runs in sequential `check_project()` phase only. Gracefully degrades if `core_engine` is unavailable.
 
+## Expanded Rule Categories (Post-Phase 4)
+
+Beyond the original 66 rules, the check engine now includes 4 additional categories
+targeting Databricks-specific validation, incremental model logic, performance
+anti-patterns, and test adequacy. These are **additive** — they don't modify any
+existing rule IDs or checker behavior.
+
+| Category | Prefix | Count | Checker File |
+|----------|--------|-------|-------------|
+| Databricks SQL | DBK | 7 | `checkers/databricks_sql.rs` |
+| Incremental Logic | INC | 5 | `checkers/incremental_logic.rs` |
+| Performance | PERF | 7 | `checkers/performance.rs` |
+| Test Adequacy | TST | 5 | `checkers/test_adequacy.rs` |
+
+**Total rules: 90** (66 original + 24 new)
+
+### DBK Rules (Databricks SQL)
+
+| Rule | Description | Default Severity | Default Enabled |
+|------|-------------|-----------------|-----------------|
+| DBK001 | Hardcoded catalog/schema in table references (use ref() or config) | Warning | yes |
+| DBK002 | Non-deterministic MERGE (MERGE INTO without deterministic match) | Error | yes |
+| DBK003 | OPTIMIZE/VACUUM in model SQL (should be maintenance ops) | Error | yes |
+| DBK004 | COPY INTO in model SQL (should be ingestion, not transformation) | Warning | yes |
+| DBK005 | Dialect-incompatible function (ISNULL, DATEADD SQL Server syntax, TOP) | Warning | yes |
+| DBK006 | CREATE OR REPLACE in incremental model (defeats incrementality) | Warning | yes |
+| DBK007 | Non-standard MERGE syntax (missing MATCHED clauses) | Warning | yes |
+
+### INC Rules (Incremental Logic)
+
+| Rule | Description | Default Severity | Default Enabled |
+|------|-------------|-----------------|-----------------|
+| INC001 | INCREMENTAL_BY_TIME_RANGE model doesn't reference time_column in WHERE | Error | yes |
+| INC002 | MERGE_BY_KEY model doesn't reference unique_key in SQL body | Error | yes |
+| INC003 | Incremental model with no WHERE clause | Warning | yes |
+| INC004 | time_column referenced in SELECT but not in WHERE filter | Warning | yes |
+| INC005 | MERGE_BY_KEY with incompatible materialization | Warning | yes |
+
+### PERF Rules (Performance Anti-Patterns)
+
+| Rule | Description | Default Severity | Default Enabled |
+|------|-------------|-----------------|-----------------|
+| PERF001 | CROSS JOIN detected (potential cartesian product) | Warning | yes |
+| PERF002 | ORDER BY in subquery or CTE (unnecessary sorting) | Warning | yes |
+| PERF003 | NOT IN with subquery (prefer NOT EXISTS) | Info | yes |
+| PERF004 | SELECT * usage (prefer explicit columns) | Info | yes |
+| PERF005 | Correlated subquery in SELECT list (potential N+1) | Warning | yes |
+| PERF006 | DISTINCT on entire SELECT (may indicate join issue) | Info | yes |
+| PERF007 | UNION instead of UNION ALL (unnecessary dedup overhead) | Info | yes |
+
+### TST Rules (Test Adequacy)
+
+| Rule | Description | Default Severity | Default Enabled |
+|------|-------------|-----------------|-----------------|
+| TST001 | Model with unique_key but no unique() test declared | Warning | yes |
+| TST002 | Model with unique_key but no not_null() test on key column | Warning | yes |
+| TST003 | Incremental model with no row_count test | Info | yes |
+| TST004 | Model with contract_mode STRICT but zero tests declared | Warning | yes |
+| TST005 | Model with no tests declared at all | Info | no |
+
+**Design rules for new categories:**
+- New rule prefixes are 3-4 uppercase letters (DBK, INC, PERF, TST) — never conflicts with existing 2-3 letter prefixes (HDR, SQL, SAF, REF, NAME, YML, DBT, CON)
+- New `CheckCategory` enum variants are additive — never modify existing variant names or serialized values
+- New checkers registered at the end of `build_checker_registry()` vector — order doesn't affect correctness
+- TST005 is disabled by default (some projects legitimately have models without tests)
+
+## Lessons Learned (Implementation Notes)
+
+### Non-Deterministic HashMap Serialization
+Rust's `HashMap` iteration order varies between process runs. Using `serde_json::to_string()` on structs containing `HashMap` fields produces different JSON on each run, causing cache invalidation. **Fix:** Implement `canonical_json()` that recursively sorts object keys before serialization. This is used in `config_hash()` for cache key computation.
+
+### `ignore` Crate Walk Overhead
+The `ignore` crate (same as ripgrep) provides .gitignore-aware file walking but is expensive (~200ms for 500 files). On warm cache runs where we only need to verify file existence/mtime, bypass the walker and use `stat_known_files()` which directly `stat()` only the cached paths.
+
+### Stat-Based Cache Fast Path
+The mtime + size fast-path check (`is_fast_cached()`) is ~1000x cheaper than read + SHA-256. When all files are cache hits, we can early-return from `check()` without reading any file content, building the model registry, or running cross-file checks. This brings warm cache from ~218ms to ~52ms for 500 models.
+
+### O(n²) Partition Trap
+When partitioning files into cached vs uncached sets, using `.iter().any()` inside a loop creates O(n²) behavior. Use a `HashSet` for O(1) lookups. This matters at 500+ files.
+
+### Cache Entry Completeness
+Cache entries must store not just content_hash but also file_size, mtime_secs, per-file diagnostics, and model metadata (CachedModel). This enables both the mtime fast-path and replaying cached diagnostics/model data for cross-file checks without re-reading files.
+
 ## Key Spec References (by section)
 
 > **Reminder:** The spec says `ironlayer-core/` — the actual directory is `core_engine/`. The spec says `poetry-core` — the actual build system is `hatchling`.

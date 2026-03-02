@@ -7,13 +7,17 @@
 //! The registry function [`build_checker_registry`] returns all available
 //! checkers for the current phase.
 
+pub mod databricks_sql;
 pub mod dbt_project;
+pub mod incremental_logic;
 pub mod model_consistency;
 pub mod naming;
+pub mod performance;
 pub mod ref_resolver;
 pub mod sql_header;
 pub mod sql_safety;
 pub mod sql_syntax;
+pub mod test_adequacy;
 pub mod yaml_schema;
 
 use crate::config::CheckConfig;
@@ -56,8 +60,8 @@ pub trait Checker: Send + Sync {
 /// Build the checker registry containing all available checkers.
 ///
 /// Returns a vector of boxed checker trait objects, one per check category.
-/// Includes Phase 1 (HDR), Phase 2 (SQL, SAF, REF, NAME), and Phase 3
-/// (YML, DBT, CON) checkers.
+/// Includes Phase 1 (HDR), Phase 2 (SQL, SAF, REF, NAME), Phase 3
+/// (YML, DBT, CON), and extended checkers (DBK, INC, PERF, TST).
 #[must_use]
 pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
     vec![
@@ -69,5 +73,9 @@ pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
         Box::new(yaml_schema::YamlSchemaChecker),
         Box::new(dbt_project::DbtProjectChecker),
         Box::new(model_consistency::ModelConsistencyChecker),
+        Box::new(databricks_sql::DatabricksSqlChecker),
+        Box::new(incremental_logic::IncrementalLogicChecker),
+        Box::new(performance::PerformanceChecker),
+        Box::new(test_adequacy::TestAdequacyChecker),
     ]
 }

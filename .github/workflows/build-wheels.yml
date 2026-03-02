@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - 'check_engine/**'
+      - 'core_engine/pyproject.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
@@ -38,18 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build wheel with maturin
+      - name: Build ironlayer-core wheel with maturin
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -m check_engine/Cargo.toml
+          args: --release --out dist
           manylinux: ${{ matrix.manylinux || 'auto' }}
+          working-directory: core_engine
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
-          path: dist/*.whl
+          path: core_engine/dist/*.whl
           if-no-files-found: error
 
   # Build the pure-Python sdist (for source installs on unsupported platforms)
@@ -63,13 +65,14 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist -m check_engine/Cargo.toml
+          args: --out dist
+          working-directory: core_engine
 
       - name: Upload sdist artifact
         uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: dist/*.tar.gz
+          path: core_engine/dist/*.tar.gz
           if-no-files-found: error
 
   # Verify wheels install and import correctly
@@ -98,7 +101,7 @@ jobs:
           merge-multiple: true
 
       - name: Install wheel
-        run: pip install --find-links dist/ ironlayer-check-engine
+        run: pip install --find-links dist/ ironlayer-core
 
       - name: Smoke test imports
         run: |

@@ -23,11 +23,12 @@ use crate::cache::CheckCache;
 use crate::checkers::{build_checker_registry, Checker};
 use crate::config::CheckConfig;
 use crate::discovery::{
-    compute_sha256, detect_project_type, filter_changed_only, get_changed_files, walk_files,
+    compute_sha256, detect_project_type, get_changed_files, read_file_content, stat_known_files,
+    walk_file_metadata,
 };
 use crate::types::{
-    CheckCategory, CheckDiagnostic, CheckResult, DiscoveredFile, DiscoveredModel, ProjectType,
-    Severity,
+    CheckCategory, CheckDiagnostic, CheckResult, DiscoveredFile, DiscoveredFileMeta,
+    DiscoveredModel, ProjectType, Severity,
 };
 
 /// The main check engine orchestrator.
@@ -105,85 +106,226 @@ impl CheckEngine {
         // 1. Detect project type
         let project_type = detect_project_type(root);
 
-        // 2. Walk files (respecting .gitignore, .ironlayerignore, exclusions)
-        let all_files = walk_files(root, &config);
+        // 2. Initialize cache (load from disk if available)
+        let mut cache = CheckCache::new(root, &config);
 
-        // 2b. If --changed-only, filter to only git-modified files
-        //     but keep all_files available for building the full model registry
-        let check_files = if config.changed_only {
+        // 3. File discovery: use targeted stat for warm cache, full walk for cold
+        //
+        // On warm runs with a valid cache, we stat only the known cached paths
+        // instead of walking the entire directory tree. This reduces warm-cache
+        // discovery from O(walk tree) to O(stat N) — typically ~5ms vs ~200ms.
+        //
+        // On cold runs (empty cache), we fall back to the full walk.
+        // If any cached files are missing (deleted), we also need the full walk
+        // to pick up any new files that might have been added.
+        let all_metas = if cache.has_entries() && !config.changed_only {
+            let known = cache.cached_paths();
+            let metas = stat_known_files(root, &known);
+
+            // If all cached files still exist, we can skip the full walk.
+            // If some are missing (deleted), fall back to the full walk
+            // to also discover any new files.
+            if metas.len() == known.len() {
+                metas
+            } else {
+                walk_file_metadata(root, &config)
+            }
+        } else {
+            walk_file_metadata(root, &config)
+        };
+
+        // 3b. If --changed-only, filter to only git-modified files
+        let check_metas: Vec<&DiscoveredFileMeta> = if config.changed_only {
             match get_changed_files(root) {
-                Some(changed) => filter_changed_only(&all_files, &changed),
+                Some(changed) => all_metas
+                    .iter()
+                    .filter(|m| changed.contains(&m.rel_path))
+                    .collect(),
                 None => {
                     log::warn!(
                         "--changed-only requested but git is unavailable. Checking all files."
                     );
-                    all_files.clone()
+                    all_metas.iter().collect()
                 }
             }
         } else {
-            all_files.clone()
+            all_metas.iter().collect()
         };
 
-        // 3. Initialize cache and partition files
-        let mut cache = CheckCache::new(root, &config);
-        let (cached_files, uncached_files) = cache.partition(&check_files);
+        // 4. Fast-partition using mtime+size
+        let check_paths: std::collections::HashSet<&str> =
+            check_metas.iter().map(|m| m.rel_path.as_str()).collect();
 
-        // 4. Parse SQL headers + extract refs from ALL files (not just uncached)
-        //    This is required so that cross-file checks (ref resolution, consistency)
-        //    have the full model registry even in --changed-only mode.
-        let models: Vec<DiscoveredModel> = all_files
-            .iter()
-            .filter(|f| {
-                f.rel_path.ends_with(".sql")
-                    || f.rel_path.ends_with(".yml")
-                    || f.rel_path.ends_with(".yaml")
-            })
-            .map(discover_model)
+        let (fast_cached, needs_read): (Vec<&DiscoveredFileMeta>, Vec<&DiscoveredFileMeta>) = {
+            let mut cached = Vec::new();
+            let mut uncached = Vec::new();
+            for meta in &all_metas {
+                if !check_paths.contains(meta.rel_path.as_str()) {
+                    continue;
+                }
+                if cache.is_fast_cached(meta) {
+                    cached.push(meta);
+                } else {
+                    uncached.push(meta);
+                }
+            }
+            (cached, uncached)
+        };
+
+        // ── Fast-path: all files cached → skip I/O, checkers, and flush ──
+        if needs_read.is_empty() {
+            let mut all_diags: Vec<CheckDiagnostic> = Vec::new();
+            for meta in &fast_cached {
+                if let Some(cached_diags) = cache.get_fast_cached_diagnostics(meta) {
+                    for cd in cached_diags {
+                        all_diags.push(cd.to_diagnostic());
+                    }
+                }
+            }
+
+            all_diags.sort_by(|a, b| {
+                a.file_path
+                    .cmp(&b.file_path)
+                    .then(a.line.cmp(&b.line))
+                    .then(a.column.cmp(&b.column))
+            });
+
+            let max_diags = config.max_diagnostics;
+            if max_diags > 0 && all_diags.len() > max_diags {
+                all_diags.truncate(max_diags);
+            }
+
+            let total_errors = all_diags
+                .iter()
+                .filter(|d| d.severity == Severity::Error)
+                .count() as u32;
+            let total_warnings = all_diags
+                .iter()
+                .filter(|d| d.severity == Severity::Warning)
+                .count() as u32;
+            let total_infos = all_diags
+                .iter()
+                .filter(|d| d.severity == Severity::Info)
+                .count() as u32;
+
+            let passed = if config.fail_on_warnings {
+                total_errors == 0 && total_warnings == 0
+            } else {
+                total_errors == 0
+            };
+
+            // No flush needed — nothing changed
+            let elapsed = start.elapsed();
+            return CheckResult {
+                diagnostics: all_diags,
+                total_files_checked: 0,
+                total_files_skipped_cache: fast_cached.len() as u32,
+                total_errors,
+                total_warnings,
+                total_infos,
+                elapsed_ms: elapsed.as_millis() as u64,
+                project_type: project_type.to_string(),
+                passed,
+            };
+        }
+
+        // ── Slow path: some files need reading and checking ──
+
+        // 4. Read content only for cache-miss files (the expensive I/O step)
+        let uncached_files: Vec<DiscoveredFile> = needs_read
+            .par_iter()
+            .filter_map(|meta| read_file_content(root, meta))
             .collect();
 
-        // 5. Run per-file checks on uncached files (parallel via rayon)
+        // 5. Build model registry:
+        //    - Fast-cached files: reconstruct DiscoveredModel from cached metadata
+        //    - Uncached files: parse headers from content
+        //    We need ALL files' models for cross-file checks (ref resolution, etc.)
+        let mut models: Vec<DiscoveredModel> = Vec::new();
+
+        // Models from cache (no content read needed)
+        for meta in &all_metas {
+            if let Some(cm) = cache.get_cached_model(meta) {
+                models.push(DiscoveredModel {
+                    name: cm.name.clone(),
+                    file_path: meta.rel_path.clone(),
+                    content_hash: String::new(),
+                    ref_names: cm.ref_names.clone(),
+                    header: cm.header.clone(),
+                    content: String::new(),
+                });
+            }
+        }
+
+        // Models from freshly-read content (overwrite any cache entries for same path)
+        let fresh_model_paths: std::collections::HashSet<&str> =
+            uncached_files.iter().map(|f| f.rel_path.as_str()).collect();
+        models.retain(|m| !fresh_model_paths.contains(m.file_path.as_str()));
+
+        for file in &uncached_files {
+            if file.rel_path.ends_with(".sql")
+                || file.rel_path.ends_with(".yml")
+                || file.rel_path.ends_with(".yaml")
+            {
+                models.push(discover_model(file));
+            }
+        }
+
+        // 6. Run per-file checks on uncached files (parallel via rayon)
         let max_diags = config.max_diagnostics;
 
-        // Build a model lookup map for O(1) per-file model resolution
         let model_map: HashMap<&str, &DiscoveredModel> =
             models.iter().map(|m| (m.file_path.as_str(), m)).collect();
 
-        // Run per-file checks in parallel using rayon
-        let file_results: Vec<(String, String, Vec<CheckDiagnostic>)> = uncached_files
+        // Build a meta lookup for mtime/size to store in cache
+        let meta_map: HashMap<&str, &DiscoveredFileMeta> =
+            all_metas.iter().map(|m| (m.rel_path.as_str(), m)).collect();
+
+        let file_results: Vec<(String, String, u64, i64, Vec<CheckDiagnostic>)> = uncached_files
             .par_iter()
             .map(|file| {
                 let model = model_map.get(file.rel_path.as_str()).copied();
                 let file_diags = self.run_per_file_checks(file, model, &project_type, &config);
-                (file.rel_path.clone(), file.content_hash.clone(), file_diags)
+                let (size, mtime) = meta_map
+                    .get(file.rel_path.as_str())
+                    .map(|m| (m.size, m.mtime_secs))
+                    .unwrap_or((0, 0));
+                (
+                    file.rel_path.clone(),
+                    file.content_hash.clone(),
+                    size,
+                    mtime,
+                    file_diags,
+                )
             })
             .collect();
 
-        // Sequentially update cache and collect diagnostics (cache is not thread-safe)
+        // Sequentially update cache and collect diagnostics
         let mut all_diags: Vec<CheckDiagnostic> = Vec::new();
-        for (rel_path, content_hash, file_diags) in file_results {
-            cache.update(&rel_path, &content_hash, &file_diags);
-            all_diags.extend(file_diags);
+        for (rel_path, content_hash, size, mtime, file_diags) in &file_results {
+            let model = model_map.get(rel_path.as_str()).copied();
+            cache.update(rel_path, content_hash, *size, *mtime, file_diags, model);
+            all_diags.extend(file_diags.iter().cloned());
 
-            // Early termination at max_diagnostics
             if max_diags > 0 && all_diags.len() >= max_diags {
                 break;
             }
         }
 
-        // 6. Replay cached diagnostics for files with cache hits
-        for file in &cached_files {
-            if let Some(cached_diags) = cache.get_cached_diagnostics(file) {
+        // 7. Replay cached diagnostics for fast-cached files
+        for meta in &fast_cached {
+            if let Some(cached_diags) = cache.get_fast_cached_diagnostics(meta) {
                 for cd in cached_diags {
                     all_diags.push(cd.to_diagnostic());
                 }
             }
         }
 
-        // 7. Run cross-file checks (sequential, needs full model list)
+        // 8. Run cross-file checks (sequential, needs full model list)
         let project_diags = self.run_cross_file_checks(&models, &project_type, &config);
         all_diags.extend(project_diags);
 
-        // 8. Apply --fix if requested (5-step workflow)
+        // 9. Apply --fix if requested (5-step workflow)
         if config.fix {
             let fixed = apply_fixes(root, &all_diags);
             if !fixed.is_empty() {
@@ -213,7 +355,7 @@ impl CheckEngine {
             }
         }
 
-        // 9. Sort diagnostics by (file_path, line, column)
+        // 10. Sort diagnostics by (file_path, line, column)
         all_diags.sort_by(|a, b| {
             a.file_path
                 .cmp(&b.file_path)
@@ -221,12 +363,12 @@ impl CheckEngine {
                 .then(a.column.cmp(&b.column))
         });
 
-        // 10. Truncate to max_diagnostics
+        // 11. Truncate to max_diagnostics
         if max_diags > 0 && all_diags.len() > max_diags {
             all_diags.truncate(max_diags);
         }
 
-        // 11. Compute summary counts
+        // 12. Compute summary counts
         let total_errors = all_diags
             .iter()
             .filter(|d| d.severity == Severity::Error)
@@ -240,14 +382,14 @@ impl CheckEngine {
             .filter(|d| d.severity == Severity::Info)
             .count() as u32;
 
-        // 12. Determine pass/fail
+        // 13. Determine pass/fail
         let passed = if config.fail_on_warnings {
             total_errors == 0 && total_warnings == 0
         } else {
             total_errors == 0
         };
 
-        // 13. Flush cache to disk
+        // 14. Flush cache to disk
         cache.flush();
 
         let elapsed = start.elapsed();
@@ -255,7 +397,7 @@ impl CheckEngine {
         CheckResult {
             diagnostics: all_diags,
             total_files_checked: uncached_files.len() as u32,
-            total_files_skipped_cache: cached_files.len() as u32,
+            total_files_skipped_cache: fast_cached.len() as u32,
             total_errors,
             total_warnings,
             total_infos,
@@ -377,11 +519,17 @@ impl CheckEngine {
 
 /// Determine if a checker should run for a given project type.
 ///
-/// - `sql_header` only runs for IronLayer projects.
-/// - Most other checkers run for all project types.
+/// - `sql_header`, `incremental_logic`, `test_adequacy` only run for IronLayer
+///   projects (they depend on `-- key: value` header fields).
+/// - `dbt_project` only runs for dbt projects.
+/// - All other checkers (sql_syntax, sql_safety, ref_resolver, naming,
+///   yaml_schema, model_consistency, databricks_sql, performance) run for
+///   all project types.
 fn should_run_checker(checker_name: &str, project_type: &ProjectType) -> bool {
     match checker_name {
-        "sql_header" => *project_type == ProjectType::IronLayer,
+        "sql_header" | "incremental_logic" | "test_adequacy" => {
+            *project_type == ProjectType::IronLayer
+        }
         "dbt_project" => *project_type == ProjectType::Dbt,
         _ => true,
     }
@@ -899,6 +1047,27 @@ mod tests {
         assert!(should_run_checker("sql_syntax", &ProjectType::IronLayer));
         assert!(should_run_checker("sql_syntax", &ProjectType::Dbt));
         assert!(should_run_checker("sql_syntax", &ProjectType::RawSql));
+        // New checkers
+        assert!(should_run_checker(
+            "incremental_logic",
+            &ProjectType::IronLayer
+        ));
+        assert!(!should_run_checker("incremental_logic", &ProjectType::Dbt));
+        assert!(!should_run_checker(
+            "incremental_logic",
+            &ProjectType::RawSql
+        ));
+        assert!(should_run_checker("test_adequacy", &ProjectType::IronLayer));
+        assert!(!should_run_checker("test_adequacy", &ProjectType::Dbt));
+        assert!(should_run_checker(
+            "databricks_sql",
+            &ProjectType::IronLayer
+        ));
+        assert!(should_run_checker("databricks_sql", &ProjectType::Dbt));
+        assert!(should_run_checker("databricks_sql", &ProjectType::RawSql));
+        assert!(should_run_checker("performance", &ProjectType::IronLayer));
+        assert!(should_run_checker("performance", &ProjectType::Dbt));
+        assert!(should_run_checker("performance", &ProjectType::RawSql));
     }
 
     #[test]
@@ -1382,5 +1551,89 @@ mod tests {
         let engine2 = CheckEngine::new(config);
         let r2 = engine2.check(dir.path());
         assert!(!r2.passed, "Should fail after header removed");
+    }
+
+    #[test]
+    fn test_warm_cache_skips_files() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+
+        for i in 0..5 {
+            let content = format!(
+                "-- name: model_{i}\n-- kind: FULL_REFRESH\n-- materialization: TABLE\nSELECT 1\n"
+            );
+            fs::write(models_dir.join(format!("model_{i}.sql")), content).unwrap();
+        }
+
+        // Cold run — should check all files (5 SQL + ironlayer.yaml = 6)
+        let config = CheckConfig::default();
+        let engine = CheckEngine::new(config);
+        let r1 = engine.check(dir.path());
+        let cold_checked = r1.total_files_checked;
+        assert!(cold_checked > 0, "Cold run: should check some files");
+        assert_eq!(
+            r1.total_files_skipped_cache, 0,
+            "Cold run: no files skipped"
+        );
+
+        // Warm run — files unchanged, should be served from cache
+        let config2 = CheckConfig::default();
+        let engine2 = CheckEngine::new(config2);
+        let r2 = engine2.check(dir.path());
+        assert_eq!(
+            r2.total_files_skipped_cache, cold_checked,
+            "Warm run: all {} files should be cache hits (got {} checked, {} cached)",
+            cold_checked, r2.total_files_checked, r2.total_files_skipped_cache
+        );
+        assert_eq!(
+            r2.total_files_checked, 0,
+            "Warm run: no files should need checking"
+        );
+    }
+
+    #[test]
+    fn test_warm_cache_500_models_fast() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("ironlayer.yaml"), "version: 1\n").unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+
+        let kinds = [
+            "FULL_REFRESH",
+            "INCREMENTAL_BY_TIME_RANGE",
+            "APPEND_ONLY",
+            "MERGE_BY_KEY",
+        ];
+
+        for i in 0..500 {
+            let kind = kinds[i % kinds.len()];
+            let extra = match kind {
+                "INCREMENTAL_BY_TIME_RANGE" => "\n-- time_column: created_at",
+                "MERGE_BY_KEY" => "\n-- unique_key: id",
+                _ => "",
+            };
+            let content = format!(
+                "-- name: model_{i}\n-- kind: {kind}{extra}\n-- materialization: TABLE\n\
+                 SELECT id, name FROM {{{{ ref('model_{}') }}}}\n",
+                if i > 0 { i - 1 } else { 0 }
+            );
+            fs::write(models_dir.join(format!("model_{i}.sql")), content).unwrap();
+        }
+
+        // Prime cache
+        let config = CheckConfig::default();
+        let engine = CheckEngine::new(config);
+        let r1 = engine.check(dir.path());
+        assert!(r1.total_files_checked > 0);
+
+        // Warm run
+        let config2 = CheckConfig::default();
+        let engine2 = CheckEngine::new(config2);
+        let r2 = engine2.check(dir.path());
+
+        assert_eq!(r2.total_files_checked, 0, "All files should be cached");
+        assert!(r2.total_files_skipped_cache > 0, "Should have cache hits");
     }
 }
