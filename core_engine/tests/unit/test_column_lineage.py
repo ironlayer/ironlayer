@@ -333,12 +333,16 @@ class TestSelectStarExpansion:
         # ``*`` should NOT appear as unresolved.
         assert "*" not in result.unresolved_columns
 
-        # Each column should trace back to the source table.
+        # Each column should trace back to the source table and source column.
         for col_name in ("id", "name", "email"):
             nodes = result.column_lineage[col_name]
             assert len(nodes) >= 1
-            assert any(n.source_table == "users" for n in nodes)
-            assert any(n.source_column == col_name for n in nodes)
+            assert any(n.source_table == "users" for n in nodes), (
+                f"column {col_name!r} should have at least one node with source_table 'users'"
+            )
+            assert any(n.source_column == col_name for n in nodes), (
+                f"column {col_name!r} should have at least one node with source_column matching output; nodes={nodes!r}"
+            )
 
     def test_star_join_with_schema_expands_both_tables(self, toolkit):
         """``SELECT *`` over a JOIN should expand columns from all

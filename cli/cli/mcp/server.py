@@ -20,6 +20,8 @@ import json
 import logging
 from typing import Any
 
+import typer
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,9 +30,13 @@ def _ensure_mcp_installed() -> None:
     try:
         import mcp  # noqa: F401
     except ImportError:
-        raise SystemExit(
-            "The 'mcp' extra is required for MCP server support.\nInstall it with: pip install ironlayer[mcp]"
+        import sys
+
+        print(
+            "The 'mcp' extra is required for MCP server support.\nInstall it with: pip install ironlayer[mcp]",
+            file=sys.stderr,
         )
+        raise typer.Exit(code=1) from None
 
 
 def create_server() -> Any:

@@ -20,46 +20,48 @@ import pytest
 from click.exceptions import Exit as ClickExit
 from typer.testing import CliRunner
 
-from cli.app import (
-    _api_request,
-    _credentials_path,
-    _format_input_range,
-    _load_model_sql_map,
-    _load_stored_token,
-    _resolve_model_sql,
-    _save_credentials,
-    app,
+from cli.app import app
+from cli.helpers import (
+    format_input_range,
+    load_model_sql_map,
+    resolve_model_sql,
+)
+from cli.helpers import (
+    api_request,
+    credentials_path,
+    load_stored_token,
+    save_credentials,
 )
 
 runner = CliRunner()
 
 
 # ---------------------------------------------------------------------------
-# _credentials_path
+# credentials_path
 # ---------------------------------------------------------------------------
 
 
 class TestCredentialsPath:
-    """Tests for _credentials_path()."""
+    """Tests for credentials_path()."""
 
     def test_returns_expected_path(self) -> None:
         """Should return ~/.ironlayer/credentials.json."""
-        result = _credentials_path()
+        result = credentials_path()
         assert result == Path.home() / ".ironlayer" / "credentials.json"
 
     def test_path_is_absolute(self) -> None:
         """Result should be an absolute path."""
-        result = _credentials_path()
+        result = credentials_path()
         assert result.is_absolute()
 
 
 # ---------------------------------------------------------------------------
-# _load_stored_token (app.py version)
+# load_stored_token
 # ---------------------------------------------------------------------------
 
 
 class TestLoadStoredTokenApp:
-    """Tests for _load_stored_token() in app.py."""
+    """Tests for load_stored_token() in app.py."""
 
     def test_returns_token_from_file(self, tmp_path: Path) -> None:
         """Should read access_token from the credentials file."""
@@ -68,46 +70,46 @@ class TestLoadStoredTokenApp:
             json.dumps({"access_token": "jwt-test-token-abc"}),
             encoding="utf-8",
         )
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            result = _load_stored_token()
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            result = load_stored_token()
             assert result == "jwt-test-token-abc"
 
     def test_returns_none_when_no_file(self, tmp_path: Path) -> None:
         """Should return None when credentials file doesn't exist."""
-        with patch("cli.app._credentials_path", return_value=tmp_path / "missing.json"):
-            result = _load_stored_token()
+        with patch("cli.helpers.credentials_path", return_value=tmp_path / "missing.json"):
+            result = load_stored_token()
             assert result is None
 
     def test_returns_none_on_malformed_json(self, tmp_path: Path) -> None:
         """Should return None when credentials file has invalid JSON."""
         cred_file = tmp_path / "credentials.json"
         cred_file.write_text("not-json{{{", encoding="utf-8")
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            result = _load_stored_token()
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            result = load_stored_token()
             assert result is None
 
     def test_returns_none_when_no_access_token_key(self, tmp_path: Path) -> None:
         """Should return None when access_token key is missing."""
         cred_file = tmp_path / "credentials.json"
         cred_file.write_text(json.dumps({"email": "user@example.com"}), encoding="utf-8")
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            result = _load_stored_token()
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            result = load_stored_token()
             assert result is None
 
 
 # ---------------------------------------------------------------------------
-# _save_credentials
+# save_credentials
 # ---------------------------------------------------------------------------
 
 
 class TestSaveCredentials:
-    """Tests for _save_credentials()."""
+    """Tests for save_credentials()."""
 
     def test_writes_credentials_file(self, tmp_path: Path) -> None:
         """Should write a JSON file with all credential fields."""
         cred_file = tmp_path / ".ironlayer" / "credentials.json"
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            _save_credentials(
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            save_credentials(
                 api_url="https://api.ironlayer.app",
                 access_token="tok-access",
                 refresh_token="tok-refresh",
@@ -124,28 +126,28 @@ class TestSaveCredentials:
     def test_creates_parent_directory(self, tmp_path: Path) -> None:
         """Should create .ironlayer/ directory if missing."""
         cred_file = tmp_path / "deep" / ".ironlayer" / "credentials.json"
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            _save_credentials("url", "tok", "ref", "user@example.com")
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            save_credentials("url", "tok", "ref", "user@example.com")
             assert cred_file.parent.exists()
 
     def test_sets_0600_permissions(self, tmp_path: Path) -> None:
         """Credentials file should have 0600 permissions."""
         cred_file = tmp_path / ".ironlayer" / "credentials.json"
-        with patch("cli.app._credentials_path", return_value=cred_file):
-            _save_credentials("url", "tok", "ref", "user@example.com")
+        with patch("cli.helpers.credentials_path", return_value=cred_file):
+            save_credentials("url", "tok", "ref", "user@example.com")
             mode = stat.S_IMODE(cred_file.stat().st_mode)
             assert mode == 0o600
 
 
 # ---------------------------------------------------------------------------
-# _api_request
+# api_request
 # ---------------------------------------------------------------------------
 
 
 class TestApiRequest:
-    """Tests for _api_request() -- HTTP client helper."""
+    """Tests for api_request() -- HTTP client helper."""
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_get_request_success(self, mock_token: MagicMock) -> None:
         """Successful GET should return parsed JSON."""
         import httpx
@@ -164,10 +166,10 @@ class TestApiRequest:
             patch("httpx.Client", return_value=mock_client),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            result = _api_request("GET", "http://localhost:8000", "/api/v1/health")
+            result = api_request("GET", "http://localhost:8000", "/api/v1/health")
             assert result == {"status": "ok"}
 
-    @patch("cli.app._load_stored_token", return_value="stored-jwt")
+    @patch("cli.helpers.load_stored_token", return_value="stored-jwt")
     def test_uses_stored_token(self, mock_token: MagicMock) -> None:
         """Should use stored token when IRONLAYER_API_TOKEN is not set."""
         import httpx
@@ -186,13 +188,13 @@ class TestApiRequest:
             patch("httpx.Client", return_value=mock_client),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            _api_request("GET", "http://localhost:8000", "/test")
+            api_request("GET", "http://localhost:8000", "/test")
 
             call_kwargs = mock_client.request.call_args
             headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
             assert headers["Authorization"] == "Bearer stored-jwt"
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_uses_env_token_over_stored(self, mock_token: MagicMock) -> None:
         """IRONLAYER_API_TOKEN env var should take precedence."""
         import httpx
@@ -210,14 +212,14 @@ class TestApiRequest:
             patch.dict(os.environ, {"IRONLAYER_API_TOKEN": "env-token"}, clear=False),
             patch("httpx.Client", return_value=mock_client),
         ):
-            _api_request("GET", "http://localhost:8000", "/test")
+            api_request("GET", "http://localhost:8000", "/test")
 
             call_kwargs = mock_client.request.call_args
             headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
             assert headers["Authorization"] == "Bearer env-token"
         os.environ.pop("IRONLAYER_API_TOKEN", None)
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_http_error_exits_with_code_3(self, mock_token: MagicMock) -> None:
         """HTTP 4xx/5xx should call typer.Exit(code=3)."""
         import httpx
@@ -242,9 +244,9 @@ class TestApiRequest:
             pytest.raises(ClickExit),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            _api_request("GET", "http://localhost:8000", "/api/v1/test")
+            api_request("GET", "http://localhost:8000", "/api/v1/test")
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_connection_error_exits_with_code_3(self, mock_token: MagicMock) -> None:
         """Connection failure should call typer.Exit(code=3)."""
         import httpx
@@ -260,9 +262,9 @@ class TestApiRequest:
             pytest.raises(ClickExit),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            _api_request("GET", "http://localhost:9999", "/test")
+            api_request("GET", "http://localhost:9999", "/test")
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_passes_body_and_params(self, mock_token: MagicMock) -> None:
         """body and params should be forwarded to the HTTP client."""
         import httpx
@@ -281,7 +283,7 @@ class TestApiRequest:
             patch("httpx.Client", return_value=mock_client),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            _api_request(
+            api_request(
                 "POST",
                 "http://localhost:8000",
                 "/test",
@@ -293,7 +295,7 @@ class TestApiRequest:
             assert call_kwargs.kwargs["json"] == {"key": "value"}
             assert call_kwargs.kwargs["params"] == {"page": "1"}
 
-    @patch("cli.app._load_stored_token", return_value=None)
+    @patch("cli.helpers.load_stored_token", return_value=None)
     def test_strips_trailing_slash_from_api_url(self, mock_token: MagicMock) -> None:
         """Trailing slash on api_url should be stripped."""
         import httpx
@@ -312,7 +314,7 @@ class TestApiRequest:
             patch("httpx.Client", return_value=mock_client),
         ):
             os.environ.pop("IRONLAYER_API_TOKEN", None)
-            _api_request("GET", "http://localhost:8000/", "/api/v1/health")
+            api_request("GET", "http://localhost:8000/", "/api/v1/health")
 
             call_args = mock_client.request.call_args
             url = call_args[0][1] if len(call_args[0]) > 1 else call_args.kwargs.get("url", "")
@@ -327,7 +329,7 @@ class TestApiRequest:
 class TestLoginCommand:
     """Tests for `ironlayer login`."""
 
-    @patch("cli.app._save_credentials")
+    @patch("cli.commands.auth.save_credentials")
     @patch("httpx.Client")
     def test_successful_login(self, mock_client_cls: MagicMock, mock_save: MagicMock) -> None:
         """Successful login saves credentials and prints success."""
@@ -465,7 +467,7 @@ class TestLogoutCommand:
         cred_file = tmp_path / "credentials.json"
         cred_file.write_text(json.dumps({"access_token": "tok"}), encoding="utf-8")
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["logout"])
 
         assert result.exit_code == 0
@@ -476,7 +478,7 @@ class TestLogoutCommand:
         """Should show 'no credentials' message when file doesn't exist."""
         cred_file = tmp_path / "missing.json"
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["logout"])
 
         assert result.exit_code == 0
@@ -493,7 +495,7 @@ class TestWhoamiCommand:
 
     def test_not_logged_in(self, tmp_path: Path) -> None:
         """Should show 'not logged in' when no credentials exist."""
-        with patch("cli.app._credentials_path", return_value=tmp_path / "missing.json"):
+        with patch("cli.commands.auth.credentials_path", return_value=tmp_path / "missing.json"):
             result = runner.invoke(app, ["whoami"])
 
         assert result.exit_code == 1
@@ -504,7 +506,7 @@ class TestWhoamiCommand:
         cred_file = tmp_path / "credentials.json"
         cred_file.write_text("not-json", encoding="utf-8")
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["whoami"])
 
         assert result.exit_code == 1
@@ -514,7 +516,7 @@ class TestWhoamiCommand:
         cred_file = tmp_path / "credentials.json"
         cred_file.write_text(json.dumps({"email": "alice@example.com"}), encoding="utf-8")
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["whoami"])
 
         assert result.exit_code == 1
@@ -550,7 +552,7 @@ class TestWhoamiCommand:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["whoami"])
 
         assert result.exit_code == 0
@@ -579,7 +581,7 @@ class TestWhoamiCommand:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        with patch("cli.app._credentials_path", return_value=cred_file):
+        with patch("cli.commands.auth.credentials_path", return_value=cred_file):
             result = runner.invoke(app, ["whoami"])
 
         assert result.exit_code == 0
@@ -588,17 +590,17 @@ class TestWhoamiCommand:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_model_sql
+# resolve_model_sql
 # ---------------------------------------------------------------------------
 
 
 class TestResolveModelSql:
-    """Tests for _resolve_model_sql()."""
+    """Tests for resolve_model_sql()."""
 
     def test_returns_sql_for_known_model(self) -> None:
         """Should return the SQL for a model that exists in the map."""
         sql_map = {"orders": "SELECT * FROM raw_orders"}
-        result = _resolve_model_sql("orders", sql_map)
+        result = resolve_model_sql("orders", sql_map)
         assert result == "SELECT * FROM raw_orders"
 
     def test_missing_model_exits(self) -> None:
@@ -607,23 +609,23 @@ class TestResolveModelSql:
 
         sql_map = {"orders": "SELECT 1", "customers": "SELECT 2"}
         with pytest.raises(ClickExit):
-            _resolve_model_sql("nonexistent_model", sql_map)
+            resolve_model_sql("nonexistent_model", sql_map)
 
 
 # ---------------------------------------------------------------------------
-# _format_input_range edge cases
+# format_input_range edge cases
 # ---------------------------------------------------------------------------
 
 
 class TestFormatInputRangeEdge:
-    """Additional edge case tests for _format_input_range."""
+    """Additional edge case tests for format_input_range."""
 
     def test_object_with_only_start(self) -> None:
         """Object with start but no end should return '-'."""
         obj = MagicMock()
         obj.start = "2025-01-01"
         del obj.end
-        result = _format_input_range(obj)
+        result = format_input_range(obj)
         assert result == "-"
 
     def test_object_with_none_start(self) -> None:
@@ -631,7 +633,7 @@ class TestFormatInputRangeEdge:
         obj = MagicMock()
         obj.start = None
         obj.end = None
-        result = _format_input_range(obj)
+        result = format_input_range(obj)
         assert result == "-"
 
 
@@ -643,7 +645,7 @@ class TestFormatInputRangeEdge:
 class TestBackfillResumeCommand:
     """Tests for `ironlayer backfill-resume`."""
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_resume_success(self, mock_api: MagicMock) -> None:
         """Successful resume should display results."""
         mock_api.return_value = {
@@ -670,7 +672,7 @@ class TestBackfillResumeCommand:
             "/api/v1/backfills/bf-123/resume",
         )
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_resume_empty_runs(self, mock_api: MagicMock) -> None:
         """Empty runs list should show success message."""
         mock_api.return_value = {"runs": []}
@@ -689,7 +691,7 @@ class TestBackfillResumeCommand:
         assert result.exit_code == 0
         assert "resumed successfully" in result.output.lower()
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_resume_json_mode(self, mock_api: MagicMock) -> None:
         """--json mode should emit raw JSON."""
         mock_api.return_value = {"status": "resumed"}
@@ -718,7 +720,7 @@ class TestBackfillResumeCommand:
 class TestBackfillHistoryCommand:
     """Tests for `ironlayer backfill-history`."""
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_history_with_entries(self, mock_api: MagicMock) -> None:
         """Should display a table of backfill history entries."""
         mock_api.return_value = [
@@ -757,7 +759,7 @@ class TestBackfillHistoryCommand:
             params={"limit": 20},
         )
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_history_empty(self, mock_api: MagicMock) -> None:
         """No entries should show 'no history' message."""
         mock_api.return_value = []
@@ -776,7 +778,7 @@ class TestBackfillHistoryCommand:
         assert result.exit_code == 0
         assert "No backfill history" in result.output
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_history_json_mode(self, mock_api: MagicMock) -> None:
         """--json mode should emit raw JSON."""
         mock_api.return_value = [{"plan_id": "p1", "status": "SUCCESS"}]
@@ -801,7 +803,7 @@ class TestBackfillHistoryCommand:
         parsed = json.loads(raw[json_start:json_end])
         assert isinstance(parsed, list)
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_history_custom_limit(self, mock_api: MagicMock) -> None:
         """--limit should be forwarded as a query parameter."""
         mock_api.return_value = []
@@ -827,7 +829,7 @@ class TestBackfillHistoryCommand:
             params={"limit": 50},
         )
 
-    @patch("cli.app._api_request")
+    @patch("cli.helpers.api_request")
     def test_history_malformed_date_handled(self, mock_api: MagicMock) -> None:
         """Malformed created_at should be displayed as-is, not crash."""
         mock_api.return_value = [
@@ -862,8 +864,8 @@ class TestBackfillHistoryCommand:
 class TestBackfillChunkedEdge:
     """Edge case tests for backfill-chunked command."""
 
-    @patch("cli.app._load_model_sql_map")
-    @patch("cli.app.display_run_results")
+    @patch("cli.commands.backfill.load_model_sql_map")
+    @patch("cli.commands.backfill.display_run_results")
     @patch("core_engine.executor.LocalExecutor")
     @patch("core_engine.config.load_settings")
     @patch("core_engine.models.plan.compute_deterministic_id", return_value="det_id")

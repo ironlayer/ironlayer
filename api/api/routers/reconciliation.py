@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.dependencies import SessionDep, TenantDep, require_feature
+from api.http_errors import not_found_404
 from api.middleware.rbac import Permission, Role, require_permission
 from api.services.reconciliation_service import ReconciliationService
 
@@ -124,7 +125,7 @@ async def resolve_discrepancy(
         resolution_note=body.resolution_note,
     )
     if result is None:
-        raise HTTPException(status_code=404, detail=f"Reconciliation check {check_id} not found")
+        raise not_found_404("Reconciliation check", check_id)
     return result
 
 
@@ -194,10 +195,7 @@ async def resolve_schema_drift(
         resolution_note=body.resolution_note,
     )
     if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Schema drift check {check_id} not found",
-        )
+        raise not_found_404("Schema drift check", str(check_id))
     return result
 
 

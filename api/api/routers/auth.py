@@ -21,7 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
-from api.dependencies import PublicSessionDep, SessionDep, TenantDep, UserDep
+from api.dependencies import PublicSessionDep, SessionDep, SettingsDep, TenantDep, UserDep
+from api.http_errors import not_found_404
 from api.middleware.login_rate_limiter import LoginRateLimiter
 from api.middleware.rbac import Permission, Role, require_permission
 from api.services.audit_service import AuditAction, AuditService
@@ -40,6 +41,9 @@ _REFRESH_COOKIE_PATH = "/api/v1/auth"  # Sent to refresh + session endpoints
 
 # Module-level login rate limiter instance (in-memory, single-replica).
 _login_limiter = LoginRateLimiter()
+
+# Generic message for public auth failures to avoid user enumeration.
+_AUTH_FAILURE_MESSAGE = "Invalid credentials or account disabled."
 
 
 def _get_client_ip(request: Request) -> str:
@@ -198,7 +202,11 @@ def _clear_refresh_cookie(response: JSONResponse) -> None:
     summary="Create a new account",
     status_code=201,
 )
-async def signup(body: SignupRequest, session: PublicSessionDep) -> JSONResponse:
+async def signup(
+    body: SignupRequest,
+    session: PublicSessionDep,
+    settings: SettingsDep,
+) -> JSONResponse:
     """Register a new user, auto-provision a tenant, and return tokens.
 
     The first user of a new tenant is assigned the ADMIN role.
@@ -207,7 +215,7 @@ async def signup(body: SignupRequest, session: PublicSessionDep) -> JSONResponse
     """
     from api.services.auth_service import AuthError, AuthService
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     try:
         result = await svc.signup(
             email=body.email,
@@ -215,7 +223,8 @@ async def signup(body: SignupRequest, session: PublicSessionDep) -> JSONResponse
             display_name=body.display_name,
         )
     except AuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        logger.warning("Signup failed: %s", exc)
+        raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     body_data = TokenResponse(
         access_token=result["access_token"],
@@ -232,7 +241,12 @@ async def signup(body: SignupRequest, session: PublicSessionDep) -> JSONResponse
     response_model=TokenResponse,
     summary="Log in with email and password",
 )
-async def login(body: LoginRequest, request: Request, session: PublicSessionDep) -> JSONResponse:
+async def login(
+    body: LoginRequest,
+    request: Request,
+    session: PublicSessionDep,
+    settings: SettingsDep,
+) -> JSONResponse:
     """Validate credentials and return an access token.
 
     Enforces brute-force protection: after 5 consecutive failures for the
@@ -254,13 +268,14 @@ async def login(body: LoginRequest, request: Request, session: PublicSessionDep)
             headers={"Retry-After": str(retry_after)},
         )
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     try:
         result = await svc.login(email=body.email, password=body.password)
     except AuthError as exc:
         # Record the failure for brute-force tracking.
         _login_limiter.record_failure(body.email, client_ip)
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        logger.warning("Login failed for %s: %s", body.email, exc)
+        raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     # Successful login — reset the failure counter.
     _login_limiter.record_success(body.email, client_ip)
@@ -280,7 +295,11 @@ async def login(body: LoginRequest, request: Request, session: PublicSessionDep)
     response_model=RefreshResponse,
     summary="Refresh an access token",
 )
-async def refresh(request: Request, session: PublicSessionDep) -> JSONResponse:
+async def refresh(
+    request: Request,
+    session: PublicSessionDep,
+    settings: SettingsDep,
+) -> JSONResponse:
     """Exchange a refresh token (from HttpOnly cookie) for a new token pair.
 
     The new access token is returned in the JSON body.  The new refresh
@@ -292,13 +311,14 @@ async def refresh(request: Request, session: PublicSessionDep) -> JSONResponse:
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token cookie")
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     try:
         result = await svc.refresh(refresh_token)
     except AuthError as exc:
         # On invalid/expired refresh token, clear the stale cookie.
+        logger.warning("Refresh failed: %s", exc)
         error_response = JSONResponse(
-            content={"detail": str(exc)},
+            content={"detail": _AUTH_FAILURE_MESSAGE},
             status_code=exc.status_code,
         )
         _clear_refresh_cookie(error_response)
@@ -320,7 +340,11 @@ async def refresh(request: Request, session: PublicSessionDep) -> JSONResponse:
     response_model=SessionResponse,
     summary="Restore session from HttpOnly refresh cookie",
 )
-async def restore_session(request: Request, session: PublicSessionDep) -> JSONResponse:
+async def restore_session(
+    request: Request,
+    session: PublicSessionDep,
+    settings: SettingsDep,
+) -> JSONResponse:
     """Validate the refresh-token cookie and return user info + a fresh access token.
 
     Called by the frontend on page load to restore a session without
@@ -333,14 +357,15 @@ async def restore_session(request: Request, session: PublicSessionDep) -> JSONRe
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
 
     # Validate the refresh token and get a new token pair.
     try:
         refreshed = await svc.refresh(refresh_token)
     except AuthError as exc:
+        logger.warning("Session restore failed: %s", exc)
         error_response = JSONResponse(
-            content={"detail": str(exc)},
+            content={"detail": _AUTH_FAILURE_MESSAGE},
             status_code=exc.status_code,
         )
         _clear_refresh_cookie(error_response)
@@ -360,7 +385,8 @@ async def restore_session(request: Request, session: PublicSessionDep) -> JSONRe
             tenant_id=claims.tenant_id,
         )
     except AuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        logger.warning("Session restore get_current_user failed: %s", exc)
+        raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     body_data = SessionResponse(
         access_token=refreshed["access_token"],
@@ -411,11 +437,12 @@ async def get_me(
     session: SessionDep,
     tenant_id: TenantDep,
     user: UserDep,
+    settings: SettingsDep,
 ) -> UserProfileResponse:
     """Return the profile of the currently authenticated user."""
     from api.services.auth_service import AuthError, AuthService
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     try:
         profile = await svc.get_current_user(user_id=user, tenant_id=tenant_id)
     except AuthError as exc:
@@ -440,6 +467,7 @@ async def create_api_key(
     session: SessionDep,
     tenant_id: TenantDep,
     user: UserDep,
+    settings: SettingsDep,
     _role: Role = Depends(require_permission(Permission.MANAGE_SETTINGS)),
 ) -> APIKeyResponse:
     """Create a new API key.  The plaintext key is returned exactly once.
@@ -448,7 +476,7 @@ async def create_api_key(
     """
     from api.services.auth_service import AuthError, AuthService
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     try:
         result = await svc.create_api_key(
             user_id=user,
@@ -480,6 +508,7 @@ async def list_api_keys(
     session: SessionDep,
     tenant_id: TenantDep,
     user: UserDep,
+    settings: SettingsDep,
     _role: Role = Depends(require_permission(Permission.MANAGE_SETTINGS)),
 ) -> list[APIKeyResponse]:
     """List all non-revoked API keys for the current user.
@@ -488,7 +517,7 @@ async def list_api_keys(
     """
     from api.services.auth_service import AuthService
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     keys = await svc.list_api_keys(user_id=user, tenant_id=tenant_id)
     return [APIKeyResponse(**k) for k in keys]
 
@@ -503,6 +532,7 @@ async def revoke_api_key(
     session: SessionDep,
     tenant_id: TenantDep,
     user: UserDep,
+    settings: SettingsDep,
     _role: Role = Depends(require_permission(Permission.MANAGE_SETTINGS)),
 ) -> dict[str, Any]:
     """Revoke an API key by its ID.
@@ -511,11 +541,11 @@ async def revoke_api_key(
     """
     from api.services.auth_service import AuthService
 
-    svc = AuthService(session)
+    svc = AuthService(session, settings=settings)
     revoked = await svc.revoke_api_key(key_id=key_id, tenant_id=tenant_id)
 
     if not revoked:
-        raise HTTPException(status_code=404, detail="API key not found or already revoked.")
+        raise not_found_404("API key")
 
     # Audit log the revocation.
     audit = AuditService(session, tenant_id=tenant_id, actor=user)

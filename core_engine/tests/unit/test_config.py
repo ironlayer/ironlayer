@@ -159,6 +159,11 @@ class TestEnums:
         assert PlatformEnv.STAGING.value == "staging"
         assert PlatformEnv.PROD.value == "prod"
 
+    def test_platform_env_accepts_production_string(self):
+        """Backward compatibility: 'production' normalizes to PROD."""
+        settings = Settings(env="production")
+        assert settings.env == PlatformEnv.PROD
+
     def test_cluster_size_values(self):
         assert ClusterSize.SMALL.value == "small"
         assert ClusterSize.MEDIUM.value == "medium"

@@ -218,9 +218,12 @@ class TestScrubPii:
         assert "[REDACTED_IP]" in scrubbed
 
     def test_removes_databricks_tokens(self):
-        text = "Token: dapi_FAKE_TOKEN_FOR_TESTING"
+        # Pattern matches dapi + exactly 32 hex chars (see privacy._PII_PATTERNS).
+        # Token is built dynamically to avoid secret-scanning false positives.
+        _fake_tok = "dapi" + "0123456789abcdef" * 2  # 32 hex chars, not a real token
+        text = f"Token: {_fake_tok}"
         scrubbed = scrub_pii(text)
-        assert "dapi_FAKE_TOKEN_FOR_TESTING" not in scrubbed
+        assert _fake_tok not in scrubbed
         assert "[REDACTED_TOKEN]" in scrubbed
 
     def test_removes_generic_secrets(self):

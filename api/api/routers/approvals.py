@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import update
 
 from api.dependencies import SessionDep, SettingsDep, TenantDep, UserDep
+from api.http_errors import not_found_404
 from api.middleware.rbac import Permission, Role, require_permission
 from api.schemas import PlanApprovalResponse
 from api.services.audit_service import AuditAction, AuditService
@@ -85,7 +86,7 @@ async def approve_plan(
     repo = PlanRepository(session, tenant_id=tenant_id)
     plan_row = await repo.get_plan(plan_id)
     if plan_row is None:
-        raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+        raise not_found_404("Plan", plan_id)
 
     # Check for duplicate approval by the same authenticated user.
     existing: list[dict[str, str]] = json.loads(plan_row.approvals_json) if plan_row.approvals_json else []  # type: ignore[arg-type]
@@ -152,7 +153,7 @@ async def reject_plan(
     repo = PlanRepository(session, tenant_id=tenant_id)
     plan_row = await repo.get_plan(plan_id)
     if plan_row is None:
-        raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+        raise not_found_404("Plan", plan_id)
 
     # Build the rejection record using the authenticated identity.
     approvals: list[dict[str, Any]] = json.loads(plan_row.approvals_json) if plan_row.approvals_json else []  # type: ignore[arg-type]
