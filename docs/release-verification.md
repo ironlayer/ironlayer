@@ -88,7 +88,19 @@ If you change **docs** or **code** in the **private** repo and want that on the 
 
 ---
 
-## 5. Quick checklist after a release
+## 5. Document review (open-source cleanliness)
+
+Before tagging a release, review docs and visible repo content for:
+
+- **Proprietary/internal names** — Use generic wording (e.g. "deployment runner" instead of internal tool names) so the public repo does not imply non-public info.
+- **Personal data** — No personal emails, internal URLs, or private GitHub usernames in docs; use org/canonical repo URLs where applicable.
+- **Non–open-source requirements** — Remove or generalize any "internal only", "confidential", or dependency on unreleased/internal packages.
+
+Capture the outcome in a one-off checklist for the release or in the release notes.
+
+---
+
+## 6. Quick checklist after a release
 
 | What | Where to check |
 |------|------------------|
@@ -102,7 +114,7 @@ If you change **docs** or **code** in the **private** repo and want that on the 
 
 ---
 
-## 6. One-off verification commands
+## 7. One-off verification commands
 
 ```bash
 # PyPI: list published versions
