@@ -1,0 +1,114 @@
+---
+description: Exodus / Iron Layer — product overview, architecture, and tech stack. Always active.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Exodus — AI-Native Data Platform Suite
+
+## Products
+
+### IronLayer — SHIP (`ironlayer_oss`, public, Apache 2.0)
+> "Know what will run. Know what it costs. Know what it breaks."
+- **What it does:** SQL control plane that runs BEFORE dbt or SQLMesh. Deterministic plan engine, column-level lineage, cost modeling, schema guardrails, impact analysis. Framework-agnostic — auto-detects dbt vs. SQLMesh.
+- **Key capabilities:** `ironlayer plan` → validated execution plan with risk scores, cost estimates, downstream impact; MCP server (18 tools for Cursor/AI); GitHub App integration.
+- **Users:** Data engineers who want CI/CD guardrails without replacing their workflow.
+
+### Exodus Foundation — BUILD (`ironlayer_infra`, private)
+> "Your entire data platform. Governed from day one."
+- **What it does:** Turnkey production data stack deployed to a client's Databricks in under a week.
+- **Key capabilities:** Terraform modules (AWS + Databricks), dbt 50+ models (medallion architecture), SQLMesh as an alternative transformation framework for new clients, Python extractors (Coinbase, Gemini, HubSpot, Polygon, Odds API), 285+ data quality tests.
+- **Users:** Organizations that need a full production data platform without months of setup.
+
+### Exodus Autopilot — RUN (`exodus-autopilot`, private)
+> "Agents that run your data platform so your team doesn't have to."
+- **What it does:** Fleet of AI agents that continuously monitor, optimize, and fix data pipelines.
+- **Key capabilities:** GitHub App (Exodus Review Engine, two-pass review), agent fleet (PEVR loop), confidence scoring, self-training OutcomeStore, PR healing (max 5 auto-fix cycles).
+- **Users:** Data teams that want autonomous operations with human-in-the-loop escalation.
+
+### Exodus Core — Shared Kernel (`exodus-core`, private)
+- Shared Python package depended on by Foundation and Autopilot.
+- Provides: auth, LLM routing, security (PromptGuard), DB abstraction, middleware, observability, config management, third-party integrations.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Infrastructure** | Terraform (AWS + Databricks providers) |
+| **Transformation** | dbt-databricks + SQLMesh (SQL-first, framework-agnostic; clients choose dbt or SQLMesh) |
+| **Ingestion** | Python extractors + Auto Loader (Delta Live Tables) |
+| **Governance** | Unity Catalog (lineage via `system.access.*`) |
+| **AI — Cloud** | Anthropic Claude (opus/sonnet/haiku via exodus-core LLM router) |
+| **AI — Local** | Ollama on Mac Studio (qwen2.5-coder:32b, qwq:32b, 7b for routing) |
+| **CI/CD** | GitHub Actions + GitHub App (FastAPI webhook) + Databricks job compute |
+| **Compute** | EC2 (webhook router) + Mac Studio M4 Max (Ollama + Docker) + Cursor Cloud Agents |
+| **CLI** | IronLayer CLI (`ironlayer plan`, `ironlayer diff`, etc.) |
+| **Review** | Two-pass: Ollama qwen2.5-coder:32b (local, fast) → Claude Opus (cloud, conditional) |
+
+## Architecture Principles
+
+1. **Databricks-native CI/CD** — All heavy compute on Databricks job compute (cheapest). SQL Warehouses for user-facing queries only.
+2. **Medallion architecture** — Bronze (raw) → Silver (staging views) → Gold (incremental marts).
+3. **Framework-agnostic** — Clients choose their transformation framework: dbt Core, dbt Cloud Enterprise, or SQLMesh. IronLayer and the review engine work with all three. See `sqlmesh.mdc` for SQLMesh conventions.
+4. **Client-agnostic core** — Platform IP in Docker image. Client-specific config in `exodus-client-template` (`exodus.yml`, `review-standards/client.yml`).
+4. **PEVR agent loop** — `plan()` → `execute()` → `verify()` → `replan()` (max 3 iterations).
+5. **Budget-protected AI** — All Claude calls through `exodus-core` LLM router with spend limits and SHA-256 response cache.
+6. **Two-pass review** — Pass 1: local Ollama (qwen2.5-coder:32b, fast/cheap). Pass 2: Claude Opus only when confidence < 70% or BLOCK candidates detected.
+7. **Shared kernel** — `exodus-core` as single dependency for shared concerns; product repos own only product logic.
+
+## Key Directories (by repo)
+
+```
+exodus-core/
+├── exodus_core/
+│   ├── llm/          # LLM router (cloud ↔ local Ollama)
+│   ├── auth/         # Auth + tenancy
+│   ├── security/     # PromptGuard (7-layer injection defense)
+│   ├── db/           # Database abstraction
+│   ├── memory/       # OutcomeStore (JSONL-backed agent memory)
+│   └── mcp_server.py # Unified MCP server (18+ tools)
+
+ironlayer_oss/
+├── ironlayer/
+│   ├── plan/         # Deterministic plan engine
+│   ├── lineage/      # Column-level lineage
+│   ├── cost/         # Cost modeling
+│   └── cli.py        # ironlayer CLI
+
+ironlayer_infra/
+├── terraform/        # 12 infrastructure modules
+├── dbt-framework/    # 50+ dbt models (staging/intermediate/marts)
+├── extractors/       # Python data extractors
+└── bundle/           # Databricks Asset Bundles
+
+exodus-autopilot/
+├── exodus_autopilot/
+│   ├── agents/       # Agent fleet (code reviewer, healer, backlog, orchestrator)
+│   ├── github_app/   # Exodus Review Engine (FastAPI webhook)
+│   ├── cicd/         # CI/CD engine (data diff, schema manager, anomaly detection)
+│   └── billing/      # Stripe integration
+
+exodus-client-template/
+├── exodus.yml        # Client config (catalog, warehouse, review thresholds)
+├── review-standards/ # BLOCK/WARN/NOTE review rules
+└── ironlayer/        # Client-specific dbt models
+
+exodus-terraform/
+├── github/           # ironlayer GitHub org management
+├── aws/              # EC2, VPC, S3
+└── databricks/       # Per-client workspace provisioning
+```
+
+## Unity Catalog Topology (per client)
+
+```
+{client}_raw   — extraction landing zone (bronze)
+{client}_prod  — production dbt outputs (silver + gold)
+{client}_ci    — ephemeral CI schemas: pr_{number} (auto-created/destroyed)
+```
+
+## Credentials
+
+- All credentials in `~/.exodus/env.local` — never commit secrets
+- Key vars: `ANTHROPIC_API_KEY`, `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `GITHUB_TOKEN`, `EXODUS_BUDGET_LIMIT`
+- Local AI: `OLLAMA_BASE_URL` (localhost), `OLLAMA_BASE_URL_REMOTE` (Tailscale to Mac Studio)

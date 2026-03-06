@@ -1,0 +1,102 @@
+---
+description: The Exodus development loop — PRIVIA. Follow for every non-trivial task.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+## The Exodus Development Loop — PRIVIA
+
+For **every non-trivial task**, follow:
+
+```
+PLAN → REVIEW → IMPLEMENT → VERIFY → INSPECT → ITERATE/ACCEPT
+```
+
+---
+
+## AI Assistant Rules
+
+### Before implementing anything:
+1. **Read the relevant existing code** — never assume structure.
+2. **Produce a written plan:** steps, files to change, acceptance criteria, risk level.
+3. **Self-review the plan** — check for gaps, missing tests, scope issues.
+4. Only then begin implementation.
+
+### During implementation:
+- Follow the plan step by step. If the plan turns out wrong, **stop and replan**.
+- Write tests alongside code — not after.
+- Use `uv run` for all Python commands (never `python` or `pip` directly).
+- All new agents/modules must be in the correct product repo (not mixed).
+
+### After implementing:
+Run these checks in the modified repo:
+```bash
+uv run ruff check .             # lint
+uv run mypy . --ignore-missing-imports  # types
+uv run pytest tests/ -v -x     # tests
+```
+
+Then **self-review** your implementation:
+- Does it satisfy every acceptance criterion?
+- Is it consistent with surrounding code style?
+- Are there hardcoded values that should be config or env vars?
+- Does it follow the correct repo / module placement?
+
+### If checks fail:
+- Minor: fix in place, re-verify
+- Substantive: return to PLAN phase
+- Max 3 iterations before escalating to human
+
+---
+
+## Triggers for the Full Loop
+
+Use PRIVIA when the task involves:
+- Writing new functions, classes, or modules
+- Changing existing logic (not just comments or formatting)
+- Adding/modifying database schemas, dbt models, or Terraform
+- Changing CI/CD pipelines or GitHub Actions
+- Architectural changes or new integrations
+- Adding new agents to the agent fleet
+
+## Skip the Loop (trivial tasks only)
+
+- Single-line typo or comment fixes
+- Documentation rewording
+- Dependency version bumps (with existing test coverage)
+- Config-only changes with no code impact
+- Cursor rule / AGENTS.md rewording
+
+---
+
+## Repo Placement Rules
+
+| What you're building | Which repo |
+|---|---|
+| Shared utility (auth, LLM, DB, security) | `exodus-core` |
+| Plan engine, lineage, cost, MCP tools | `ironlayer_oss` |
+| Terraform module, dbt model, extractor | `ironlayer_infra` |
+| AI agent, GitHub App, CI/CD engine, billing | `exodus-autopilot` |
+| Per-client config, review standards | `exodus-client-template` |
+| GitHub org Terraform, runner setup | `exodus-terraform` |
+| AI rules, skills, workspace setup | `iron-layer-dev-workspace` |
+
+**Never** place shared utilities in product repos — put them in `exodus-core` first.
+
+---
+
+## Agents Follow PEVR
+
+All `exodus-autopilot` agents inherit from `exodus_core.agents.BaseAgent`:
+
+```python
+class MyAgent(BaseAgent):
+    def plan(self, task: str) -> AgentPlan:     # Analyze task, produce approach
+        ...
+    def execute(self, plan: AgentPlan) -> Any:  # Implement the plan
+        ...
+    def verify(self, result: Any) -> bool:      # Check output vs acceptance criteria
+        ...
+    def run_cycle(self, task: str) -> AgentResult:  # Orchestrate (max 3 replans)
+        ...
+```

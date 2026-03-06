@@ -1,0 +1,328 @@
+---
+description: Exodus CI/CD engine — Databricks-native pipeline, per-PR schema isolation, and per-repo CI strategy.
+globs: ["**/.github/workflows/**", "**/cicd/**", "**/bundle/**"]
+alwaysApply: false
+---
+
+# Exodus CI/CD Engine
+
+## Core Principle: Databricks-Native
+
+All CI/CD compute runs on **Databricks job compute** — auto-provisions, auto-terminates.
+Never use SQL Warehouses for CI/CD (wrong compute model, too expensive).
+
+## Per-PR Schema Lifecycle
+
+### dbt Core clients
+```
+PR opened
+  → CREATE SCHEMA {client}_ci.pr_{number}
+  → shallow clone prod tables (baseline)
+  → ironlayer plan (validate execution, cost estimate)
+  → dbt build --target ci --select {changed_models}+
+  → data diff (ci vs prod: row counts, distributions, nulls)
+  → anomaly detection (statistical outliers)
+  → lineage query (downstream impact)
+  → post structured PR comment
+
+PR merged/closed
+  → DROP SCHEMA {client}_ci.pr_{number} CASCADE
+```
+
+### SQLMesh clients (Virtual Data Environments — free, no schema cloning cost)
+```
+PR opened
+  → ironlayer plan --framework sqlmesh (validate, cost estimate)
+  → sqlmesh plan ci_pr_{number} --no-prompts (Virtual Data Environment)
+  → sqlmesh run --environment ci_pr_{number}
+  → sqlmesh test (unit tests)
+  → sqlmesh table_diff prod:ci_pr_{number} {changed_model}
+  → post structured PR comment (plan summary + table diff)
+
+PR merged/closed
+  → sqlmesh plan prod --no-prompts (pointer swap — near-instant)
+  → sqlmesh run --environment prod
+  → Virtual Data Environment ci_pr_{number} auto-cleaned
+```
+
+**SQLMesh advantage:** Virtual Data Environments are view pointer swaps — no data copying, near-zero CI cost vs. Databricks ephemeral schema cloning for large tables.
+
+## GitHub Actions Per-Repo CI Strategy
+
+### exodus-core
+```yaml
+# .github/workflows/ci.yml
+jobs:
+  lint:     ruff check . + mypy .
+  test:     uv run pytest tests/ -v --cov=exodus_core
+  build:    python -m build (wheel)
+  publish:  pypi publish (on tag)
+```
+
+### ironlayer_oss
+```yaml
+jobs:
+  lint:     ruff + mypy
+  test:     pytest
+  docker:   Build + push to GHCR
+  deploy:   Deploy MCP server (on main merge)
+```
+
+### ironlayer_infra
+```yaml
+jobs:
+  terraform-validate:  terraform fmt -check + terraform validate
+  dbt-compile:         dbt compile --target ci
+  dbt-test:            dbt test --target ci (schema tests only — no data)
+  terraform-plan:      terraform plan (PR comment with plan output)
+```
+
+### exodus-autopilot
+```yaml
+jobs:
+  lint:          ruff + mypy
+  test:          pytest tests/unit/ -v
+  docker:        Build + push to GHCR
+  deploy-ec2:    Deploy webhook to EC2 (on main merge)
+  deploy-mac:    Deploy Ollama models + Docker to Mac Studio (on tag)
+```
+
+### exodus-terraform
+```yaml
+jobs:
+  fmt-check:   terraform fmt -check -recursive
+  validate:    terraform validate
+  plan:        terraform plan (post as PR comment)
+  apply:       terraform apply (on main merge, after human approval)
+```
+
+### Data-eXchange
+```yaml
+jobs:
+  fmt:     cargo fmt --check
+  clippy:  cargo clippy -- -D warnings
+  test:    cargo test
+  build:   cargo build --release (artifacts)
+```
+
+## GitHub Actions Runners
+
+- **ubuntu-latest** — Default for lint, type-check, unit tests, Docker builds
+- **mac-studio** (self-hosted, M4 Max) — Ollama model tests, heavy integration tests, Docker builds with ARM images
+
+```yaml
+jobs:
+  test-local-llm:
+    runs-on: [self-hosted, mac-studio]
+    steps:
+      - name: Test Ollama health
+        run: curl -s http://localhost:11434/api/tags
+```
+
+## Data Diff SQL Patterns
+
+```sql
+-- Row count comparison
+SELECT 'prod' AS env, COUNT(*) AS row_count FROM {prod_catalog}.gold.{table}
+UNION ALL
+SELECT 'ci'   AS env, COUNT(*) AS row_count FROM {ci_catalog}.pr_{number}.{table};
+
+-- Metric distribution (numeric columns)
+SELECT
+    '{col}'                                                    AS column_name,
+    ROUND(AVG({col}), 4)                                       AS mean,
+    ROUND(STDDEV({col}), 4)                                    AS stddev,
+    MIN({col})                                                 AS min_val,
+    MAX({col})                                                 AS max_val,
+    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {col}), 4) AS median
+FROM {ci_catalog}.pr_{number}.{table};
+```
+
+## Lineage Queries (Unity Catalog)
+
+```sql
+-- Downstream tables impacted by a changed table
+SELECT target_table_full_name, target_type, entity_type
+FROM system.access.table_lineage
+WHERE source_table_full_name = '{catalog}.{schema}.{table}'
+  AND event_time > current_timestamp() - INTERVAL 30 DAYS;
+```
+
+## IronLayer Plan Gate
+
+Before every `dbt build` or `sqlmesh run` in CI, IronLayer validates the execution plan:
+
+```bash
+# dbt projects
+ironlayer plan \
+  --manifest target/manifest.json \
+  --target ci \
+  --require-confidence 70 \
+  --block-on-findings BLOCK
+
+# SQLMesh projects (auto-detected)
+ironlayer plan \
+  --framework sqlmesh \
+  --require-confidence 70 \
+  --block-on-findings BLOCK
+```
+
+CI fails if:
+- `confidence < 70`
+- Any BLOCK-severity finding
+- Cost estimate > `$CI_COST_LIMIT` (default $2)
+
+---
+
+## Cursor CLI in CI
+
+[Cursor CLI](https://cursor.com/cli) enables headless agent runs from GitHub Actions and terminal scripts.
+Use it for agent-driven tasks that go beyond simple linting: generating PR summaries, auto-fixing WARN findings,
+or running a planning pass on a complex diff.
+
+```yaml
+# .github/workflows/cursor-agent.yml
+- name: Install Cursor CLI
+  run: curl -fsSL https://cursor.com/install.sh | sh
+
+- name: Run Cursor agent on PR diff
+  env:
+    CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+  run: |
+    cursor agent \
+      --prompt "Review the diff in this PR for BLOCK/WARN/NOTE findings using exodus review standards" \
+      --model auto \
+      --output review-output.md
+
+- name: Post review as PR comment
+  uses: actions/github-script@v7
+  with:
+    script: |
+      const fs = require('fs');
+      const body = fs.readFileSync('review-output.md', 'utf8');
+      github.rest.issues.createComment({ issue_number: context.issue.number, body });
+```
+
+**When to use Cursor CLI in CI:**
+- Auto-generate PR descriptions from diff (`cursor agent --prompt "Summarize this diff"`)
+- Run a planning pass before complex migrations
+- Generate dbt model documentation from source YAML
+- Headless agent tasks on a schedule (cron workflows)
+
+**When NOT to use:**
+- Simple linting (use ruff/sqlfluff directly — cheaper)
+- Tests (use pytest directly)
+- Standard CI checks (use existing jobs)
+
+---
+
+## Bugbot Integration
+
+[Cursor Bugbot](https://cursor.com/bugbot) is a free automated pre-merge code review that runs on every PR.
+Enable it on all ironlayer org repos as a **complement** to the custom Exodus review engine (not a replacement).
+
+**Setup:**
+1. Install the Cursor Bugbot GitHub App on the `ironlayer` org
+2. Add `.cursor/bugbot.json` to each repo:
+
+```json
+{
+  "enabled": true,
+  "severity_threshold": "warn",
+  "auto_fix": false,
+  "ignore_patterns": [
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "uv.lock",
+    "**/*.lock"
+  ]
+}
+```
+
+3. Configure as a required check in branch protection rules
+
+**Bugbot vs. Exodus Review Engine:**
+
+| Capability | Bugbot | Exodus Review Engine |
+|------------|--------|---------------------|
+| General code bugs | ✅ | ✅ |
+| dbt/SQL conventions | ❌ | ✅ |
+| Data diff | ❌ | ✅ |
+| Client-specific rules | ❌ | ✅ |
+| Schema drift | ❌ | ✅ |
+| Cost | Free | Credits |
+
+Run Bugbot first (free), then Exodus engine only if Bugbot passes. This conserves AI credits.
+
+---
+
+## Cloud Agents API
+
+The [Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) enables programmatic agent launches
+with webhooks and status polling. Use this to automate the PR review + healing loop without manual `@cursor` invocations.
+
+```bash
+# Launch a Cloud Agent via API
+curl -X POST https://api.cursor.com/agents \
+  -H "Authorization: Bearer $CURSOR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Review PR #42 in ironlayer/ironlayer_infra for BLOCK findings",
+    "model": "auto",
+    "repo": "ironlayer/ironlayer_infra",
+    "branch": "feature/new-dbt-models"
+  }'
+
+# Poll for completion
+curl https://api.cursor.com/agents/{agent_id}/status \
+  -H "Authorization: Bearer $CURSOR_API_KEY"
+```
+
+**Integration with EC2 webhook router:**
+The EC2 instance receives GitHub webhooks → dispatches Cloud Agent runs via API → posts results back to PR.
+This replaces the need for `@cursor` comments on every PR.
+
+```python
+# exodus-autopilot/webhook.py pattern
+@app.post("/github/webhook")
+async def handle_pr(payload: dict):
+    if payload["action"] == "opened":
+        agent_id = await launch_cloud_agent(
+            prompt=f"Review PR #{payload['number']} ...",
+            repo=payload["repository"]["full_name"],
+        )
+        await store_agent_job(pr_number=payload["number"], agent_id=agent_id)
+    return {"status": "queued"}
+```
+
+---
+
+## Parallel Agents / Worktrees
+
+[Cursor Worktrees](https://cursor.com/docs/configuration/worktrees) enable multiple agents to work on
+different branches simultaneously, each in an isolated git worktree with its own environment.
+
+**Configuration (already set up at `.cursor/worktrees.json`):**
+```json
+{
+  "setup-worktree-unix": [
+    "uv sync --frozen 2>/dev/null || uv sync",
+    "cp $ROOT_WORKTREE_PATH/.env .env 2>/dev/null || true"
+  ]
+}
+```
+
+**Use cases:**
+- **Best-of-N review:** Launch 2 agents on the same PR diff with different prompts, pick the better review
+- **Parallel feature development:** Agent A works on the Python extractor, Agent B works on dbt models simultaneously
+- **Regression comparison:** One agent on `main`, one on `feature/` — compare outputs
+
+**Worktree lifecycle:**
+```bash
+# Cursor manages this automatically, but you can also use git manually:
+git worktree add ../ironlayer_infra-pr-42 feature/pr-42-models
+cd ../ironlayer_infra-pr-42
+uv sync --frozen
+# Agent runs here in isolation
+git worktree remove ../ironlayer_infra-pr-42
+```

@@ -1,0 +1,76 @@
+---
+description: AI model routing strategy — cloud (Anthropic) and local (Ollama on Mac Studio). Always follow this.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+## Model Routing Strategy
+
+Exodus uses a two-tier routing architecture: **cloud** (Anthropic) for quality-sensitive tasks, **local** (Ollama on Mac Studio) for speed and cost efficiency. All routing goes through `exodus-core` LLM router — never call APIs directly in product code.
+
+### Cloud Models (Anthropic)
+
+| Task | Model | Why |
+|---|---|---|
+| Writing new code from scratch | **opus** | Maximum quality, architectural reasoning |
+| System / schema design, ADRs | **opus** | Complex multi-constraint reasoning |
+| Security analysis | **opus** | Must not miss subtle issues |
+| Data modeling (dbt, Kimball) | **opus** | Business logic fidelity |
+| PEVR planning phase | **opus** | Plan quality determines implementation quality |
+| PR review pass 2 (escalated) | **opus** | Deep review when pass 1 flags BLOCK candidates |
+| PR review pass 1, standard review | **sonnet** | Reliable quality at standard cost |
+| Test generation | **sonnet** | Coverage and edge case reasoning |
+| Refactoring, documentation | **sonnet** | Good quality, not max-quality |
+| Data diff, NL-to-SQL | **sonnet** | Sufficient for standard complexity |
+| Confidence scoring, routing decisions | **haiku** | Fast, cheap, accurate for simple decisions |
+| Commit message validation | **haiku** | Pattern matching |
+| Metadata extraction | **haiku** | Extraction tasks, not reasoning |
+
+### Local Models (Ollama — Mac Studio M4 Max)
+
+| Task | Model | VRAM |
+|---|---|---|
+| Code generation, PR review pass 1 | **qwen2.5-coder:32b** | 20 GB |
+| Feedback loops, root cause analysis | **qwq:32b** | 20 GB |
+| YAML config, lightweight code | **qwen2.5-coder:14b** | 9 GB |
+| Task classification, routing | **qwen2.5-coder:7b** | 5 GB |
+| Local embeddings | **nomic-embed-text** | 0.3 GB |
+
+### Routing Rules
+
+- **Premium tier → opus:** architectural decisions, security, new code from scratch, planning
+- **Standard tier → sonnet OR qwen2.5-coder:32b:** code review, test gen, refactoring
+- **Economy tier → haiku OR qwen2.5-coder:7b:** classification, pattern matching, extraction
+
+**Two-pass PR review logic:**
+1. Pass 1 (always): `qwen2.5-coder:32b` locally — fast, zero API cost
+2. Pass 2 (conditional): `claude-opus-4` — only when pass 1 confidence < 70% or BLOCK candidate detected
+
+**Never:**
+- Use opus for classification, linting, or formatting — wastes budget
+- Use haiku or 7b for code generation or security review — insufficient quality
+- Hardcode model names in product code — use `exodus-core` router + tier constants
+
+### In Code
+
+```python
+from exodus_core.llm import LLMRouter, ModelTier
+
+router = LLMRouter()
+
+# Cloud routing
+response = router.call(prompt, tier=ModelTier.PREMIUM)   # opus
+response = router.call(prompt, tier=ModelTier.STANDARD)  # sonnet
+response = router.call(prompt, tier=ModelTier.ECONOMY)   # haiku
+
+# Local-first routing (falls back to cloud if Mac Studio unreachable)
+response = router.call(prompt, tier=ModelTier.STANDARD, prefer_local=True)
+# → qwen2.5-coder:32b if OLLAMA_BASE_URL reachable, else sonnet
+```
+
+### Upgrading Models
+
+When Anthropic releases new Claude versions or Ollama publishes better models:
+1. Update `ai/model-routing.yml` family aliases only
+2. Run `make sync-ai` to propagate to all repos
+3. Never update individual agent files — the router resolves aliases

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "dpb-platform": {
+      "command": "/Users/helderdasilva/Documents/production_code/iron-layer-dev-workspace/repos/dpb-data-platform-in-a-box/.venv/bin/python",
+      "args": [
+        "/Users/helderdasilva/Documents/production_code/iron-layer-dev-workspace/repos/dpb-data-platform-in-a-box/dpb/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/helderdasilva/Documents/production_code/iron-layer-dev-workspace/repos/dpb-data-platform-in-a-box"
+      }
+    }
+  }
+}

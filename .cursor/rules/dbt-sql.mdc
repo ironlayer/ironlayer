@@ -1,0 +1,203 @@
+---
+description: dbt Core and SQL conventions for Exodus-internal projects (Foundation, ironlayer_infra, client templates). Medallion architecture, Databricks-native.
+globs: ["**/*.sql", "**/*.yml", "**/dbt-framework/**", "**/dbt/**"]
+alwaysApply: false
+---
+
+# dbt Core / SQL Conventions
+
+> **This rule covers dbt Core on Databricks** (Exodus Foundation, ironlayer_infra, client templates).
+> For dbt Cloud Enterprise client engagements, see `dbt-cloud.mdc` instead.
+> **For SQLMesh projects** (clients using SQLMesh as their transformation framework), see `sqlmesh.mdc` and use the `exodus-sqlmesh` Claude skill.
+
+---
+
+## dbt MCP Local Tools (available in Cursor via `dbt` MCP server)
+
+These tools run against the local dbt project set by `DBT_PROJECT_DIR` in `~/.exodus/env.local`:
+
+### CLI Tools
+```
+dbt_run             — Run one or more models against the dev warehouse
+dbt_build           — Run + test models in DAG order
+dbt_test            — Run tests on selected models
+dbt_compile         — Compile models to SQL without executing (fast validation)
+dbt_list            — List models matching a selector (e.g., +stg_coinbase__candles+)
+dbt_parse           — Parse the project for syntax errors
+dbt_show            — Preview first N rows of a model
+dbt_source_freshness — Check all source freshness against warn/error thresholds
+```
+
+### Metadata Tools (no warehouse required)
+```
+get_all_models      — List all models with layer, materialization, schema
+get_model_details   — Schema, columns, tests, config for a specific model
+get_lineage         — Upstream/downstream DAG for a model
+get_model_health    — Test pass/fail and freshness for a model
+get_all_sources     — All sources with freshness config
+get_exposures       — Downstream consumers of models
+```
+
+### Codegen Tools (requires `DISABLE_DBT_CODEGEN=false` in MCP env, already set)
+```
+generate_staging_model  — Generate a staging model SQL file from a source table
+generate_model_yaml     — Generate a YAML companion file for an existing model
+generate_source         — Generate a sources.yml block from a database table
+```
+
+**Prefer codegen tools** over manually writing boilerplate. Example workflow:
+```
+1. Use generate_source to scaffold sources.yml for a new raw table
+2. Use generate_staging_model to scaffold the staging SQL
+3. Use generate_model_yaml to add YAML companion with column descriptions
+4. Manually add business logic and tests on top of the generated base
+```
+
+---
+
+## dbt Fusion Engine (Evaluation Phase)
+
+dbt Labs released the **Fusion engine** (Rust-based, 30x faster parsing) with a free VS Code extension.
+Fusion works with dbt Core locally (no dbt Cloud required).
+
+**What Fusion adds:**
+- IntelliSense: autocomplete for `ref()`, `source()`, column names
+- Live error detection: catches compilation errors as you type
+- Instant parse times (milliseconds instead of seconds for large projects)
+- Column-level lineage visualization in VS Code
+
+**Status:** Under evaluation (see T-23.4 in UNIFIED_BACKLOG.md).
+**Do not** require Fusion for any current development work.
+If you have Fusion installed, the `dbt` MCP server will auto-detect it.
+
+---
+
+## Model Naming (Medallion Architecture)
+
+| Layer | Pattern | Materialization | Schema |
+|---|---|---|---|
+| Staging | `stg_{source}__{table}` | view | silver |
+| Intermediate | `int_{domain}__{description}` | table | silver |
+| Dimensions | `dim_{entity}` | incremental (merge) | gold |
+| Facts | `fct_{event}` | incremental (merge) | gold |
+
+Examples: `stg_coinbase__candles`, `int_crypto__daily_ohlcv`, `dim_asset`, `fct_trade`
+
+## SQL Style
+
+```sql
+with
+
+source as (
+    select * from {{ source('bronze', 'raw_coinbase_candles') }}
+),
+
+cleaned as (
+
+    select
+        -- surrogate key: never MD5() directly
+        {{ surrogate_key(['product_id', 'start_time']) }} as candle_id,
+        product_id,
+        lower(side)                                        as side,
+        open::decimal(18, 8)                               as open_price,
+        high::decimal(18, 8)                               as high_price,
+        low::decimal(18, 8)                                as low_price,
+        close::decimal(18, 8)                              as close_price,
+        volume::decimal(24, 8)                             as volume,
+        to_timestamp(start_time)                           as candle_at,
+        current_timestamp()                                as _dbt_loaded_at
+
+    from source
+    where start_time is not null
+
+)
+
+select * from cleaned
+```
+
+## SQL Rules
+
+- UPPERCASE all SQL keywords (`SELECT`, `FROM`, `WHERE`, `JOIN`, `WITH`, `AS`)
+- CTE pattern: `with source as (...), cleaned as (...) select * from cleaned`
+- Indent 4 spaces
+- One column per line in `SELECT`
+- Alias all columns explicitly — no `select *` in marts
+- Max line length: 120 characters
+
+## Required Macros
+
+```sql
+-- Surrogate key (never raw MD5)
+{{ surrogate_key(['col1', 'col2']) }}
+
+-- Safe division (never raw /)
+{{ safe_divide(numerator, denominator) }}
+
+-- PII masking (gold layer)
+{{ pii_mask(email, 'email') }}
+
+-- Audit columns (add to all models)
+{{ audit_columns() }}  -- adds _dbt_loaded_at, _dbt_updated_at
+```
+
+## YAML Schema (required for every model)
+
+```yaml
+models:
+  - name: stg_coinbase__candles
+    description: "One row per OHLCV candle from Coinbase Advanced Trade API"
+    config:
+      materialized: view
+      schema: silver
+    columns:
+      - name: candle_id
+        description: "Surrogate key (product_id + start_time)"
+        tests:
+          - unique
+          - not_null
+      - name: open_price
+        description: "Opening price in USD"
+        tests:
+          - not_null
+          - positive_value
+
+sources:
+  - name: bronze
+    database: "{{ env_var('DBT_CATALOG') }}_raw"
+    schema: coinbase
+    tables:
+      - name: raw_coinbase_candles
+        loaded_at_field: _extracted_at
+        freshness:
+          warn_after: { count: 6, period: hour }
+          error_after: { count: 24, period: hour }
+```
+
+## Incremental Models (dims and facts)
+
+```sql
+{{ config(
+    materialized='incremental',
+    unique_key='candle_id',
+    incremental_strategy='merge',
+    on_schema_change='sync_all_columns',
+) }}
+
+{% if is_incremental() %}
+where candle_at > (select max(candle_at) from {{ this }})
+{% endif %}
+```
+
+## IronLayer Plan Integration
+
+Before running dbt in CI, always run `ironlayer plan`:
+- Validates the execution graph
+- Reports cost estimate for the run
+- Flags risky operations (full refresh, schema change)
+- Only proceed if confidence ≥ 70% and zero BLOCK findings
+
+## Source Freshness
+
+Run `dbt source freshness` daily. Alert if:
+- Bronze tables: warn > 6 hours stale, error > 24 hours
+- Silver/Gold: warn > 12 hours, error > 48 hours

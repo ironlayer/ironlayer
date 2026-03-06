@@ -1,0 +1,157 @@
+---
+description: Client deployment playbook — onboarding a new client to Exodus Foundation + IronLayer.
+globs: ["**/exodus-client-template/**", "**/exodus.yml", "**/review-standards/**"]
+alwaysApply: false
+---
+
+# Client Deployment Playbook
+
+## Client Repo Structure (`exodus-client-template`)
+
+```
+{client-name}/
+├── exodus.yml              # Master client config
+├── review-standards/
+│   └── client.yml          # BLOCK/WARN/NOTE rules for this client
+├── knowledge-base/
+│   └── domain.md           # Domain context injected into agent prompts
+├── ironlayer/              # Client-specific IronLayer models and overrides
+│   └── clients/{client}/   # Custom dbt models, sources, seeds
+└── terraform/
+    └── client.tfvars       # Per-client Terraform variable overrides
+```
+
+## Transformation Framework Selection
+
+Exodus supports three transformation frameworks. Determine which one the client uses during onboarding:
+
+| Framework | Auto-detect Signal | IronLayer Flag |
+|-----------|--------------------|----------------|
+| **dbt Core** | `dbt_project.yml` present | `--framework dbt` |
+| **SQLMesh** | `config.yaml` + `MODEL(` blocks in `.sql` files | `--framework sqlmesh` |
+| **Raw SQL** | Neither of the above | `--framework raw` |
+
+Run `ironlayer plan --framework auto .` during Phase 2 — it will auto-detect and confirm the framework. All IronLayer governance capabilities (cost, risk, lineage, safety, PR review) work regardless of framework.
+
+**Framework-specific resources:**
+- **dbt Core:** See `dbt-sql.mdc` rule + `exodus-dbt-model` skill
+- **dbt Cloud Enterprise:** See `dbt-cloud.mdc` rule + `exodus-dbt-cloud` skill
+- **SQLMesh:** See `sqlmesh.mdc` rule + `exodus-sqlmesh` skill
+
+## `exodus.yml` — Client Config Schema
+
+```yaml
+client:
+  id: client-alpha
+  name: "Client Alpha"
+  transformation_framework: dbt       # dbt | sqlmesh | raw | auto (default: auto)
+  databricks:
+    host: "https://xxx.azuredatabricks.net"
+    warehouse_id: "abc123"           # SQL Warehouse (user-facing queries only)
+    job_compute:                     # Job compute for CI/CD (cheapest)
+      node_type: "i3.xlarge"
+      min_workers: 1
+      max_workers: 4
+  unity_catalog:
+    raw_catalog: "client_alpha_raw"
+    prod_catalog: "client_alpha_prod"
+    ci_catalog:  "client_alpha_ci"   # Used for dbt clients; SQLMesh uses Virtual Environments
+  review:
+    block_threshold: 70              # confidence < 70 → Request Changes
+    standards_file: "review-standards/client.yml"
+    pass2_enabled: true              # Two-pass review (Pro tier)
+  platform_version: "2.0.0"         # Pinned Exodus Foundation version
+```
+
+## `review-standards/client.yml` — Review Rules
+
+```yaml
+# Inherits from exodus-autopilot/review-standards/default.yml
+# Override or add rules specific to this client
+# Framework-specific sections: dbt, sqlmesh, sql, terraform
+
+rules:
+  dbt:                               # Only applied for dbt clients
+    - id: CLIENT-001
+      severity: BLOCK
+      description: "All fact tables must have a grain comment in the model config"
+      pattern: "fct_*.sql missing grain comment"
+
+    - id: CLIENT-002
+      severity: WARN
+      description: "Staging models should not contain business logic"
+
+  sqlmesh:                           # Only applied for SQLMesh clients
+    - id: CLIENT-SM-001
+      severity: BLOCK
+      description: "INCREMENTAL_BY_UNIQUE_KEY models must define grain in MODEL DDL"
+
+    - id: CLIENT-SM-002
+      severity: WARN
+      description: "All INCREMENTAL models must define owner in MODEL DDL"
+
+  sql:
+    - id: CLIENT-SQL-001
+      severity: BLOCK
+      description: "Raw division is not allowed — use {{ safe_divide() }} (dbt) or @safe_divide() (sqlmesh)"
+
+  terraform:
+    - id: CLIENT-TF-001
+      severity: BLOCK
+      description: "All S3 buckets must have versioning enabled"
+```
+
+## Onboarding Checklist
+
+### Phase 1: Infrastructure (Days 1-2)
+- [ ] Create client in `exodus-terraform/clients/{client}.tf`
+- [ ] `terraform apply` — creates GitHub repo, Databricks catalogs, S3 bucket, IAM roles
+- [ ] Validate Unity Catalog topology: raw / prod / ci catalogs
+- [ ] Configure GitHub App installation for client repo
+
+### Phase 2: Data Stack (Days 3-4)
+- [ ] Copy `exodus-client-template` → client's new repo
+- [ ] Fill in `exodus.yml` with client's Databricks details and `transformation_framework`
+- [ ] Run `ironlayer plan --framework auto .` — confirm framework detection
+- [ ] **If dbt:** Configure `profiles.yml`; run `dbt build --target dev` to validate connectivity
+- [ ] **If SQLMesh:** Configure `config.yaml` gateway; run `sqlmesh plan dev` to validate connectivity
+- [ ] Configure source extractors (Coinbase, HubSpot, or client-specific)
+
+### Phase 3: AI Review (Day 5)
+- [ ] Fill in `review-standards/client.yml` with client-specific rules (include `sqlmesh:` section if SQLMesh client)
+- [ ] Fill in `knowledge-base/domain.md` with domain context
+- [ ] Test GitHub App webhook (open a test PR, verify review comment)
+- [ ] Validate framework-specific CI: dbt build OR sqlmesh plan + table diff
+- [ ] Validate two-pass review triggers (pass 1 and pass 2 escalation)
+- [ ] Enable `PRHealingAgent` if Pro tier
+
+### Phase 4: Demo Readiness
+- [ ] Run `ironlayer plan .` on client project — generate first plan report (auto-detects framework)
+- [ ] Run full CI on a sample PR — data diff (dbt: IronLayer engine; sqlmesh: `table_diff`), lineage, anomaly detection
+- [ ] Review costs: `exodus ai-usage --month`
+- [ ] Client walkthrough: show AI review comment, auto-fix demo
+
+## Terraform Provisioning (exodus-terraform)
+
+```hcl
+# terraform/clients/client-alpha.tf
+module "client_alpha" {
+  source = "../modules/client"
+
+  client_id     = "client-alpha"
+  client_name   = "Client Alpha"
+  github_org    = "ironlayer"
+  databricks_host = "https://xxx.azuredatabricks.net"
+
+  subscription_tier = "pro"  # free | pro
+
+  tags = merge(local.common_tags, {
+    Client = "client-alpha"
+  })
+}
+```
+
+## Version Pinning
+
+Clients pin to a specific Exodus Foundation version in `exodus.yml` (`platform_version`).
+Upgrading: update `platform_version` → open PR → AI review validates the change → human approves.
