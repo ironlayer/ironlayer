@@ -778,7 +778,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
     { name = "rich", specifier = ">=13.0,<14.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3.0" },
-    { name = "sqlglot", specifier = ">=26.0" },
+    { name = "sqlglot", specifier = ">=26.0,<30.0" },
 ]
 
 [package.metadata.requires-dev]

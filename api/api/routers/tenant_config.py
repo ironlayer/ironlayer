@@ -478,6 +478,13 @@ async def test_llm_key(
         )
         return {"status": "ok", "model": response.model}
     except Exception as exc:  # LLM client can raise various errors (network, API, validation)
+        # BL-087: Log the full (redacted) message server-side but return a generic
+        # error to the client.  Provider error messages can reveal rate-limit quotas,
+        # account tier info, and internal endpoint URLs — none of which should be
+        # exposed to the API consumer.
         redacted_message = _redact_key(str(exc), plaintext)
         logger.warning("LLM key test failed for tenant=%s: %s", tenant_id, redacted_message)
-        return {"status": "error", "detail": "LLM key validation failed", "error": redacted_message}
+        return {
+            "status": "error",
+            "detail": "Provider returned an error — check the key and account status",
+        }

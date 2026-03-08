@@ -69,4 +69,7 @@ warn_return_any = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Safety net: add workspace packages to sys.path so tests work even when
+# the venv .pth files are stale or missing (e.g. after a repo move).
+pythonpath = [".", "../core_engine", "../api"]
 addopts = "--cov=cli --cov-report=term-missing"

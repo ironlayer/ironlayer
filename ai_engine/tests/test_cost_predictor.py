@@ -7,8 +7,6 @@ cost rate variation, and edge cases (zero partitions, very large volumes).
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -58,7 +56,11 @@ class TestHasTrainedModel:
         assert predictor.has_trained_model is False
 
     def test_model_loaded_from_disk(self, tmp_path):
-        """When a valid model file exists, has_trained_model is True."""
+        """When a valid model file exists, has_trained_model is True after predict().
+
+        BL-100: model loading is lazy, so has_trained_model is False immediately
+        after construction and only becomes True after the first predict() call.
+        """
         from sklearn.linear_model import LinearRegression
 
         import joblib
@@ -78,7 +80,13 @@ class TestHasTrainedModel:
         joblib.dump(model, model_path)
 
         predictor = CostPredictor(model_path=model_path)
+        # BL-100: lazy loading — model is NOT loaded at construction time.
+        assert predictor.has_trained_model is False
+        assert predictor.is_ready is False
+        # Trigger load via predict().
+        predictor.predict(_req())
         assert predictor.has_trained_model is True
+        assert predictor.is_ready is True
 
 
 # ================================================================== #
@@ -194,7 +202,11 @@ class TestTrainedModelPrediction:
         model_path = tmp_path / "cost_model.joblib"
         joblib.dump(model, model_path)
 
-        return CostPredictor(model_path=model_path)
+        predictor = CostPredictor(model_path=model_path)
+        # BL-100: Warm up the predictor to trigger lazy model loading so that
+        # all tests in this class receive a "hot" predictor with has_trained_model=True.
+        predictor.predict(_req())
+        return predictor
 
     def test_trained_model_is_used(self, trained_predictor):
         assert trained_predictor.has_trained_model is True
@@ -334,3 +346,94 @@ class TestEdgeCases:
         assert "estimated_runtime_minutes" in data
         assert "estimated_cost_usd" in data
         assert "confidence" in data
+
+
+# ================================================================== #
+# BL-100: Lazy model loading + is_ready
+# ================================================================== #
+
+
+class TestLazyLoading:
+    """BL-100: Model loading is deferred to the first predict() call."""
+
+    def test_heuristic_mode_is_immediately_ready(self):
+        """Pure heuristic mode (no path, no registry) is ready at construction."""
+        predictor = CostPredictor(model_path=None, registry=None)
+        assert predictor.is_ready is True
+
+    def test_model_path_mode_not_ready_at_init(self, tmp_path):
+        """When model_path is set, predictor is NOT ready until first predict()."""
+        import joblib
+        from sklearn.linear_model import LinearRegression
+
+        model = LinearRegression()
+        X = np.array([[1, 2, 3, 0, 0, 0, 0, 0]], dtype=np.float64)
+        y = np.array([100.0])
+        model.fit(X, y)
+        model_path = tmp_path / "cost_model.joblib"
+        joblib.dump(model, model_path)
+
+        predictor = CostPredictor(model_path=model_path)
+        assert predictor.is_ready is False
+        assert predictor.has_trained_model is False
+
+    def test_model_path_mode_ready_after_predict(self, tmp_path):
+        """After predict() the predictor is ready and model is loaded."""
+        import joblib
+        from sklearn.linear_model import LinearRegression
+
+        model = LinearRegression()
+        X = np.array(
+            [[1, 2, 3, 0, 0, 0, 0, 0], [4, 5, 6, 0, 0, 0, 0, 0]],
+            dtype=np.float64,
+        )
+        y = np.array([100.0, 200.0])
+        model.fit(X, y)
+        model_path = tmp_path / "cost_model.joblib"
+        joblib.dump(model, model_path)
+
+        predictor = CostPredictor(model_path=model_path)
+        predictor.predict(_req())
+
+        assert predictor.is_ready is True
+        assert predictor.has_trained_model is True
+
+    def test_nonexistent_path_becomes_ready_after_predict(self, tmp_path):
+        """Missing model file → heuristic fallback; predictor still becomes ready."""
+        predictor = CostPredictor(model_path=tmp_path / "missing.joblib")
+        assert predictor.is_ready is False
+
+        result = predictor.predict(_req())
+
+        assert predictor.is_ready is True
+        assert predictor.has_trained_model is False
+        assert result.confidence == 0.4  # heuristic confidence
+
+    def test_ensure_loaded_is_idempotent(self):
+        """Calling _ensure_loaded() multiple times on a ready predictor is safe."""
+        predictor = CostPredictor(model_path=None, registry=None)
+        assert predictor.is_ready is True
+        predictor._ensure_loaded()
+        predictor._ensure_loaded()
+        assert predictor.is_ready is True
+
+    def test_registry_mode_not_ready_at_init(self, tmp_path):
+        """Registry mode is NOT ready until first predict()."""
+        from ai_engine.ml.model_registry import ModelRegistry
+
+        registry = ModelRegistry(models_dir=tmp_path)
+        predictor = CostPredictor(registry=registry)
+        assert predictor.is_ready is False
+        assert predictor.has_trained_model is False
+
+    def test_registry_mode_ready_after_predict_fallback(self, tmp_path):
+        """Registry with no cost_model uses heuristic; predictor becomes ready."""
+        from ai_engine.ml.model_registry import ModelRegistry
+
+        registry = ModelRegistry(models_dir=tmp_path)
+        predictor = CostPredictor(registry=registry)
+        result = predictor.predict(_req())
+
+        assert predictor.is_ready is True
+        assert predictor.has_trained_model is False
+        assert result.confidence == 0.4  # heuristic

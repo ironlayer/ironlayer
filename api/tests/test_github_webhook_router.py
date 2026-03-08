@@ -34,7 +34,7 @@ from api.services.ai_client import AIServiceClient
 # ---------------------------------------------------------------------------
 
 _DEV_SECRET = "test-secret-key-for-ironlayer-tests"
-_WEBHOOK_SECRET = "test-webhook-hmac-secret"
+_WEBHOOK_SECRET = "test-webhook-hmac-secret-long-enough-32c"
 _CREDENTIAL_KEY = "ironlayer-dev-secret-change-in-production"
 
 
@@ -472,8 +472,12 @@ class TestWebhookHMACValidation:
         assert "Signature verification failed" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_missing_secret_encrypted_logs_warning(self) -> None:
-        """Config without secret_encrypted still processes (degraded mode)."""
+    async def test_missing_secret_encrypted_returns_403(self) -> None:
+        """Config without secret_encrypted is rejected with 403 (BL-044).
+
+        Previously this fell through in degraded mode — now a missing secret
+        is a hard reject to prevent unauthenticated webhook processing.
+        """
         app, mock_session = _create_test_app()
         transport = ASGITransport(app=app)
 
@@ -506,8 +510,9 @@ class TestWebhookHMACValidation:
                     },
                 )
 
-        # Degraded mode: event is still processed but a warning is logged.
-        assert resp.status_code == 200
+        # BL-044: no secret → 403 Forbidden (hard reject, not degraded pass-through).
+        assert resp.status_code == 403
+        assert "secret" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_decryption_failure_returns_500(self) -> None:
@@ -588,7 +593,7 @@ class TestWebhookConfigCreate:
                     json={
                         "repo_url": "https://github.com/org/repo.git",
                         "branch": "main",
-                        "secret": "my-webhook-secret",
+                        "secret": "my-webhook-secret-that-is-32-chars-or-more",
                     },
                 )
 
@@ -599,7 +604,7 @@ class TestWebhookConfigCreate:
 
     @pytest.mark.asyncio
     async def test_create_config_secret_too_short(self) -> None:
-        """Secret shorter than 8 chars returns 422."""
+        """Secret shorter than 32 chars returns 422 (BL-060: raised entropy requirement)."""
         app, _ = _create_test_app()
         transport = ASGITransport(app=app)
 
@@ -636,7 +641,7 @@ class TestWebhookRBAC:
                 json={
                     "repo_url": "https://github.com/org/repo.git",
                     "branch": "main",
-                    "secret": "my-webhook-secret",
+                    "secret": "my-webhook-secret-that-is-32-chars-or-more",
                 },
             )
 
@@ -654,7 +659,7 @@ class TestWebhookRBAC:
                 json={
                     "repo_url": "https://github.com/org/repo.git",
                     "branch": "main",
-                    "secret": "my-webhook-secret",
+                    "secret": "my-webhook-secret-that-is-32-chars-or-more",
                 },
             )
 
@@ -672,7 +677,7 @@ class TestWebhookRBAC:
                 json={
                     "repo_url": "https://github.com/org/repo.git",
                     "branch": "main",
-                    "secret": "my-webhook-secret",
+                    "secret": "my-webhook-secret-that-is-32-chars-or-more",
                 },
             )
 

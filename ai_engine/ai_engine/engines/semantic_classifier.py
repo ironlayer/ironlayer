@@ -165,7 +165,7 @@ class SemanticClassifier:
     # Public
     # ------------------------------------------------------------------
 
-    def classify(
+    async def classify(
         self,
         request: SemanticClassifyRequest,
     ) -> SemanticClassifyResponse:
@@ -185,7 +185,7 @@ class SemanticClassifier:
             and self._llm.enabled
             and llm_enabled
         ):
-            result = self._llm_enrich(request, result)
+            result = await self._llm_enrich(request, result)
 
         return result
 
@@ -593,7 +593,7 @@ class SemanticClassifier:
     # LLM enrichment
     # ------------------------------------------------------------------
 
-    def _llm_enrich(
+    async def _llm_enrich(
         self,
         request: SemanticClassifyRequest,
         rule_result: SemanticClassifyResponse,
@@ -614,7 +614,7 @@ class SemanticClassifier:
         if hasattr(request, "api_key") and request.api_key is not None:
             tenant_api_key = request.api_key.get_secret_value()
 
-        llm_result = self._llm.classify_change(
+        llm_result = await self._llm.classify_change(
             old_sql=request.old_sql,
             new_sql=request.new_sql,
             context="\n".join(context_parts),

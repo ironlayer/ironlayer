@@ -312,3 +312,96 @@ class RunRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one() or 0
+
+    async def get_historical_stats_batch(self, model_names: list[str]) -> dict[str, Any]:
+        """Return historical stats for multiple models in two queries instead of 2N.
+
+        Uses ``WHERE model_name IN (...)`` aggregated with ``GROUP BY model_name``.
+        Returns a mapping of ``{model_name: {avg_runtime_seconds, avg_cost_usd, run_count}}``.
+        Models with no completed runs are absent from the result.
+        """
+        if not model_names:
+            return {}
+
+        # Subquery: last 30 completed runs per model, ranked newest-first.
+        ranked = (
+            select(
+                RunTable.model_name,
+                RunTable.started_at,
+                RunTable.finished_at,
+                RunTable.cost_usd,
+                func.row_number()
+                .over(
+                    partition_by=RunTable.model_name,
+                    order_by=RunTable.finished_at.desc(),
+                )
+                .label("rn"),
+            )
+            .where(
+                RunTable.tenant_id == self._tenant_id,
+                RunTable.model_name.in_(model_names),
+                RunTable.status == "COMPLETED",
+                RunTable.finished_at.is_not(None),
+                RunTable.started_at.is_not(None),
+            )
+            .subquery()
+        )
+
+        # Only take the most recent 30 runs per model.
+        filtered = select(
+            ranked.c.model_name,
+            ranked.c.started_at,
+            ranked.c.finished_at,
+            ranked.c.cost_usd,
+        ).where(ranked.c.rn <= 30).subquery()
+
+        agg_stmt = select(
+            filtered.c.model_name,
+            func.count().label("run_count"),
+            func.avg(
+                func.extract("epoch", filtered.c.finished_at)
+                - func.extract("epoch", filtered.c.started_at)
+            ).label("avg_runtime"),
+            func.avg(filtered.c.cost_usd).label("avg_cost"),
+        ).group_by(filtered.c.model_name)
+
+        agg_result = await self._session.execute(agg_stmt)
+        output: dict[str, Any] = {}
+        for row in agg_result.all():
+            output[row.model_name] = {
+                "avg_runtime_seconds": float(row.avg_runtime) if row.avg_runtime is not None else None,
+                "avg_cost_usd": float(row.avg_cost) if row.avg_cost is not None else None,
+                "run_count": row.run_count,
+            }
+        return output
+
+    async def get_failure_rates_batch(self, model_names: list[str]) -> dict[str, float]:
+        """Return the failure rate for each model in a single aggregated query.
+
+        Uses ``WHERE model_name IN (...)`` with ``GROUP BY model_name``.
+        Returns a mapping of ``{model_name: failure_rate}`` where ``failure_rate``
+        is ``failed_count / total_count``.  Models with zero runs get a rate of 0.0.
+        """
+        if not model_names:
+            return {}
+
+        stmt = select(
+            RunTable.model_name,
+            func.count().label("total"),
+            func.count().filter(RunTable.status == "FAILED").label("failed"),
+        ).where(
+            RunTable.tenant_id == self._tenant_id,
+            RunTable.model_name.in_(model_names),
+        ).group_by(RunTable.model_name)
+
+        result = await self._session.execute(stmt)
+        rates: dict[str, float] = {}
+        for row in result.all():
+            total = row.total or 0
+            failed = row.failed or 0
+            rates[row.model_name] = 0.0 if total == 0 else failed / total
+        # Ensure all requested names have an entry (even if no runs exist).
+        for name in model_names:
+            if name not in rates:
+                rates[name] = 0.0
+        return rates

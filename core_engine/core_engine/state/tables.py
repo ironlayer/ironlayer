@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -342,6 +343,14 @@ class AuditLogTable(Base):
     The ``entry_hash`` is a SHA-256 digest of the entry's content fields,
     and ``previous_hash`` links to the preceding entry's hash to form a
     tamper-evident chain per tenant.
+
+    GDPR right-to-erasure notes
+    ---------------------------
+    ``is_anonymized`` is set to ``True`` when ``actor`` and ``metadata_json``
+    have been redacted.  Hash-chain verification (``verify_chain``) skips the
+    hash recomputation for anonymized entries — the stored ``entry_hash``
+    (computed from original data) is used as-is to advance the chain — so
+    the chain remains verifiable for all non-anonymized surrounding entries.
     """
 
     __tablename__ = "audit_log"
@@ -356,8 +365,10 @@ class AuditLogTable(Base):
     previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_anonymized: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
 
     __table_args__ = (
+        Index("ix_audit_log_tenant_id", "tenant_id"),
         Index("ix_audit_tenant_created", "tenant_id", "created_at"),
         Index("ix_audit_tenant_action", "tenant_id", "action"),
         Index("ix_audit_entity", "tenant_id", "entity_type", "entity_id"),
@@ -419,6 +430,7 @@ class TenantConfigTable(Base):
     api_quota_monthly: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ai_quota_monthly: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     max_seats: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
     updated_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
@@ -548,9 +560,11 @@ class UsageEventTable(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
+        # Composite index covering (tenant_id, event_type, created_at).
+        # ix_usage_events_tenant_type_month was an identical duplicate — dropped by BL-101.
+        # ix_usage_events_tenant_created (tenant_id, created_at) was a strict prefix
+        # subset of this composite index — dropped by BL-101 (migration 029).
         Index("ix_usage_events_tenant_type_created", "tenant_id", "event_type", "created_at"),
-        Index("ix_usage_events_tenant_type_month", "tenant_id", "event_type", "created_at"),
-        Index("ix_usage_events_tenant_created", "tenant_id", "created_at"),
     )
 
 
@@ -961,7 +975,7 @@ class APIKeyTable(Base):
     """Long-lived API keys for programmatic access (CLI, CI/CD).
 
     Keys are shown to the user exactly once at creation time.  Only the
-    SHA-256 hash of the key is stored; the first 8 characters are kept as
+    SHA-256 hash of the key is stored; the first 16 characters are kept as
     a prefix to help users identify their keys.
     """
 
@@ -971,7 +985,7 @@ class APIKeyTable(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     scopes: Mapped[dict | None] = mapped_column(_JsonType, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1127,4 +1141,49 @@ class InvoiceTable(Base):
         Index("ix_invoices_tenant_number", "tenant_id", "invoice_number", unique=True),
         Index("ix_invoices_stripe_invoice", "stripe_invoice_id"),
         Index("ix_invoices_tenant_period", "tenant_id", "period_start", "period_end"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Event outbox (transactional event persistence)
+# ---------------------------------------------------------------------------
+
+
+class EventOutboxTable(Base):
+    """Transactional outbox for guaranteed-delivery event dispatch.
+
+    Events written here are part of the same database transaction as the
+    business operation that triggered them, ensuring at-least-once delivery
+    even if the process crashes after the transaction commits.
+
+    An ``OutboxPoller`` background task reads ``pending`` entries and
+    dispatches them through the in-memory ``EventBus`` handlers, then
+    marks them ``delivered``.  Failed entries are retried up to
+    ``max_attempts`` times before being marked ``failed``.
+    """
+
+    __tablename__ = "event_outbox"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict] = mapped_column(_JsonType, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'delivered', 'failed')",
+            name="ck_event_outbox_status",
+        ),
+        Index("ix_event_outbox_status_created", "status", "created_at"),
+        Index("ix_event_outbox_tenant", "tenant_id"),
     )

@@ -172,7 +172,7 @@ async def list_plans(
     tenant_id: TenantDep,
     _role: Role = Depends(require_permission(Permission.READ_PLANS)),
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=100_000),
 ) -> list[dict[str, Any]]:
     """Return a paginated list of plan summaries."""
     service = PlanService(session, ai_client, settings, tenant_id=tenant_id)

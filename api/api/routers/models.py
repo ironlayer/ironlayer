@@ -11,7 +11,7 @@ from core_engine.state.repository import (
     RunRepository,
     WatermarkRepository,
 )
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import SessionDep, SettingsDep, TenantDep
 from api.http_errors import not_found_404
@@ -37,7 +37,7 @@ async def list_models(
     owner: str | None = Query(default=None, description="Filter by owner."),
     search: str | None = Query(default=None, description="Text search on model name."),
     limit: int = Query(default=100, ge=1, le=500, description="Max models to return."),
-    offset: int = Query(default=0, ge=0, description="Number of rows to skip."),
+    offset: int = Query(default=0, ge=0, le=100_000, description="Number of rows to skip."),
 ) -> list[dict[str, Any]]:
     """Return registered models with pagination, optionally filtered."""
     repo = ModelRepository(session, tenant_id=tenant_id)
@@ -243,7 +243,11 @@ async def get_model_lineage(
     if target is None:
         raise not_found_404("Model", model_name)
 
-    all_models = await repo.list_all(limit=500)
+    # BL-074: cap list_all at 1000 to support larger tenants; report truncation.
+    # TODO: replace with a PostgreSQL recursive CTE for O(1) memory at scale.
+    _LINEAGE_MODEL_CAP = 1000
+    all_models = await repo.list_all(limit=_LINEAGE_MODEL_CAP)
+    graph_truncated = len(all_models) >= _LINEAGE_MODEL_CAP
 
     # Build adjacency from model metadata.
     # Each model's tags field may contain dependency info, but the
@@ -264,8 +268,17 @@ async def get_model_lineage(
         children_of.setdefault(m.model_name, set())
         parents_of.setdefault(m.model_name, set())
 
-    # Walk relationships (BFS upstream).
+    # BL-074: Maximum graph traversal depth.  Chains deeper than this limit
+    # would cause RecursionError (~1000 default) and are pathological.
+    _MAX_LINEAGE_DEPTH = 50
+    depth_truncated = False
+
     def _walk_upstream(name: str, depth: int = 0) -> int:
+        nonlocal depth_truncated
+        # BL-074: hard depth cap — stop traversal and flag truncation.
+        if depth > _MAX_LINEAGE_DEPTH:
+            depth_truncated = True
+            return depth
         max_depth = depth
         for parent in parents_of.get(name, set()):
             if parent not in _visited_up:
@@ -275,6 +288,11 @@ async def get_model_lineage(
         return max_depth
 
     def _walk_downstream(name: str, depth: int = 0) -> int:
+        nonlocal depth_truncated
+        # BL-074: hard depth cap — stop traversal and flag truncation.
+        if depth > _MAX_LINEAGE_DEPTH:
+            depth_truncated = True
+            return depth
         max_depth = depth
         for child in children_of.get(name, set()):
             if child not in _visited_down:
@@ -285,12 +303,14 @@ async def get_model_lineage(
 
     depth_up = _walk_upstream(model_name)
     depth_down = _walk_downstream(model_name)
+    is_truncated = depth_truncated or graph_truncated
 
     return {
         "model_name": model_name,
         "upstream": sorted(upstream),
         "downstream": sorted(downstream),
         "depth": max(depth_up, depth_down),
+        "is_truncated": is_truncated,
     }
 
 
@@ -441,12 +461,6 @@ async def get_model(
     # Fetch latest run stats.
     run_repo = RunRepository(session, tenant_id=tenant_id)
     stats = await run_repo.get_historical_stats(model_name)
-
-    # Fetch most recent runs.
-    await run_repo.get_by_plan("")  # empty plan_id returns nothing
-    # Instead, query by model name through recent plan runs.
-    # The RunRepository does not have a get_by_model method, so we
-    # rely on historical stats for run info.
 
     tags = json.loads(row.tags) if row.tags else []
 

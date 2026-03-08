@@ -102,13 +102,23 @@ class PlanRepository:
                 await self._session.execute(stmt)
             await self._session.flush()
 
-    async def list_recent(self, limit: int = 20) -> list[PlanTable]:
-        """Return the most recently created plans."""
+    async def list_recent(self, limit: int = 20, offset: int = 0) -> list[PlanTable]:
+        """Return the most recently created plans with SQL-level pagination.
+
+        Parameters
+        ----------
+        limit:
+            Maximum number of rows to return.
+        offset:
+            Number of rows to skip before returning results (applied at SQL
+            level to avoid O(offset) memory overhead).
+        """
         stmt = (
             select(PlanTable)
             .where(PlanTable.tenant_id == self._tenant_id)
             .order_by(PlanTable.created_at.desc())
             .limit(limit)
+            .offset(offset)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

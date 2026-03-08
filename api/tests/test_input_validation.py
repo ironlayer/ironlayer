@@ -568,13 +568,23 @@ class TestPaginationLimits:
         client: AsyncClient,
         _mock_session: AsyncMock,
     ) -> None:
-        """Very large offset values should be accepted (returns empty results)."""
+        """Large offset values within the cap (le=100_000) should be accepted."""
         with patch("api.routers.models.ModelRepository") as MockRepo:
             instance = MockRepo.return_value
             instance.list_all = AsyncMock(return_value=[])
-            resp = await client.get("/api/v1/models?offset=999999")
+            resp = await client.get("/api/v1/models?offset=100000")
             assert resp.status_code == 200
             assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_offset_exceeding_cap_rejected(
+        self,
+        client: AsyncClient,
+        _mock_session: AsyncMock,
+    ) -> None:
+        """BL-068: Offsets above 100_000 are rejected (prevents sequential scan DoS)."""
+        resp = await client.get("/api/v1/models?offset=999999")
+        assert resp.status_code == 422
 
     @pytest.mark.asyncio
     async def test_non_integer_limit_rejected(

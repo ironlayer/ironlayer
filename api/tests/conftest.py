@@ -12,7 +12,7 @@ import hmac
 import json
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 

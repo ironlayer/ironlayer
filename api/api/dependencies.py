@@ -12,7 +12,7 @@ from core_engine.state.database import get_engine, set_tenant_context
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api.config import APISettings, load_api_settings
+from api.config import APISettings
 from api.services.ai_client import AIServiceClient
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,22 @@ SettingsDep = Annotated[APISettings, Depends(get_settings)]
 
 
 def init_engine(settings: APISettings) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
-    """Create async engine and session factory. Caller stores on app.state."""
-    engine = get_engine(settings.database_url)
+    """Create async engine and session factory. Caller stores on app.state.
+
+    BL-096: Pool configuration is read from settings (DB_POOL_SIZE, DB_MAX_OVERFLOW,
+    DB_POOL_TIMEOUT) and logged at startup (INFO level) for operational visibility.
+    """
+    engine = get_engine(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    logger.info(
+        "DB connection pool: pool_size=%d max_overflow=%d pool_timeout=%.1fs pool_pre_ping=True",
+        settings.db_pool_size,
+        settings.db_max_overflow,
+        settings.db_pool_timeout,
+    )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, session_factory
 

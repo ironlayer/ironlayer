@@ -13,7 +13,7 @@ from typing import Any
 
 import bcrypt
 from core_engine.state.repository import EventSubscriptionRepository
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from api.dependencies import SessionDep, TenantDep
@@ -47,9 +47,9 @@ class EventSubscriptionCreate(BaseModel):
     )
     secret: str | None = Field(
         default=None,
-        min_length=8,
+        min_length=32,
         description=(
-            "Webhook signing secret (min 8 chars).  Used to compute "
+            "Webhook signing secret (min 32 chars).  Used to compute "
             "HMAC-SHA256 signatures sent in the X-IronLayer-Signature header.  "
             "The secret is bcrypt-hashed at rest."
         ),
@@ -72,8 +72,8 @@ class EventSubscriptionUpdate(BaseModel):
     url: str | None = Field(default=None, min_length=1, max_length=2048)
     secret: str | None = Field(
         default=None,
-        min_length=8,
-        description="New signing secret.  Omit to leave unchanged.",
+        min_length=32,
+        description="New signing secret (min 32 chars).  Omit to leave unchanged.",
     )
     event_types: list[str] | None = Field(default=None)
     active: bool | None = Field(default=None)

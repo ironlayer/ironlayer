@@ -16,7 +16,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 
@@ -132,7 +131,7 @@ class TestCreateSubscription:
                 json={
                     "name": "Secure Hook",
                     "url": "https://secure.example.com/hook",
-                    "secret": "my-super-secret-key-123",
+                    "secret": "my-super-secret-key-at-least-32chars",
                 },
             )
 

@@ -19,7 +19,7 @@ from typing import Any
 from core_engine.state.repository import TokenRevocationRepository
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from api.dependencies import PublicSessionDep, SessionDep, SettingsDep, TenantDep, UserDep
 from api.http_errors import not_found_404
@@ -39,7 +39,8 @@ _REFRESH_COOKIE_KEY = "refresh_token"
 _REFRESH_COOKIE_MAX_AGE = 7 * 24 * 3600  # 7 days
 _REFRESH_COOKIE_PATH = "/api/v1/auth"  # Sent to refresh + session endpoints
 
-# Module-level login rate limiter instance (in-memory, single-replica).
+# Module-level login rate limiter instance.
+# Uses Redis when configured (via lifespan); falls back to in-memory otherwise.
 _login_limiter = LoginRateLimiter()
 
 # Generic message for public auth failures to avoid user enumeration.
@@ -68,6 +69,19 @@ class SignupRequest(BaseModel):
     email: EmailStr = Field(..., description="Email address.")
     password: str = Field(..., min_length=8, description="Password (min 8 characters).")
     display_name: str = Field(..., min_length=1, max_length=256, description="Display name.")
+
+    @field_validator("password")
+    @classmethod
+    def _check_password_complexity(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters.")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not any(c.isdigit() or not c.isalnum() for c in v):
+            raise ValueError("Password must contain at least one digit or special character.")
+        return v
 
 
 class LoginRequest(BaseModel):
@@ -260,7 +274,7 @@ async def login(
     client_ip = _get_client_ip(request)
 
     # Check rate limit BEFORE validating credentials.
-    allowed, retry_after = _login_limiter.check_rate_limit(body.email, client_ip)
+    allowed, retry_after = await _login_limiter.check_rate_limit(body.email, client_ip)
     if not allowed:
         raise HTTPException(
             status_code=429,
@@ -273,12 +287,12 @@ async def login(
         result = await svc.login(email=body.email, password=body.password)
     except AuthError as exc:
         # Record the failure for brute-force tracking.
-        _login_limiter.record_failure(body.email, client_ip)
+        await _login_limiter.record_failure(body.email, client_ip)
         logger.warning("Login failed for %s: %s", body.email, exc)
         raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     # Successful login — reset the failure counter.
-    _login_limiter.record_success(body.email, client_ip)
+    await _login_limiter.record_success(body.email, client_ip)
 
     body_data = TokenResponse(
         access_token=result["access_token"],
@@ -309,7 +323,11 @@ async def refresh(
 
     refresh_token = request.cookies.get(_REFRESH_COOKIE_KEY)
     if not refresh_token:
-        raise HTTPException(status_code=401, detail="No refresh token cookie")
+        raise HTTPException(
+            status_code=401,
+            detail="No refresh token cookie",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     svc = AuthService(session, settings=settings)
     try:
@@ -355,7 +373,11 @@ async def restore_session(
 
     refresh_token = request.cookies.get(_REFRESH_COOKIE_KEY)
     if not refresh_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(
+            status_code=401,
+            detail="No refresh token cookie",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     svc = AuthService(session, settings=settings)
 
@@ -367,6 +389,7 @@ async def restore_session(
         error_response = JSONResponse(
             content={"detail": _AUTH_FAILURE_MESSAGE},
             status_code=exc.status_code,
+            headers={"WWW-Authenticate": "Bearer"},
         )
         _clear_refresh_cookie(error_response)
         return error_response
@@ -374,9 +397,13 @@ async def restore_session(
     # Decode the new access token to extract user/tenant info.
     tm = svc._tm
     try:
-        claims = tm.validate_token(refreshed["access_token"])
-    except PermissionError as exc:
-        raise HTTPException(status_code=401, detail=str(exc))
+        claims = await tm.validate_token_async(refreshed["access_token"])
+    except PermissionError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Fetch full user profile.
     try:
@@ -446,7 +473,8 @@ async def get_me(
     try:
         profile = await svc.get_current_user(user_id=user, tenant_id=tenant_id)
     except AuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        logger.warning("GET /auth/me failed for user=%s: %s", user, exc)
+        raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     return UserProfileResponse(**profile)
 
@@ -485,7 +513,8 @@ async def create_api_key(
             scopes=body.scopes,
         )
     except AuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        logger.warning("API key creation failed for user=%s: %s", user, exc)
+        raise HTTPException(status_code=exc.status_code, detail=_AUTH_FAILURE_MESSAGE)
 
     # Audit log the API key creation.
     audit = AuditService(session, tenant_id=tenant_id, actor=user)

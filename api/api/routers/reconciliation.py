@@ -14,7 +14,7 @@ from typing import Any
 from core_engine.license.feature_flags import Feature
 from core_engine.state.repository import ReconciliationScheduleRepository
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.dependencies import SessionDep, TenantDep, require_feature
 from api.http_errors import not_found_404
@@ -68,6 +68,20 @@ class ScheduleRequest(BaseModel):
         default=True,
         description="Whether the schedule is active.",
     )
+
+    @field_validator("cron_expression")
+    @classmethod
+    def _validate_cron(cls, v: str) -> str:
+        if len(v) > 100:
+            raise ValueError("Cron expression must not exceed 100 characters.")
+        try:
+            from croniter import croniter
+
+            if not croniter.is_valid(v):
+                raise ValueError(f"Invalid cron expression: {v!r}.")
+        except ImportError:
+            pass  # croniter not installed — skip validation
+        return v
 
 
 # ---------------------------------------------------------------------------

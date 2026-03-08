@@ -27,7 +27,7 @@ async def list_tenants(
     status: str | None = Query(None, description="Filter by health status: active, at_risk, churning"),
     sort_by: str = Query("health_score", description="Sort by: health_score, health_score_desc, updated_at, tenant_id"),
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=100_000),
 ) -> dict[str, Any]:
     """List all tenants with health scores, filterable by status.
 

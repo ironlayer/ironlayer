@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class BodyLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests with Content-Length exceeding max_body_size bytes."""
 
-    def __init__(self, app: object, *, max_body_size: int = 1_048_576) -> None:
+    def __init__(self, app: ASGIApp, *, max_body_size: int = 1_048_576) -> None:
         super().__init__(app)
         self._max_size = max_body_size
 
