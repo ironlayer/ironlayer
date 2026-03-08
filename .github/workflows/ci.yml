@@ -568,75 +568,42 @@ jobs:
             --name ${{ vars.APP_PREFIX }}-migrate \
             --resource-group ${{ env.RESOURCE_GROUP }}
 
-      - name: Deploy API
-        run: |
-          az containerapp update \
-            --name ${{ vars.APP_PREFIX }}-api \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image "${{ env.ACR_LOGIN_SERVER }}/ironlayer-api:${{ steps.version.outputs.tag }}"
+      # Canary deploys — each call to canary_deploy.sh:
+      #   1. Enables multiple-revision mode (idempotent)
+      #   2. Records the current active revision
+      #   3. Deploys the new revision at 0% traffic
+      #   4. Waits for the new revision to reach Running state (up to 3 min)
+      #   5. Smoke-tests the canary directly via its revision FQDN
+      #   6. Shifts traffic progressively: 10% → 50% → 100% (1 min between shifts)
+      #   7. On any failure: restores 100% traffic to old revision and exits 1.
+      # Revision suffix uses the tag with dots → dashes (Azure CA name constraint).
 
-      - name: Deploy AI Engine
+      - name: Deploy API (canary)
         run: |
-          az containerapp update \
-            --name ${{ vars.APP_PREFIX }}-ai \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image "${{ env.ACR_LOGIN_SERVER }}/ironlayer-ai:${{ steps.version.outputs.tag }}"
+          SUFFIX="v$(echo '${{ steps.version.outputs.tag }}' | tr '.' '-')"
+          bash infra/scripts/canary_deploy.sh \
+            "${{ vars.APP_PREFIX }}-api" \
+            "${{ env.ACR_LOGIN_SERVER }}/ironlayer-api:${{ steps.version.outputs.tag }}" \
+            "/api/v1/health" \
+            "$SUFFIX"
 
-      - name: Deploy Frontend
+      - name: Deploy AI Engine (canary)
         run: |
-          az containerapp update \
-            --name ${{ vars.APP_PREFIX }}-frontend \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image "${{ env.ACR_LOGIN_SERVER }}/ironlayer-frontend:${{ steps.version.outputs.tag }}"
+          SUFFIX="v$(echo '${{ steps.version.outputs.tag }}' | tr '.' '-')"
+          bash infra/scripts/canary_deploy.sh \
+            "${{ vars.APP_PREFIX }}-ai" \
+            "${{ env.ACR_LOGIN_SERVER }}/ironlayer-ai:${{ steps.version.outputs.tag }}" \
+            "/health" \
+            "$SUFFIX"
 
-      - name: Verify deployments
+      - name: Deploy Frontend (canary)
         run: |
-          MAX_ATTEMPTS=12
-          SLEEP_INTERVAL=10
-          for APP in ${{ vars.APP_PREFIX }}-api ${{ vars.APP_PREFIX }}-ai ${{ vars.APP_PREFIX }}-frontend; do
-            echo "--- Waiting for ${APP} to become healthy ---"
-            for i in $(seq 1 $MAX_ATTEMPTS); do
-              STATUS=$(az containerapp show \
-                --name "${APP}" \
-                --resource-group "${{ env.RESOURCE_GROUP }}" \
-                --query "properties.runningStatus" \
-                --output tsv 2>/dev/null || echo "Unknown")
-              ACTIVE_REVISIONS=$(az containerapp revision list \
-                --name "${APP}" \
-                --resource-group "${{ env.RESOURCE_GROUP }}" \
-                --query "[?properties.active].name" \
-                --output tsv 2>/dev/null || echo "")
-              if [ -n "$ACTIVE_REVISIONS" ] && [ "$STATUS" = "Running" ]; then
-                echo "${APP} is healthy (attempt ${i}/${MAX_ATTEMPTS})"
-                break
-              fi
-              if [ "$i" = "$MAX_ATTEMPTS" ]; then
-                echo "ERROR: ${APP} did not become healthy after $((MAX_ATTEMPTS * SLEEP_INTERVAL))s"
-                az containerapp revision list \
-                  --name "${APP}" \
-                  --resource-group "${{ env.RESOURCE_GROUP }}" \
-                  --output table
-                exit 1
-              fi
-              echo "Attempt ${i}/${MAX_ATTEMPTS}: ${APP} status=${STATUS}, retrying in ${SLEEP_INTERVAL}s..."
-              sleep $SLEEP_INTERVAL
-            done
-          done
-
-      - name: Smoke test API health
-        run: |
-          API_URL="${{ vars.API_URL || '${{ vars.API_URL || 'https://api.ironlayer.app' }}' }}"
-          for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${API_URL}/api/v1/health" || true)
-            if [ "$STATUS" = "200" ]; then
-              echo "API health check passed (attempt ${i})"
-              exit 0
-            fi
-            echo "Attempt ${i}: got HTTP ${STATUS}, retrying in 10s..."
-            sleep 10
-          done
-          echo "API health check failed after 5 attempts"
-          exit 1
+          SUFFIX="v$(echo '${{ steps.version.outputs.tag }}' | tr '.' '-')"
+          bash infra/scripts/canary_deploy.sh \
+            "${{ vars.APP_PREFIX }}-frontend" \
+            "${{ env.ACR_LOGIN_SERVER }}/ironlayer-frontend:${{ steps.version.outputs.tag }}" \
+            "/" \
+            "$SUFFIX"
 
   # ---------------------------------------------------------------------------
   # Publish CLI wheel + OpenAPI spec (release tags only)
@@ -678,6 +645,16 @@ jobs:
               json.dump(spec, f, indent=2)
           "
 
+      - name: Generate SBOM
+        # Install cyclonedx-bom as an isolated uv tool (not into the workspace
+        # venv) so the tool itself does not appear in the SBOM it generates.
+        run: |
+          uv tool install cyclonedx-bom
+          cyclonedx-py environment --output-format JSON --outfile sbom.json
+
+      - name: Validate SBOM
+        run: uv tool run cyclonedx validate --input-format JSON --input-file sbom.json
+
       - name: Extract version
         id: version
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
@@ -692,3 +669,4 @@ jobs:
             cli/dist/*.whl
             cli/dist/*.tar.gz
             api/openapi.json
+            sbom.json
