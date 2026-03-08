@@ -505,10 +505,10 @@ class TestAdminRole:
 
     @pytest.mark.asyncio
     async def test_admin_can_read_runs(self, rbac_client: AsyncClient) -> None:
-        with patch("api.routers.runs.RunRepository") as MockRepo:
+        with patch("api.routers.runs.RunRepository"):
             mock_result = MagicMock()
             mock_result.scalars.return_value.all.return_value = []
-            rbac_client._transport.app  # noqa: ensure app is accessible
+            rbac_client._transport.app  # noqa: B018 - ensure app is accessible
             # Use a mock session execute that returns empty results.
             resp = await rbac_client.get(
                 "/api/v1/runs",

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import pytest
-
 from ai_engine.engines.failure_predictor import (
     FailurePredictor,
     RunHistory,
-    compute_cost_trend,
     _sigmoid,
+    compute_cost_trend,
 )
 
 # ---------------------------------------------------------------------------

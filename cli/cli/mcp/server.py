@@ -15,7 +15,6 @@ Usage::
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -136,11 +135,10 @@ async def run_sse(host: str = "127.0.0.1", port: int = 3333) -> None:
     """
     _ensure_mcp_installed()
 
+    import uvicorn
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.routing import Mount, Route
-
-    import uvicorn
 
     server = create_server()
     sse_transport = SseServerTransport("/messages/")

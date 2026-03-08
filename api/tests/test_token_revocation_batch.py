@@ -12,10 +12,8 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 import time
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -112,7 +110,6 @@ class TestBatchCheckerL1Cache:
         assert _check_revocation_batch is not None
 
         # Pre-populate L1 cache by calling the single checker first.
-        from api.middleware.auth import _check_revocation
 
         # Patch DB so L3 check populates the L1 cache.
         with patch("core_engine.state.repository.TokenRevocationRepository") as repo_cls:

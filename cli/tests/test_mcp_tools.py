@@ -18,13 +18,9 @@ Test categories:
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
-
 from cli.mcp.tools import (
     TOOL_DEFINITIONS,
     TOOL_DISPATCH,
@@ -35,7 +31,6 @@ from cli.mcp.tools import (
     ironlayer_transpile,
     ironlayer_validate,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -21,22 +21,21 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pytest
-from sklearn.linear_model import LinearRegression
-
 from ai_engine.ml.model_registry import (
-    ModelRegistry,
-    ModelRecord,
     _CACHE_TTL_SECONDS,
-    _compute_file_sha256,
-    _compute_psi,
-    _digest_path,
     _MAX_PREDICTION_RECORDS,
     _PSI_MIN_RECORDS,
     _PSI_WINDOW,
+    ModelRecord,
+    ModelRegistry,
+    _compute_file_sha256,
+    _compute_psi,
+    _digest_path,
     _validate_model_name,
     _validate_model_version,
     _verify_model_file,
 )
+from sklearn.linear_model import LinearRegression
 
 # ================================================================== #
 # Fixtures
@@ -469,10 +468,10 @@ class TestCostPredictorRegistryIntegration:
 
     def test_prediction_recorded_via_registry(self, tmp_path: Path) -> None:
         """CostPredictor records predictions into the registry after _model_predict."""
-        from ai_engine.engines.cost_predictor import CostPredictor
-        from ai_engine.models.requests import CostPredictRequest
-        from ai_engine.ml.cost_model import CostModelTrainer
         import numpy as np
+        from ai_engine.engines.cost_predictor import CostPredictor
+        from ai_engine.ml.cost_model import CostModelTrainer
+        from ai_engine.models.requests import CostPredictRequest
 
         # Train a minimal model and save it so CostPredictor loads it.
         features = np.array([[i, 0, 1, 0, 0, 0, 0, 0] for i in range(1, 11)], dtype=np.float64)

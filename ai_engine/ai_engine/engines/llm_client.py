@@ -22,6 +22,8 @@ import logging
 import time as _time
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, ValidationError
+
 from ai_engine.engines.budget_guard import BudgetExceededError, BudgetGuard, LLMUsage
 from ai_engine.engines.pii_scrubber import (
     contains_pii,
@@ -29,7 +31,6 @@ from ai_engine.engines.pii_scrubber import (
     scrub_sql_for_llm,
 )
 from ai_engine.engines.prompts import get_prompt
-from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:
     from ai_engine.config import AISettings

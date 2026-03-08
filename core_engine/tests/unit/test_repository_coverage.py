@@ -23,11 +23,6 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import DateTime, JSON
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.types import TypeDecorator
-
 from core_engine.state.repository import (
     AIFeedbackRepository,
     AnalyticsRepository,
@@ -59,6 +54,10 @@ from core_engine.state.repository import (
     WatermarkRepository,
 )
 from core_engine.state.tables import Base, UsageEventTable
+from sqlalchemy import JSON, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.types import TypeDecorator
 
 # ---------------------------------------------------------------------------
 # SQLite column-type compatibility patching
@@ -317,9 +316,9 @@ class TestSnapshotRepository:
 
     async def test_get_latest(self, async_session: AsyncSession) -> None:
         repo = SnapshotRepository(async_session, _TENANT)
-        s1 = await repo.create_snapshot("staging", {"m1": "v1"})
+        await repo.create_snapshot("staging", {"m1": "v1"})
         # Second snapshot with different versions produces a different hash
-        s2 = await repo.create_snapshot("staging", {"m1": "v2"})
+        await repo.create_snapshot("staging", {"m1": "v2"})
         latest = await repo.get_latest("staging")
         # Both snapshots exist; the latest call returns the most recent
         assert latest is not None
@@ -624,7 +623,7 @@ class TestAuditRepository:
     async def test_log_with_metadata(self, async_session: AsyncSession) -> None:
         repo = AuditRepository(async_session, tenant_id=_TENANT)
         meta = {"key": "value", "count": 42}
-        entry_id = await repo.log(actor="bob", action="plan.run", metadata=meta)
+        await repo.log(actor="bob", action="plan.run", metadata=meta)
         entries = await repo.query()
         assert len(entries) == 1
         assert entries[0].metadata_json == meta
@@ -1798,7 +1797,7 @@ class TestInvoiceRepository:
         num = await repo.get_next_invoice_number()
         assert num.startswith("INV-")
         # Second call should produce a different sequence number
-        now = datetime.now(UTC)
+        datetime.now(UTC)
         inv_data = self._make_invoice()
         inv_data["invoice_number"] = num
         await repo.create(**inv_data)

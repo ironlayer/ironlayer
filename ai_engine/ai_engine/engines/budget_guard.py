@@ -26,8 +26,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import weakref
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 
-
 from ai_engine.engines.cache import DEFAULT_TTL, ResponseCache
 
 # ---------------------------------------------------------------------------

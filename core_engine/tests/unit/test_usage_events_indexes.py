@@ -13,9 +13,8 @@ from __future__ import annotations
 import importlib
 
 import pytest
-from sqlalchemy import Index
-
 from core_engine.state.tables import UsageEventTable
+from sqlalchemy import Index
 
 
 class TestUsageEventTableIndexes:

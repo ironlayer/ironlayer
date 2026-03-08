@@ -18,7 +18,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -668,7 +668,6 @@ class TestAIServiceClientPost:
         return AIServiceClient("http://ai-engine:8001", shared_secret="secret")
 
     async def test_post_returns_json_on_success(self) -> None:
-        from api.services.ai_client import AIServiceClient
 
         client = self._make_client()
         mock_resp = MagicMock()
@@ -706,7 +705,6 @@ class TestAIServiceClientPost:
         assert client._circuit_breaker._failures == 1
 
     async def test_post_skipped_when_circuit_open(self) -> None:
-        from api.services.ai_client import _CircuitBreaker
 
         client = self._make_client()
         # Force circuit open
@@ -1468,7 +1466,7 @@ class TestReconciliationServiceInit:
             patch("api.services.reconciliation_service.SchemaDriftRepository") as MockDrift,
             patch("api.services.reconciliation_service.ModelRepository") as MockModel,
         ):
-            svc = ReconciliationService(session, tenant_id="my-tenant")
+            ReconciliationService(session, tenant_id="my-tenant")
 
         MockRun.assert_called_once_with(session, tenant_id="my-tenant")
         MockRecon.assert_called_once_with(session, tenant_id="my-tenant")
@@ -1813,11 +1811,9 @@ class TestResolveSchemaDrift:
 
 def _build_approvals_app(mock_session: AsyncMock, user_identity: str = "test-user"):
     """Build a minimal FastAPI app with the approvals router and dep overrides."""
-    from fastapi import FastAPI
     from api.routers.approvals import router
     from api.dependencies import get_tenant_session, get_tenant_id, get_settings
     from api.middleware.rbac import get_user_role, Role
-    from api.services.ai_client import AIServiceClient
     from api.dependencies import get_user_identity
     from pydantic import SecretStr
 
@@ -2166,7 +2162,6 @@ class TestRejectEndpoint:
 
             # Capture the values written to session.execute
             execute_calls: list[Any] = []
-            original_execute = session.execute
 
             async def _capture_execute(stmt, *args, **kwargs):
                 execute_calls.append(stmt)

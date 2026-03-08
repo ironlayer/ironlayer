@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import typer
 
 from cli.helpers import console, credentials_path, save_credentials
-from cli.state import get_json_output
 
 
 def login_command(

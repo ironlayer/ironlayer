@@ -21,7 +21,6 @@ from ai_engine.config import AISettings, load_ai_settings
 from ai_engine.engines.budget_guard import BudgetGuard
 from ai_engine.engines.cache import ResponseCache
 from ai_engine.engines.cost_predictor import CostPredictor
-from ai_engine.ml.model_registry import ModelRegistry
 from ai_engine.engines.failure_predictor import FailurePredictor
 from ai_engine.engines.fragility_scorer import FragilityScorer
 from ai_engine.engines.in_memory_usage_repo import InMemoryLLMUsageRepo
@@ -34,6 +33,7 @@ from ai_engine.middleware import (
     RequestSizeLimitMiddleware,
     SharedSecretMiddleware,
 )
+from ai_engine.ml.model_registry import ModelRegistry
 from ai_engine.routers import cache as cache_router
 from ai_engine.routers import cost as cost_router
 from ai_engine.routers import fragility as fragility_router

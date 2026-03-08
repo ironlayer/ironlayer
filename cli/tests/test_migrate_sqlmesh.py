@@ -9,19 +9,15 @@ warnings.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-from typer.testing import CliRunner
-
+from cli.app import app
 from core_engine.models.model_definition import (
     Materialization,
     ModelDefinition,
     ModelKind,
 )
-
-from cli.app import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

@@ -10,11 +10,6 @@ from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
-# BL-094: Redis cache TTL for plan JSON (5 minutes).
-PLAN_CACHE_TTL = 300
-
-_GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{4,40}$")
-
 from core_engine.contracts.schema_validator import (
     ContractValidationResult,
     validate_schema_contracts_batch,
@@ -47,6 +42,11 @@ from api.config import APISettings
 from api.services.ai_client import AIServiceClient
 
 logger = logging.getLogger(__name__)
+
+# BL-094: Redis cache TTL for plan JSON (5 minutes).
+PLAN_CACHE_TTL = 300
+
+_GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{4,40}$")
 
 
 def _plan_cache_key_for(tenant_id: str, plan_id: str) -> str:

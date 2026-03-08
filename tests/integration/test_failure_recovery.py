@@ -10,11 +10,7 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
 import time
-import uuid
-from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,9 +23,8 @@ import pytest
 @pytest.fixture
 def token_config():
     """Create a minimal TokenConfig for testing."""
-    from pydantic import SecretStr
-
     from api.security import AuthMode, TokenConfig
+    from pydantic import SecretStr
 
     return TokenConfig(
         auth_mode=AuthMode.DEVELOPMENT,
@@ -129,12 +124,12 @@ class TestConcurrentSignups:
 
         # First signup: user doesn't exist → create succeeds.
         mock_session = AsyncMock()
-        service = AuthService(mock_session)
+        service = AuthService(mock_session, token_manager=MagicMock())
 
         # Mock the user repo to simulate "user already exists" on second call.
-        with patch("api.services.auth_service.UserRepository") as MockUserRepo:
+        with patch("api.services.auth_service.UserRepository") as mock_user_repo:
             repo_instance = AsyncMock()
-            MockUserRepo.return_value = repo_instance
+            mock_user_repo.return_value = repo_instance
 
             # First call: no existing user.
             repo_instance.get_by_email_any_tenant.return_value = None
@@ -146,9 +141,9 @@ class TestConcurrentSignups:
                 tenant_id="t1",
             )
 
-            with patch("api.services.auth_service.TenantConfigRepository") as MockTenantRepo:
+            with patch("api.services.auth_service.TenantConfigRepository") as mock_tenant_repo:
                 tenant_repo_instance = AsyncMock()
-                MockTenantRepo.return_value = tenant_repo_instance
+                mock_tenant_repo.return_value = tenant_repo_instance
 
                 result = await service.signup("race@test.com", "password123", "Racer")
                 assert result["user"]["email"] == "race@test.com"
@@ -231,12 +226,14 @@ class TestAuthServiceErrors:
         from api.services.auth_service import AuthError, AuthService
 
         mock_session = AsyncMock()
-        service = AuthService(mock_session)
+        service = AuthService(mock_session, token_manager=MagicMock())
 
-        with patch("api.services.auth_service.UserRepository") as MockUserRepo:
+        with patch("api.services.auth_service.UserRepository") as mock_user_repo, \
+             patch("api.services.auth_service.AuditService") as mock_audit_cls:
             repo_instance = AsyncMock()
-            MockUserRepo.return_value = repo_instance
+            mock_user_repo.return_value = repo_instance
             repo_instance.verify_password.return_value = None
+            mock_audit_cls.return_value = AsyncMock()
 
             with pytest.raises(AuthError) as exc_info:
                 await service.login("user@test.com", "wrongpassword")
@@ -248,11 +245,11 @@ class TestAuthServiceErrors:
         from api.services.auth_service import AuthError, AuthService
 
         mock_session = AsyncMock()
-        service = AuthService(mock_session)
+        service = AuthService(mock_session, token_manager=MagicMock())
 
-        with patch("api.services.auth_service.UserRepository") as MockUserRepo:
+        with patch("api.services.auth_service.UserRepository") as mock_user_repo:
             repo_instance = AsyncMock()
-            MockUserRepo.return_value = repo_instance
+            mock_user_repo.return_value = repo_instance
             repo_instance.verify_password.return_value = MagicMock(
                 is_active=False,
                 id="user-1",
@@ -269,7 +266,7 @@ class TestAuthServiceErrors:
         from api.services.auth_service import AuthError, AuthService
 
         mock_session = AsyncMock()
-        service = AuthService(mock_session)
+        service = AuthService(mock_session, token_manager=MagicMock())
 
         # Invalid email.
         with pytest.raises(AuthError, match="valid email"):
@@ -294,9 +291,8 @@ class TestKmsProviderDetection:
 
     def test_aws_kms_arn_detected(self):
         """AWS KMS ARN is correctly identified."""
-        from pydantic import SecretStr
-
         from api.security import KmsProvider, TokenConfig
+        from pydantic import SecretStr
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -306,9 +302,8 @@ class TestKmsProviderDetection:
 
     def test_azure_keyvault_uri_detected(self):
         """Azure Key Vault URI is correctly identified."""
-        from pydantic import SecretStr
-
         from api.security import KmsProvider, TokenConfig
+        from pydantic import SecretStr
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -318,9 +313,8 @@ class TestKmsProviderDetection:
 
     def test_azure_keyvault_uri_with_version(self):
         """Azure Key Vault URI with version is correctly identified."""
-        from pydantic import SecretStr
-
         from api.security import KmsProvider, TokenConfig
+        from pydantic import SecretStr
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -330,9 +324,8 @@ class TestKmsProviderDetection:
 
     def test_explicit_provider_override(self):
         """Explicit provider setting overrides auto-detection."""
-        from pydantic import SecretStr
-
         from api.security import KmsProvider, TokenConfig
+        from pydantic import SecretStr
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),
@@ -343,9 +336,8 @@ class TestKmsProviderDetection:
 
     def test_unknown_uri_defaults_to_aws(self):
         """Unknown URI format defaults to AWS KMS for backward compatibility."""
-        from pydantic import SecretStr
-
         from api.security import KmsProvider, TokenConfig
+        from pydantic import SecretStr
 
         config = TokenConfig(
             jwt_secret=SecretStr("test-secret-kms"),

@@ -9,9 +9,8 @@ Covers:
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from ai_engine.config import ALLOWED_LLM_MODELS, AISettings
+from pydantic import ValidationError
 
 
 class TestLLMModelAllowlist:

@@ -14,22 +14,18 @@ from __future__ import annotations
 
 import io
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-from rich.console import Console
-from typer.testing import CliRunner
-
+from cli.app import app
+from cli.commands.migrate import _extract_sql_table_refs, _generate_ironlayer_file
+from cli.display import display_migration_report
 from core_engine.models.model_definition import (
     Materialization,
     ModelDefinition,
     ModelKind,
 )
-
-from cli.app import app
-from cli.commands.migrate import _extract_sql_table_refs, _generate_ironlayer_file
-from cli.display import display_migration_report
+from rich.console import Console
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

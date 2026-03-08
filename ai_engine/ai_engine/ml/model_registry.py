@@ -23,7 +23,7 @@ import logging
 import re
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple, TypedDict
 
@@ -346,7 +346,7 @@ class ModelRegistry:
             name=name,
             version=resolved_version,
             path=model_path,
-            loaded_at=datetime.now(tz=timezone.utc),
+            loaded_at=datetime.now(tz=UTC),
         )
         # Track the most-recently-loaded version so record_prediction can
         # tag predictions correctly even when multiple versions are cached.
@@ -395,7 +395,7 @@ class ModelRegistry:
             "features": features,
             "prediction": prediction,
             "actual": actual,
-            "recorded_at": datetime.now(tz=timezone.utc).isoformat(),
+            "recorded_at": datetime.now(tz=UTC).isoformat(),
         }
         # BL-091: Warn *once* when the ring buffer first fills up (not on every append).
         buf = self._predictions[model_name]

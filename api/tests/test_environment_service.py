@@ -182,7 +182,7 @@ class TestCreateEphemeralEnvironment:
             instance.create = AsyncMock(return_value=env_row)
 
             service = EnvironmentService(session, tenant_id="t1")
-            result = await service.create_ephemeral_environment(
+            await service.create_ephemeral_environment(
                 pr_number=99,
                 branch_name="fix/bug",
                 catalog="dev",

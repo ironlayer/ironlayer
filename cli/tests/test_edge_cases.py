@@ -16,21 +16,18 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from click.exceptions import Exit as ClickExit
-from typer.testing import CliRunner
-
+from cli.app import app
+from cli.commands.migrate import _extract_sql_table_refs, _generate_ironlayer_file
+from cli.state import emit_metrics, set_global_options
 from core_engine.models.model_definition import (
     Materialization,
     ModelDefinition,
     ModelKind,
 )
-
-from cli.app import app
-from cli.commands.migrate import _extract_sql_table_refs, _generate_ironlayer_file
-from cli.state import emit_metrics, set_global_options
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

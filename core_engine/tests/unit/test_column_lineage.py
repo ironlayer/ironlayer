@@ -18,9 +18,8 @@ Covers:
 from __future__ import annotations
 
 import pytest
-
 from core_engine.sql_toolkit import Dialect, SqlLineageError, get_sql_toolkit
-from core_engine.sql_toolkit._types import ColumnLineageNode, ColumnLineageResult
+from core_engine.sql_toolkit._types import ColumnLineageResult
 
 
 @pytest.fixture(scope="module")
@@ -423,7 +422,6 @@ class TestCrossModelLineage:
     def test_trace_across_dag(self):
         """trace_column_across_dag should follow edges through models."""
         import networkx as nx
-
         from core_engine.graph.column_lineage import trace_column_across_dag
 
         # Build a simple 2-model DAG: raw.orders → staging.orders_clean
@@ -452,7 +450,6 @@ class TestCrossModelLineage:
     def test_external_source_terminates(self):
         """Models not in the DAG should appear as terminal nodes."""
         import networkx as nx
-
         from core_engine.graph.column_lineage import trace_column_across_dag
 
         dag = nx.DiGraph()

@@ -7,15 +7,13 @@ cost rate variation, and edge cases (zero partitions, very large volumes).
 
 from __future__ import annotations
 
-
 import numpy as np
 import pytest
-
 from ai_engine.engines.cost_predictor import (
-    CostPredictor,
     _COST_RATES,
     _HEURISTIC_BASE_SECONDS,
     _HEURISTIC_PER_PARTITION_SECONDS,
+    CostPredictor,
 )
 from ai_engine.models.requests import CostPredictRequest
 from ai_engine.models.responses import CostPredictResponse
@@ -61,20 +59,19 @@ class TestHasTrainedModel:
         BL-100: model loading is lazy, so has_trained_model is False immediately
         after construction and only becomes True after the first predict() call.
         """
-        from sklearn.linear_model import LinearRegression
-
         import joblib
+        from sklearn.linear_model import LinearRegression
 
         model = LinearRegression()
         # 8 features matching extract_features output:
         # partition_count, log_volume, workers, sql_complexity,
         # join_count, cte_count, has_window, table_count
-        X = np.array(
+        x_data = np.array(
             [[1, 2, 3, 0, 0, 0, 0, 0], [4, 5, 6, 0, 0, 0, 0, 0]],
             dtype=np.float64,
         )
         y = np.array([100.0, 200.0])
-        model.fit(X, y)
+        model.fit(x_data, y)
 
         model_path = tmp_path / "cost_model.joblib"
         joblib.dump(model, model_path)
@@ -179,14 +176,13 @@ class TestTrainedModelPrediction:
     @pytest.fixture()
     def trained_predictor(self, tmp_path):
         """Create a predictor with a real trained model."""
-        from sklearn.linear_model import LinearRegression
-
         import joblib
+        from sklearn.linear_model import LinearRegression
 
         # Train a simple model with 8 features matching extract_features:
         # partition_count, log_volume, workers, sql_complexity,
         # join_count, cte_count, has_window, table_count
-        X = np.array(
+        x_data = np.array(
             [
                 [5, np.log1p(1e6), 2, 5.0, 1.0, 0.0, 0.0, 2.0],
                 [10, np.log1p(1e8), 4, 8.0, 2.0, 1.0, 0.0, 3.0],
@@ -197,7 +193,7 @@ class TestTrainedModelPrediction:
         )
         y = np.array([120.0, 300.0, 600.0, 1200.0])
         model = LinearRegression()
-        model.fit(X, y)
+        model.fit(x_data, y)
 
         model_path = tmp_path / "cost_model.joblib"
         joblib.dump(model, model_path)
@@ -367,9 +363,9 @@ class TestLazyLoading:
         from sklearn.linear_model import LinearRegression
 
         model = LinearRegression()
-        X = np.array([[1, 2, 3, 0, 0, 0, 0, 0]], dtype=np.float64)
+        x_data = np.array([[1, 2, 3, 0, 0, 0, 0, 0]], dtype=np.float64)
         y = np.array([100.0])
-        model.fit(X, y)
+        model.fit(x_data, y)
         model_path = tmp_path / "cost_model.joblib"
         joblib.dump(model, model_path)
 
@@ -383,12 +379,12 @@ class TestLazyLoading:
         from sklearn.linear_model import LinearRegression
 
         model = LinearRegression()
-        X = np.array(
+        x_data = np.array(
             [[1, 2, 3, 0, 0, 0, 0, 0], [4, 5, 6, 0, 0, 0, 0, 0]],
             dtype=np.float64,
         )
         y = np.array([100.0, 200.0])
-        model.fit(X, y)
+        model.fit(x_data, y)
         model_path = tmp_path / "cost_model.joblib"
         joblib.dump(model, model_path)
 

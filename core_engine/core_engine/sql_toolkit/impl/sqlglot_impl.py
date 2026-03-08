@@ -52,7 +52,6 @@ from .._types import (
     SqlNodeKind,
     SqlNormalizationError,
     SqlParseError,
-    SqlTranspileError,
     TableRef,
     TranspileResult,
 )

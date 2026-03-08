@@ -221,7 +221,7 @@ async def test_sliding_window_resets() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # Use a patched window to avoid waiting 60 seconds.
         # We manipulate time.monotonic to simulate window expiry.
-        base_time = time.monotonic()
+        time.monotonic()
         call_count = 0
 
         original_monotonic = time.monotonic

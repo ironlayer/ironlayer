@@ -11,25 +11,18 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-
-from core_engine.models.telemetry import MetricsEvent, RunTelemetry
+from core_engine.models.telemetry import RunTelemetry
 from core_engine.telemetry.collector import capture_run_telemetry
 from core_engine.telemetry.emitter import MetricsEmitter
 from core_engine.telemetry.kpi import (
     ALL_KPIS,
-    COST_SAVINGS,
     KPIEvaluator,
     KPIResult,
     KPIStatus,
     KPIThreshold,
-    PLAN_ACCURACY,
-    PLAN_GENERATION_TIME,
-    PLANNER_DETERMINISM,
-    SEMANTIC_DIFF_FP_RATE,
 )
 from core_engine.telemetry.privacy import (
     TelemetryConsent,
@@ -38,7 +31,6 @@ from core_engine.telemetry.privacy import (
     check_consent,
     scrub_dict,
     scrub_pii,
-    scrub_sql_pii,
 )
 from core_engine.telemetry.retention import RetentionPolicy
 

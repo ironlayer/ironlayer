@@ -10,7 +10,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
-
 from ai_engine.engines.llm_client import LLMClient
 from ai_engine.models.requests import (
     CostPredictRequest,

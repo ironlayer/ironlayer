@@ -16,19 +16,18 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from core_engine.state.plan_repository import PlanRepository
+from core_engine.state.repository import ModelRepository, RunRepository, WatermarkRepository
+from core_engine.state.tables import Base, ModelTable, PlanTable, WatermarkTable
 from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.types import TypeDecorator
-
-from core_engine.state.plan_repository import PlanRepository
-from core_engine.state.repository import ModelRepository, RunRepository, WatermarkRepository
-from core_engine.state.tables import Base, ModelTable, PlanTable, RunTable, WatermarkTable
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -52,7 +51,7 @@ def _patch_columns_for_sqlite() -> None:
 
         def process_result_value(self, value, dialect):  # type: ignore[override]
             if value is not None and value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
+                return value.replace(tzinfo=UTC)
             return value
 
     for table in Base.metadata.tables.values():
@@ -104,7 +103,7 @@ def _make_run_record(
     finished_at: datetime | None = None,
 ) -> dict:
     """Build a minimal run record dict for test insertion."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return {
         "run_id": uuid4().hex,
         "plan_id": plan_id,
@@ -166,7 +165,7 @@ class TestHistoricalStatsWithCost:
 
         # Create three runs with known costs: 1.0, 2.0, 3.0 -> avg = 2.0.
         for cost in [1.0, 2.0, 3.0]:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             record = _make_run_record(
                 model_name=model,
                 cost_usd=cost,
@@ -189,7 +188,7 @@ class TestHistoricalStatsWithCost:
 
         # Create runs without cost.
         for _ in range(2):
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             record = _make_run_record(
                 model_name=model,
                 cost_usd=None,
@@ -208,7 +207,7 @@ class TestHistoricalStatsWithCost:
         model = "analytics.mixed"
 
         # One run with cost, one without.  avg should be over the non-null value only.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record_with = _make_run_record(
             model_name=model,
             cost_usd=4.0,
@@ -300,7 +299,7 @@ class TestGetHistoricalStatsBatch:
     async def test_batch_returns_stats_for_all_models(self, async_session: AsyncSession):
         """Two models with completed runs appear in the batch result."""
         repo = RunRepository(async_session, tenant_id=_TENANT)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for model in ("analytics.orders", "analytics.users"):
             for cost in [1.0, 2.0]:
@@ -341,7 +340,7 @@ class TestGetHistoricalStatsBatch:
         """Stats for tenant-A do not appear in tenant-B's batch result."""
         repo_a = RunRepository(async_session, tenant_id="tenant-a")
         repo_b = RunRepository(async_session, tenant_id="tenant-b")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         record = _make_run_record(
             model_name="shared.model",
@@ -358,7 +357,7 @@ class TestGetHistoricalStatsBatch:
     async def test_batch_caps_at_thirty_runs_per_model(self, async_session: AsyncSession):
         """Only the 30 most recent completed runs are used per model."""
         repo = RunRepository(async_session, tenant_id=_TENANT)
-        base = datetime.now(timezone.utc)
+        base = datetime.now(UTC)
 
         # Insert 35 runs; the oldest 5 have cost=100, the recent 30 have cost=1.
         for i in range(35):
@@ -446,7 +445,7 @@ def _make_watermark_row(
         model_name=model_name,
         partition_start=start,
         partition_end=end,
-        last_updated=datetime.now(timezone.utc),
+        last_updated=datetime.now(UTC),
     )
     session.add(row)
     return row
@@ -463,10 +462,10 @@ class TestGetWatermarksBatch:
 
         # Insert two watermarks for model-a (different timestamps).
         row_old = _make_watermark_row(async_session, _TENANT, "m.a", d1, d2)
-        row_old.last_updated = datetime(2024, 1, 10, tzinfo=timezone.utc)
+        row_old.last_updated = datetime(2024, 1, 10, tzinfo=UTC)
 
         row_new = _make_watermark_row(async_session, _TENANT, "m.a", d3, d4)
-        row_new.last_updated = datetime(2024, 2, 10, tzinfo=timezone.utc)
+        row_new.last_updated = datetime(2024, 2, 10, tzinfo=UTC)
 
         # One watermark for model-b.
         _make_watermark_row(async_session, _TENANT, "m.b", d1, d2)

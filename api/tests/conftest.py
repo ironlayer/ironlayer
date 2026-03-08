@@ -26,10 +26,10 @@ from httpx import ASGITransport, AsyncClient
 _TEST_JWT_SECRET = "test-secret-key-for-ironlayer-tests"
 os.environ.setdefault("JWT_SECRET", _TEST_JWT_SECRET)
 
-from pydantic import SecretStr
+from pydantic import SecretStr  # noqa: E402
 
-from api.config import APISettings
-from api.dependencies import (
+from api.config import APISettings  # noqa: E402
+from api.dependencies import (  # noqa: E402
     get_admin_session,
     get_ai_client,
     get_db_session,
@@ -37,8 +37,8 @@ from api.dependencies import (
     get_settings,
     get_tenant_session,
 )
-from api.main import create_app
-from api.services.ai_client import AIServiceClient
+from api.main import create_app  # noqa: E402
+from api.services.ai_client import AIServiceClient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Dev auth token (shared across all tests)
@@ -189,7 +189,7 @@ def mock_ai_client() -> AsyncMock:
 # ---------------------------------------------------------------------------
 
 
-from api.test_utils import set_app_state_for_test
+from api.test_utils import set_app_state_for_test  # noqa: E402
 
 
 @pytest.fixture()

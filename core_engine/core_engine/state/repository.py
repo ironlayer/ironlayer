@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, cast, delete, func, insert, select, text, update
+from sqlalchemy import and_, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +25,8 @@ from core_engine.state._repository_utils import (
     _dialect_upsert_nothing,
     _escape_like,
 )
-from core_engine.state.plan_repository import PlanRepository
-from core_engine.state.run_repository import RunRepository
+from core_engine.state.plan_repository import PlanRepository as PlanRepository  # noqa: F401
+from core_engine.state.run_repository import RunRepository as RunRepository  # noqa: F401
 from core_engine.state.tables import (
     AIFeedbackTable,
     APIKeyTable,
@@ -45,7 +45,6 @@ from core_engine.state.tables import (
     LockTable,
     ModelTable,
     ModelTestTable,
-    PlanTable,
     ReconciliationCheckTable,
     ReconciliationScheduleTable,
     RunTable,
@@ -3874,7 +3873,7 @@ class EventOutboxRepository:
         event_type: str,
         payload: dict[str, Any],
         correlation_id: str,
-    ) -> "EventOutboxTable":
+    ) -> EventOutboxTable:
         """Insert a pending outbox entry within the current transaction.
 
         The caller is responsible for committing the transaction.
@@ -3892,7 +3891,7 @@ class EventOutboxRepository:
         await self._session.flush()
         return row
 
-    async def get_pending(self, limit: int = 100) -> list["EventOutboxTable"]:
+    async def get_pending(self, limit: int = 100) -> list[EventOutboxTable]:
         """Return pending entries ordered by ``created_at`` (oldest first)."""
         from core_engine.state.tables import EventOutboxTable
 
@@ -3917,8 +3916,9 @@ class EventOutboxRepository:
 
     async def mark_delivered(self, entry_id: int) -> None:
         """Mark an outbox entry as successfully delivered."""
-        from core_engine.state.tables import EventOutboxTable
         from datetime import UTC, datetime
+
+        from core_engine.state.tables import EventOutboxTable
 
         stmt = (
             update(EventOutboxTable)
@@ -3938,8 +3938,9 @@ class EventOutboxRepository:
         """
         if not entry_ids:
             return
-        from core_engine.state.tables import EventOutboxTable
         from datetime import UTC, datetime
+
+        from core_engine.state.tables import EventOutboxTable
 
         stmt = (
             update(EventOutboxTable)
