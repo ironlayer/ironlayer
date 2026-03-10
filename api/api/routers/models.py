@@ -244,7 +244,7 @@ async def get_model_lineage(
         raise not_found_404("Model", model_name)
 
     # BL-074: cap list_all at 1000 to support larger tenants; report truncation.
-    # TODO: replace with a PostgreSQL recursive CTE for O(1) memory at scale.
+    # Design note: a PostgreSQL recursive CTE would give O(1) memory at scale.
     _LINEAGE_MODEL_CAP = 1000
     all_models = await repo.list_all(limit=_LINEAGE_MODEL_CAP)
     graph_truncated = len(all_models) >= _LINEAGE_MODEL_CAP

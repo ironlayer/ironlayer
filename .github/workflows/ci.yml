@@ -525,7 +525,7 @@ jobs:
           build-args: |
             BUILD_SHA=${{ github.sha }}
             BUILD_REF=${{ github.ref }}
-            VITE_API_URL=${{ vars.VITE_API_URL || '${{ vars.API_URL || '${{ vars.API_URL || 'https://api.ironlayer.app' }}' }}' }}
+            VITE_API_URL=${{ vars.API_URL || 'https://api.ironlayer.app' }}
 
       - name: Rotate cache
         run: |

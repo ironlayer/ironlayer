@@ -187,13 +187,14 @@ function UsageDashboard() {
           </div>
         </div>
 
-        {/* Quota progress (placeholder -- real quotas come from billing) */}
+        {/* Quota progress — placeholder limits; replace with values from
+            GET /billing/plans or X-*-Quota-Limit response headers. */}
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h3 className="mb-4 text-sm font-semibold text-gray-900">Quota Usage</h3>
           <div className="space-y-4">
             {['plan_run', 'ai_call', 'backfill_run'].map((type) => {
               const count = summary?.events_by_type[type] ?? 0;
-              const limit = type === 'plan_run' ? 100 : type === 'ai_call' ? 500 : 50;
+              const limit = type === 'plan_run' ? 1_000 : type === 'ai_call' ? 5_000 : 50;
               const pct = Math.min((count / limit) * 100, 100);
               const label = EVENT_TYPE_LABELS[type] ?? type;
 
