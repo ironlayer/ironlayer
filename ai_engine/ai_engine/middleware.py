@@ -1,25 +1,79 @@
-"""Authentication, rate limiting, and request size middleware for the AI engine."""
+"""Authentication, rate limiting, and request size middleware for the AI engine.
+
+Pure ASGI middleware — no BaseHTTPMiddleware dependency.  Each class
+implements ``__init__(app, ...)`` + ``async __call__(scope, receive, send)``
+and is registered via ``app.add_middleware(ClassName, **kwargs)``.
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import secrets
 import time
 from collections import defaultdict
-
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+# Type aliases for ASGI callables.
+ASGIApp = Any
+Scope = dict[str, Any]
+Receive = Callable[..., Any]
+Send = Callable[..., Any]
 
 # Paths that bypass authentication and rate limiting (health checks, readiness probes).
 _PUBLIC_PATHS: frozenset[str] = frozenset({"/health", "/healthz", "/readyz"})
 
 
-class SharedSecretMiddleware(BaseHTTPMiddleware):
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_header(scope: Scope, name: bytes) -> bytes:
+    """Extract a header value from ASGI scope (lowercase byte-tuple list)."""
+    for key, val in scope.get("headers", []):
+        if key == name:
+            return val
+    return b""
+
+
+async def _send_json_error(
+    send: Send,
+    status: int,
+    detail: str,
+    *,
+    extra_headers: list[tuple[bytes, bytes]] | None = None,
+) -> None:
+    """Send a complete JSON error response via raw ASGI send."""
+    body = json.dumps({"detail": detail}).encode()
+    headers: list[tuple[bytes, bytes]] = [
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(body)).encode()),
+    ]
+    if extra_headers:
+        headers.extend(extra_headers)
+    await send({
+        "type": "http.response.start",
+        "status": status,
+        "headers": headers,
+    })
+    await send({
+        "type": "http.response.body",
+        "body": body,
+        "more_body": False,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Shared-secret authentication
+# ---------------------------------------------------------------------------
+
+
+class SharedSecretMiddleware:
     """Validates a shared secret on every non-public request.
 
     In development mode (AI_ENGINE_SHARED_SECRET not set and
@@ -29,8 +83,8 @@ class SharedSecretMiddleware(BaseHTTPMiddleware):
     raises RuntimeError at init time if it is missing.
     """
 
-    def __init__(self, app, *, platform_env: str = "development") -> None:
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, *, platform_env: str = "development") -> None:
+        self.app = app
         raw_secret = os.environ.get("AI_ENGINE_SHARED_SECRET", "")
         if raw_secret:
             self._secret = raw_secret
@@ -54,17 +108,23 @@ class SharedSecretMiddleware(BaseHTTPMiddleware):
         # AI_ENGINE_SHARED_SECRET_PREVIOUS can be removed.
         self._previous_secret = os.environ.get("AI_ENGINE_SHARED_SECRET_PREVIOUS", "")
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Allow health checks without auth.
-        if request.url.path in _PUBLIC_PATHS:
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        auth_header = request.headers.get("authorization", "")
+        # Allow health checks without auth.
+        if scope["path"] in _PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        auth_header = _get_header(scope, b"authorization").decode("latin-1")
         if not auth_header.startswith("Bearer "):
-            return JSONResponse(
-                {"detail": "Missing or malformed Authorization header. Expected: Bearer <token>"},
-                status_code=401,
+            await _send_json_error(
+                send, 401,
+                "Missing or malformed Authorization header. Expected: Bearer <token>",
             )
+            return
 
         token = auth_header[7:]  # Strip "Bearer " prefix
 
@@ -73,23 +133,25 @@ class SharedSecretMiddleware(BaseHTTPMiddleware):
         if not valid and self._previous_secret:
             valid = secrets.compare_digest(token, self._previous_secret)
             if valid:
+                client = scope.get("client")
+                client_host = client[0] if client else "unknown"
                 logger.info(
                     "AI engine auth: request from %s accepted with previous shared secret "
                     "-- update caller to use the new AI_ENGINE_SHARED_SECRET.",
-                    request.client.host if request.client else "unknown",
+                    client_host,
                 )
 
         if not valid:
+            client = scope.get("client")
+            client_host = client[0] if client else "unknown"
             logger.warning(
                 "AI engine auth failed: invalid shared secret from %s",
-                request.client.host if request.client else "unknown",
+                client_host,
             )
-            return JSONResponse(
-                {"detail": "Invalid shared secret"},
-                status_code=401,
-            )
+            await _send_json_error(send, 401, "Invalid shared secret")
+            return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +193,7 @@ class _TenantBucket:
         return True, 0
 
 
-class AIRateLimitMiddleware(BaseHTTPMiddleware):
+class AIRateLimitMiddleware:
     """Rate limits AI engine requests by tenant.
 
     Uses the ``X-Tenant-Id`` header (set by the API service) to
@@ -143,22 +205,29 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         max_requests: int = 60,
         window_seconds: float = 60.0,
     ) -> None:
-        super().__init__(app)
+        self.app = app
         self._max_requests = max_requests
         self._window = window_seconds
-        self._buckets: dict[str, _TenantBucket] = defaultdict(lambda: _TenantBucket(self._max_requests, self._window))
+        self._buckets: dict[str, _TenantBucket] = defaultdict(
+            lambda: _TenantBucket(self._max_requests, self._window),
+        )
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         # Skip rate limiting for health checks.
-        if request.url.path in _PUBLIC_PATHS:
-            return await call_next(request)
+        if scope["path"] in _PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
 
-        raw_tenant_id = request.headers.get("x-tenant-id", "__unknown__")
+        raw_tenant_id = _get_header(scope, b"x-tenant-id").decode("latin-1") or "__unknown__"
         # BL-076: Sanitize tenant_id before logging to prevent log injection.
         # A header value containing \n or \r can inject fake log lines into SIEM.
         tenant_id = re.sub(r"[\r\n\t\0]", "_", raw_tenant_id)[:128]
@@ -167,13 +236,14 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
 
         if not allowed:
             logger.warning("AI engine rate limit exceeded for tenant %s", tenant_id)
-            return JSONResponse(
-                {"detail": f"Rate limit exceeded. Try again in {retry_after} seconds."},
-                status_code=429,
-                headers={"Retry-After": str(retry_after)},
+            await _send_json_error(
+                send, 429,
+                f"Rate limit exceeded. Try again in {retry_after} seconds.",
+                extra_headers=[(b"retry-after", str(retry_after).encode())],
             )
+            return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
@@ -181,77 +251,89 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+class RequestSizeLimitMiddleware:
     """Reject requests whose body exceeds a configurable limit.
 
     Two-layer guard:
     1. **Pre-read** — checks ``Content-Length`` header before any body
        is consumed (fast reject for well-behaved clients).
     2. **Streaming** — wraps the ASGI receive channel to count bytes as
-       they arrive, rejecting chunked-encoded requests that exceed the
-       limit without relying on ``Content-Length``.
+       they arrive.  When the limit is exceeded the inner app's response
+       is suppressed and a 413 is sent directly.
 
     Default limit: 1 MiB (1 048 576 bytes).
     """
 
-    def __init__(self, app, *, max_body_size: int = 1_048_576) -> None:
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, *, max_body_size: int = 1_048_576) -> None:
+        self.app = app
         self._max_size = max_body_size
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+
         # Layer 1: fast Content-Length check.
-        content_length = request.headers.get("content-length")
-        if content_length is not None:
+        content_length_raw = _get_header(scope, b"content-length")
+        if content_length_raw:
             try:
-                length = int(content_length)
+                length = int(content_length_raw)
             except (ValueError, OverflowError):
-                return JSONResponse(
-                    {"detail": "Invalid Content-Length header"},
-                    status_code=400,
-                )
+                await _send_json_error(send, 400, "Invalid Content-Length header")
+                return
             if length > self._max_size:
                 logger.warning(
                     "Rejected request to %s: Content-Length %d exceeds limit %d",
-                    request.url.path,
+                    path,
                     length,
                     self._max_size,
                 )
-                return JSONResponse(
-                    {"detail": f"Request body too large. Maximum: {self._max_size} bytes"},
-                    status_code=413,
+                await _send_json_error(
+                    send, 413,
+                    f"Request body too large. Maximum: {self._max_size} bytes",
                 )
+                return
 
         # Layer 2: streaming byte counter for chunked requests.
+        # When the limit is exceeded, the inner app's response is suppressed
+        # and replaced with a 413.
         bytes_received = 0
         max_size = self._max_size
-        original_receive = request.receive
         exceeded = False
+        response_started = False
 
-        async def _counting_receive():
+        async def _counting_receive() -> dict[str, Any]:
             nonlocal bytes_received, exceeded
-            message = await original_receive()
+            message = await receive()
             if message.get("type") == "http.request":
                 body = message.get("body", b"")
                 bytes_received += len(body)
                 if bytes_received > max_size:
                     exceeded = True
-                    logger.warning(
-                        "Rejected chunked request to %s: streamed %d bytes exceeds limit %d",
-                        request.url.path,
-                        bytes_received,
-                        max_size,
-                    )
-                    # Return empty body + more_body=False to stop streaming.
-                    return {"type": "http.request", "body": b"", "more_body": False}
             return message
 
-        request._receive = _counting_receive
-        response = await call_next(request)
+        async def _guarded_send(message: dict[str, Any]) -> None:
+            nonlocal response_started
+            if exceeded:
+                # Suppress the inner app's response — we send 413 after it finishes.
+                return
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        await self.app(scope, _counting_receive, _guarded_send)
 
         if exceeded:
-            return JSONResponse(
-                {"detail": f"Request body too large. Maximum: {self._max_size} bytes"},
-                status_code=413,
+            logger.warning(
+                "Rejected chunked request to %s: streamed %d bytes exceeds limit %d",
+                path,
+                bytes_received,
+                max_size,
             )
-
-        return response
+            if not response_started:
+                await _send_json_error(
+                    send, 413,
+                    f"Request body too large. Maximum: {self._max_size} bytes",
+                )

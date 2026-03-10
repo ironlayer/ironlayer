@@ -22,7 +22,8 @@ _cache: ResponseCache | None = None
 
 def get_classifier() -> SemanticClassifier:
     """Return the module-level classifier instance."""
-    assert _classifier is not None, "SemanticClassifier not initialised"
+    if _classifier is None:
+        raise RuntimeError("SemanticClassifier not initialised")
     return _classifier
 
 

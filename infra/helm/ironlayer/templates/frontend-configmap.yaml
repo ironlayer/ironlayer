@@ -21,11 +21,13 @@ data:
         root /usr/share/nginx/html;
         index index.html;
 
-        # ---------- Security headers ----------
-        add_header X-Frame-Options "SAMEORIGIN" always;
+        # ---------- Security headers (same 6 as frontend/nginx.conf) ----------
+        add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
         # ---------- Gzip compression ----------
         gzip on;
@@ -51,16 +53,26 @@ data:
 
             # Security headers (must be repeated — nginx inheritance does not
             # apply across location blocks that also call add_header).
-            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Frame-Options "DENY" always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         }
 
         # ---------- Static assets (cache-busted by Vite hashes) ----------
         location /assets/ {
             expires 1y;
-            add_header Cache-Control "public, immutable";
+            add_header Cache-Control "public, immutable" always;
+            # Security headers (must be repeated — add_header in this block
+            # shadows all server-level headers).
+            add_header X-Frame-Options "DENY" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
             try_files $uri =404;
         }
 

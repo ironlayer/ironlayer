@@ -22,7 +22,8 @@ _cache: ResponseCache | None = None
 
 def get_optimizer() -> SQLOptimizer:
     """Return the module-level optimizer instance."""
-    assert _optimizer is not None, "SQLOptimizer not initialised"
+    if _optimizer is None:
+        raise RuntimeError("SQLOptimizer not initialised")
     return _optimizer
 
 
