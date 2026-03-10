@@ -56,7 +56,7 @@ class TestCheckPlanQuota:
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
-        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=50)
+        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=12)
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
@@ -73,7 +73,7 @@ class TestCheckPlanQuota:
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
-        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=100)
+        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=25)
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
@@ -82,7 +82,7 @@ class TestCheckPlanQuota:
 
         assert allowed is False
         assert reason is not None
-        assert "100/100" in reason
+        assert "25/25" in reason
         assert "plan run quota exceeded" in reason.lower()
 
     @pytest.mark.asyncio
@@ -91,7 +91,7 @@ class TestCheckPlanQuota:
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
-        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=150)
+        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=30)
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
@@ -100,7 +100,7 @@ class TestCheckPlanQuota:
 
         assert allowed is False
         assert reason is not None
-        assert "150/100" in reason
+        assert "30/25" in reason
 
     @pytest.mark.asyncio
     async def test_enterprise_unlimited_always_allowed(self, mock_session: AsyncMock) -> None:
@@ -187,7 +187,11 @@ class TestCheckAiQuota:
 
     @pytest.mark.asyncio
     async def test_under_limit_returns_allowed(self, mock_session: AsyncMock) -> None:
-        """When AI calls are under the limit, return (True, None)."""
+        """When AI calls are under the limit, return (True, None).
+
+        Uses Team tier because Community AI quota is 0 (AI advisory is
+        gated at Team+ via require_feature).
+        """
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
@@ -195,7 +199,7 @@ class TestCheckAiQuota:
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
-        with patch.object(service, "_get_plan_tier", return_value="community"):
+        with patch.object(service, "_get_plan_tier", return_value="team"):
             allowed, reason = await service.check_ai_quota()
 
         assert allowed is True
@@ -204,38 +208,38 @@ class TestCheckAiQuota:
 
     @pytest.mark.asyncio
     async def test_at_limit_returns_denied(self, mock_session: AsyncMock) -> None:
-        """When AI calls equal the limit, return (False, message)."""
+        """When AI calls equal the Team limit of 5000, return (False, message)."""
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
-        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=500)
+        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=5000)
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
-        with patch.object(service, "_get_plan_tier", return_value="community"):
+        with patch.object(service, "_get_plan_tier", return_value="team"):
             allowed, reason = await service.check_ai_quota()
 
         assert allowed is False
         assert reason is not None
-        assert "500/500" in reason
+        assert "5000/5000" in reason
         assert "ai call quota exceeded" in reason.lower()
 
     @pytest.mark.asyncio
     async def test_over_limit_returns_denied(self, mock_session: AsyncMock) -> None:
-        """When AI calls exceed the community limit of 500, return denied."""
+        """When AI calls exceed the Team limit of 5000, return denied."""
         service = _make_service(mock_session)
 
         service._quota_repo = AsyncMock()
-        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=750)
+        service._quota_repo.get_monthly_event_count = AsyncMock(return_value=7500)
         service._config_repo = AsyncMock()
         service._config_repo.get = AsyncMock(return_value=None)
 
-        with patch.object(service, "_get_plan_tier", return_value="community"):
+        with patch.object(service, "_get_plan_tier", return_value="team"):
             allowed, reason = await service.check_ai_quota()
 
         assert allowed is False
         assert reason is not None
-        assert "750/500" in reason
+        assert "7500/5000" in reason
 
     @pytest.mark.asyncio
     async def test_enterprise_unlimited_always_allowed(self, mock_session: AsyncMock) -> None:
@@ -285,7 +289,7 @@ class TestCheckAiQuota:
         with patch.object(service, "_get_plan_tier", return_value="community"):
             allowed, reason = await service.check_ai_quota()
 
-        # 800 < 1000, so allowed despite community default of 500.
+        # 800 < 1000, so allowed (explicit config overrides community default of 0).
         assert allowed is True
         assert reason is None
 
@@ -613,7 +617,7 @@ class TestGetUsageVsLimits:
 
         service._quota_repo = AsyncMock()
         service._quota_repo.get_current_usage = AsyncMock(
-            return_value={"plan_run": 50, "ai_call": 250, "api_request": 5000}
+            return_value={"plan_run": 12, "ai_call": 0, "api_request": 5000}
         )
 
         service._config_repo = AsyncMock()
@@ -629,16 +633,16 @@ class TestGetUsageVsLimits:
         plan_quota = result["quotas"][0]
         assert plan_quota["name"] == "Plan Runs"
         assert plan_quota["event_type"] == "plan_run"
-        assert plan_quota["used"] == 50
-        assert plan_quota["limit"] == 100
-        assert plan_quota["percentage"] == 50.0
+        assert plan_quota["used"] == 12
+        assert plan_quota["limit"] == 25
+        assert plan_quota["percentage"] == 48.0
 
         ai_quota = result["quotas"][1]
         assert ai_quota["name"] == "AI Calls"
         assert ai_quota["event_type"] == "ai_call"
-        assert ai_quota["used"] == 250
-        assert ai_quota["limit"] == 500
-        assert ai_quota["percentage"] == 50.0
+        assert ai_quota["used"] == 0
+        assert ai_quota["limit"] == 0
+        assert ai_quota["percentage"] is None  # limit 0 → no percentage
 
         api_quota = result["quotas"][2]
         assert api_quota["name"] == "API Requests"
@@ -742,4 +746,11 @@ class TestGetUsageVsLimits:
 
         for quota in result["quotas"]:
             assert quota["used"] == 0
-            assert quota["percentage"] == 0.0
+        # Plan and API quotas have non-zero limits → percentage is 0.0.
+        # AI quota has limit=0 for community → percentage is None.
+        plan_q = result["quotas"][0]
+        assert plan_q["percentage"] == 0.0
+        ai_q = result["quotas"][1]
+        assert ai_q["percentage"] is None  # community AI limit is 0
+        api_q = result["quotas"][2]
+        assert api_q["percentage"] == 0.0

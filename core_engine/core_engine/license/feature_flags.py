@@ -3,9 +3,12 @@
 Three license tiers control access to platform features:
 
 * **Community** -- Free tier with core plan/apply functionality.
-* **Team** -- Adds AI advisory, multi-model plans, and cost tracking.
+* **Team** -- Adds AI advisory, cost tracking, and team management.
 * **Enterprise** -- Full feature set including SSO, multi-tenant RLS,
-  failure prediction, and advanced security.
+  failure prediction, and advanced analytics.
+
+Rate limiting and credential encryption are always-on security behaviours
+and are **not** tier-gated.  Multi-model plans are available to all tiers.
 """
 
 from __future__ import annotations
@@ -35,7 +38,6 @@ class Feature(str, Enum):
     # Team features
     AI_ADVISORY = "ai_advisory"
     COST_TRACKING = "cost_tracking"
-    MULTI_MODEL_PLANS = "multi_model_plans"
     MIGRATION_TOOLS = "migration_tools"
     STRUCTURED_TELEMETRY = "structured_telemetry"
     API_ACCESS = "api_access"
@@ -50,8 +52,6 @@ class Feature(str, Enum):
     AUDIT_LOG = "audit_log"
     RECONCILIATION = "reconciliation"
     LLM_BUDGET_GUARDRAILS = "llm_budget_guardrails"
-    CREDENTIAL_ENCRYPTION = "credential_encryption"
-    RATE_LIMITING = "rate_limiting"
 
 
 # Features available at each tier.  Higher tiers include all lower-tier
@@ -72,7 +72,6 @@ _TEAM_FEATURES: frozenset[Feature] = _COMMUNITY_FEATURES | frozenset(
     {
         Feature.AI_ADVISORY,
         Feature.COST_TRACKING,
-        Feature.MULTI_MODEL_PLANS,
         Feature.MIGRATION_TOOLS,
         Feature.STRUCTURED_TELEMETRY,
         Feature.API_ACCESS,
@@ -90,8 +89,6 @@ _ENTERPRISE_FEATURES: frozenset[Feature] = _TEAM_FEATURES | frozenset(
         Feature.AUDIT_LOG,
         Feature.RECONCILIATION,
         Feature.LLM_BUDGET_GUARDRAILS,
-        Feature.CREDENTIAL_ENCRYPTION,
-        Feature.RATE_LIMITING,
     }
 )
 

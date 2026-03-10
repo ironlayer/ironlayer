@@ -6,7 +6,7 @@ tenant_config overrides, then tier defaults, with ``None`` meaning unlimited.
 
 Tier defaults::
 
-    community:  plans=100,  ai=500,    api=10_000
+    community:  plans=25,   ai=0,      api=10_000
     team:       plans=1_000, ai=5_000,  api=100_000
     enterprise: unlimited
 
@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)
 
 _TIER_DEFAULTS: dict[str, dict[str, int | None]] = {
     "community": {
-        "plan_quota_monthly": 100,
-        "ai_quota_monthly": 500,
+        "plan_quota_monthly": 25,
+        "ai_quota_monthly": 0,
         "api_quota_monthly": 10_000,
         "max_seats": 1,
     },
@@ -323,6 +323,39 @@ class QuotaService:
                 return False, msg
 
         return True, None
+
+    async def get_quota_remaining_and_limit(
+        self,
+        event_type: str,
+    ) -> tuple[int | None, int | None]:
+        """Return ``(remaining, limit)`` for *event_type*.
+
+        Both values are ``None`` when the quota is unlimited (Enterprise).
+
+        Parameters
+        ----------
+        event_type:
+            One of ``"plan_run"``, ``"ai_call"``, ``"api_request"``.
+
+        Returns
+        -------
+        tuple[int | None, int | None]
+            ``(remaining_count, monthly_limit)`` where *remaining_count*
+            is ``max(0, limit - current_usage)``.
+        """
+        quota_field_map = {
+            "plan_run": "plan_quota_monthly",
+            "ai_call": "ai_quota_monthly",
+            "api_request": "api_quota_monthly",
+        }
+        quota_field = quota_field_map.get(event_type)
+        if quota_field is None:
+            return None, None
+        limit = await self._get_effective_quota(quota_field)
+        if limit is None:
+            return None, None
+        current = await self._quota_repo.get_monthly_event_count(event_type)
+        return max(0, limit - current), limit
 
     async def get_usage_vs_limits(self) -> dict[str, Any]:
         """Return current usage alongside effective limits for all quota types.

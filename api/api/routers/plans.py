@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core_engine.license.feature_flags import Feature
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
 from api.dependencies import AIClientDep, MeteringDep, SessionDep, SettingsDep, TenantDep, UserDep, require_feature
@@ -95,6 +95,7 @@ class SuggestionFeedbackRequest(BaseModel):
 @router.post("/generate", response_model=PlanResponse)
 async def generate_plan(
     body: GeneratePlanRequest,
+    response: Response,
     session: SessionDep,
     ai_client: AIClientDep,
     settings: SettingsDep,
@@ -161,6 +162,14 @@ async def generate_plan(
         target_sha=body.target_sha,
     )
 
+    # Quota-remaining headers for frontend upgrade nudges.
+    # Metering flushes async (DatabaseSink.flush uses create_task), so DB
+    # count hasn't incremented yet; remaining - 1 gives the post-request view.
+    remaining, limit = await quota.get_quota_remaining_and_limit("plan_run")
+    if limit is not None:
+        response.headers["X-Plan-Quota-Remaining"] = str(max(0, remaining - 1))
+        response.headers["X-Plan-Quota-Limit"] = str(limit)
+
     return plan
 
 
@@ -199,6 +208,7 @@ async def get_plan(
 @router.post("/{plan_id}/augment", response_model=PlanResponse)
 async def augment_plan(
     plan_id: str,
+    response: Response,
     session: SessionDep,
     ai_client: AIClientDep,
     settings: SettingsDep,
@@ -222,9 +232,21 @@ async def augment_plan(
 
     service = PlanService(session, ai_client, settings, tenant_id=tenant_id, metering=metering)
     try:
-        return await service.generate_augmented_plan(plan_id)
+        result = await service.generate_augmented_plan(plan_id)
     except ValueError:
         raise not_found_404("Plan", plan_id)
+
+    # Quota-remaining headers for frontend upgrade nudges.
+    # Do NOT subtract here: one augment can consume multiple AI units
+    # (semantic_classify + predict_cost + score_risk). The header reflects
+    # pre-request state. A future version can pass back the exact N from
+    # the service for a more precise count.
+    remaining, limit = await quota.get_quota_remaining_and_limit("ai_call")
+    if limit is not None:
+        response.headers["X-AI-Quota-Remaining"] = str(remaining)
+        response.headers["X-AI-Quota-Limit"] = str(limit)
+
+    return result
 
 
 @router.post("/{plan_id}/apply", response_model=list[RunRecordResponse])

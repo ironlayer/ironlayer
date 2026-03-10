@@ -46,6 +46,7 @@ class TestPlanQuotaEnforcement:
         ):
             quota_instance = MockQuota.return_value
             quota_instance.check_plan_quota = AsyncMock(return_value=(True, None))
+            quota_instance.get_quota_remaining_and_limit = AsyncMock(return_value=(24, 25))
 
             plan_instance = MockPlanService.return_value
             plan_instance.generate_plan = AsyncMock(return_value=expected_plan)
@@ -76,7 +77,7 @@ class TestPlanQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_generate_plan_quota_exceeded(self, client: AsyncClient) -> None:
         """When check_plan_quota returns (False, reason), endpoint returns 429."""
-        exceeded_msg = "Monthly plan run quota exceeded (100/100). Upgrade your plan for higher limits."
+        exceeded_msg = "Monthly plan run quota exceeded (25/25). Upgrade your plan for higher limits."
 
         with patch("api.services.quota_service.QuotaService") as MockQuota:
             quota_instance = MockQuota.return_value
@@ -109,7 +110,7 @@ class TestAugmentQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_augment_plan_ai_quota_exceeded(self, client: AsyncClient) -> None:
         """When check_ai_quota returns (False, reason), endpoint returns 429."""
-        ai_exceeded_msg = "Monthly AI call quota exceeded (500/500). Upgrade your plan for higher limits."
+        ai_exceeded_msg = "Monthly AI call quota exceeded (5000/5000). Upgrade your plan for higher limits."
 
         with patch("api.services.quota_service.QuotaService") as MockQuota:
             quota_instance = MockQuota.return_value

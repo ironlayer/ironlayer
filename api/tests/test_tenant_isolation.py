@@ -277,7 +277,15 @@ class TestCrossTenantPlanAccess:
         client_b: AsyncClient,
         _mock_session: AsyncMock,
     ) -> None:
-        with patch("api.routers.plans.PlanService") as MockSvc:
+        with (
+            patch("api.services.quota_service.QuotaService") as MockQuota,
+            patch("api.routers.plans.PlanService") as MockSvc,
+        ):
+            quota_instance = MockQuota.return_value
+            quota_instance.check_ai_quota = AsyncMock(return_value=(True, None))
+            quota_instance.check_llm_budget = AsyncMock(return_value=(True, None))
+            quota_instance.get_quota_remaining_and_limit = AsyncMock(return_value=(None, None))
+
             instance = MockSvc.return_value
             instance.generate_augmented_plan = AsyncMock(side_effect=ValueError("Plan plan-alpha-001 not found"))
             resp = await client_b.post("/api/v1/plans/plan-alpha-001/augment")

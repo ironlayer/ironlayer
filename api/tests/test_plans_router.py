@@ -361,7 +361,15 @@ async def test_augment_plan_success(
         }
     }
 
-    with patch("api.routers.plans.PlanService") as MockPlanService:
+    with (
+        patch("api.services.quota_service.QuotaService") as MockQuota,
+        patch("api.routers.plans.PlanService") as MockPlanService,
+    ):
+        quota_instance = MockQuota.return_value
+        quota_instance.check_ai_quota = AsyncMock(return_value=(True, None))
+        quota_instance.check_llm_budget = AsyncMock(return_value=(True, None))
+        quota_instance.get_quota_remaining_and_limit = AsyncMock(return_value=(4999, 5000))
+
         instance = MockPlanService.return_value
         instance.generate_augmented_plan = AsyncMock(return_value=augmented)
 
@@ -377,7 +385,15 @@ async def test_augment_plan_success(
 @pytest.mark.asyncio
 async def test_augment_plan_not_found(client: AsyncClient) -> None:
     """Augmenting a non-existent plan returns 404."""
-    with patch("api.routers.plans.PlanService") as MockPlanService:
+    with (
+        patch("api.services.quota_service.QuotaService") as MockQuota,
+        patch("api.routers.plans.PlanService") as MockPlanService,
+    ):
+        quota_instance = MockQuota.return_value
+        quota_instance.check_ai_quota = AsyncMock(return_value=(True, None))
+        quota_instance.check_llm_budget = AsyncMock(return_value=(True, None))
+        quota_instance.get_quota_remaining_and_limit = AsyncMock(return_value=(4999, 5000))
+
         instance = MockPlanService.return_value
         instance.generate_augmented_plan = AsyncMock(side_effect=ValueError("Plan nonexistent not found"))
 
