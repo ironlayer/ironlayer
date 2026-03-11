@@ -78,6 +78,9 @@ class ModelTable(Base):
     __table_args__ = (
         PrimaryKeyConstraint("tenant_id", "model_name"),
         Index("ix_models_tenant", "tenant_id"),
+        # NOTE: A GIN trigram index (ix_models_name_trgm) is created by Alembic
+        # migration 030 on PostgreSQL only.  It cannot be declared here because
+        # the postgresql_using/postgresql_ops kwargs crash SQLite's create_all().
     )
 
 

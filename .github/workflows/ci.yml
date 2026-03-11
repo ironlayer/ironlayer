@@ -204,7 +204,7 @@ jobs:
             console.log(pct);
           ")
           echo "Line coverage: ${COVERAGE}%"
-          node -e "if (${COVERAGE} < 25) { console.error('Coverage ${COVERAGE}% is below 25% threshold'); process.exit(1); }"
+          node -e "if (${COVERAGE} < 50) { console.error('Coverage ${COVERAGE}% is below 50% threshold'); process.exit(1); }"
 
   # ---------------------------------------------------------------------------
   # Planner determinism gate -- core platform invariant
@@ -531,7 +531,7 @@ jobs:
           build-args: |
             BUILD_SHA=${{ github.sha }}
             BUILD_REF=${{ github.ref }}
-            VITE_API_URL=${{ vars.API_URL || 'https://api.ironlayer.app' }}
+            VITE_API_URL=${{ vars.API_URL || 'http://localhost:8000' }}
 
       - name: Rotate cache
         run: |

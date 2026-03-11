@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ class FrontendErrorReport(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict, description="Any additional context")
 
 
-@router.post("/frontend", status_code=204)
-async def report_frontend_error(body: FrontendErrorReport) -> None:
+@router.post("/frontend", status_code=204, response_class=Response)
+async def report_frontend_error(body: FrontendErrorReport) -> Response:
     """Accept a structured error report from the frontend ErrorBoundary.
 
     The report is written to the structured application log so that it
@@ -52,3 +53,4 @@ async def report_frontend_error(body: FrontendErrorReport) -> None:
             "extra": body.extra,
         },
     )
+    return Response(status_code=204)

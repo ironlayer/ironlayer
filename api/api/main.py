@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api import __version__
 from api.config import APISettings, PlatformEnv, load_api_settings
@@ -385,6 +385,11 @@ def create_app() -> FastAPI:
     async def permission_error_handler(request: Request, exc: PermissionError) -> JSONResponse:
         logger.warning("PermissionError on %s: %s", request.url.path, exc)
         return JSONResponse(status_code=403, content={"detail": "Permission denied"})
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+        logger.warning("IntegrityError on %s: %s", request.url.path, exc)
+        return JSONResponse(status_code=409, content={"detail": "Resource conflict"})
 
     @app.exception_handler(SQLAlchemyError)
     async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:

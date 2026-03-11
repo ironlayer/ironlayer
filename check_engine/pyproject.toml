@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "ironlayer-check-engine"
 version = "0.3.0"
-description = "Rust-powered validation engine for IronLayer — 90 rules across 12 categories"
+description = "Rust-powered validation engine for IronLayer — 75+ rules across 12 categories"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 classifiers = [

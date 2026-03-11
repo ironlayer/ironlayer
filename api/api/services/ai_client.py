@@ -36,6 +36,44 @@ _PROMPT_INJECTION_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")  # Keep \n, \t, \r
+
+# ---------------------------------------------------------------------------
+# PII redaction patterns
+# ---------------------------------------------------------------------------
+# Defence-in-depth: strip personally identifiable information before sending
+# user-derived context to the external LLM.  Patterns are chosen to avoid
+# false-positives on legitimate SQL data (numeric IDs, timestamps, IPs in
+# WHERE clauses) that the LLM needs to understand query semantics.
+#
+# Design decisions:
+#   - Emails: always PII — redact.
+#   - Credit cards: require a known issuer prefix (Visa 4, MC 51-55,
+#     Amex 34/37, Discover 6011/65) + standard 4×4 grouping to avoid
+#     false-matching on numeric IDs and timestamps.
+#   - SSNs: US-government validation constraints (area ≠ 000/666/9xx,
+#     group ≠ 00, serial ≠ 0000) to reduce false-positives on model IDs.
+#   - IPs: NOT redacted — they are query-logic data in SQL advisory context,
+#     not PII.  The LLM needs them to understand WHERE clauses.
+#   - SSH keys: credential headers — redact.
+_PII_PATTERNS = re.compile(
+    r"|".join(
+        [
+            # Email addresses
+            r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
+            # Credit cards: known issuer prefix + 16 digits in 4×4 groups.
+            # Visa (4xxx), Mastercard (51-55xx), Amex (34/37xx), Discover (6011/65xx).
+            # Separators: space or dash between groups, or no separator.
+            r"\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
+            # US Social Security Numbers with validity constraints.
+            # Area (XXX): not 000, 666, or 900-999.
+            # Group (YY): not 00.  Serial (ZZZZ): not 0000.
+            r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b",
+            # SSH / PEM private key headers
+            r"-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----",
+        ]
+    )
+)
+
 _MAX_FIELD_SIZE = 50 * 1024  # 50 KB per field
 
 
@@ -62,6 +100,8 @@ def _sanitize_ai_input(value: str, field_name: str = "input") -> str:
     cleaned = _CONTROL_CHARS.sub("", value)
     # Strip prompt injection markers.
     cleaned = _PROMPT_INJECTION_PATTERNS.sub("[FILTERED]", cleaned)
+    # Redact PII (emails, credit cards, SSNs, SSH key headers).
+    cleaned = _PII_PATTERNS.sub("[PII_REDACTED]", cleaned)
     # Truncate to max size.
     if len(cleaned) > _MAX_FIELD_SIZE:
         cleaned = cleaned[:_MAX_FIELD_SIZE] + f"\n[TRUNCATED: {field_name} exceeded {_MAX_FIELD_SIZE} bytes]"

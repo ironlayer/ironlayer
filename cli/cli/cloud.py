@@ -90,7 +90,7 @@ def load_stored_token() -> str | None:
 def load_api_url() -> str:
     """Return the configured API URL, defaulting to production."""
     config = load_cloud_config()
-    return config.get("cloud", {}).get("api_url", "https://api.ironlayer.app")
+    return config.get("cloud", {}).get("api_url", "https://api.ironlayer.example.com")
 
 
 def save_cloud_config(api_url: str, api_token: str) -> None:

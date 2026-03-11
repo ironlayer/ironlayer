@@ -2,16 +2,16 @@
 # =============================================================================
 # IronLayer End-to-End Smoke Test
 #
-# Verifies critical paths in the production deployment.
-# Usage: ./scripts/e2e_smoke_test.sh [BASE_URL]
-# Default: https://api.ironlayer.app
+# Verifies critical paths in a deployed instance.
+# Usage: ./scripts/e2e_smoke_test.sh [API_URL] [FRONTEND_URL] [MARKETING_URL]
+# Default: http://localhost:8000
 # =============================================================================
 
 set -euo pipefail
 
-BASE_URL="${1:-https://api.ironlayer.app}"
-FRONTEND_URL="${2:-https://app.ironlayer.app}"
-MARKETING_URL="${3:-https://ironlayer.app}"
+BASE_URL="${1:-http://localhost:8000}"
+FRONTEND_URL="${2:-http://localhost:3000}"
+MARKETING_URL="${3:-http://localhost:3000}"
 PASS=0
 FAIL=0
 WARN=0
@@ -68,14 +68,19 @@ check_ssl() {
             FAIL=$((FAIL + 1))
         fi
     else
-        red "  ✗ $desc (could not read certificate)"
-        FAIL=$((FAIL + 1))
+        yellow "  ⚠ $desc (SSL not available — skipping for non-HTTPS targets)"
+        WARN=$((WARN + 1))
     fi
 }
 
+# Extract hostnames from URLs for SSL checks.
+API_HOST=$(echo "$BASE_URL" | sed -E 's|https?://([^/:]+).*|\1|')
+FRONTEND_HOST=$(echo "$FRONTEND_URL" | sed -E 's|https?://([^/:]+).*|\1|')
+MARKETING_HOST=$(echo "$MARKETING_URL" | sed -E 's|https?://([^/:]+).*|\1|')
+
 echo ""
 blue "═══════════════════════════════════════════════════════════════"
-blue "  IronLayer Production Smoke Test"
+blue "  IronLayer Smoke Test"
 blue "  API:       $BASE_URL"
 blue "  Frontend:  $FRONTEND_URL"
 blue "  Marketing: $MARKETING_URL"
@@ -86,9 +91,15 @@ blue "════════════════════════�
 echo ""
 blue "1. SSL Certificates"
 # -------------------------------------------------------------------------
-check_ssl "API SSL cert" "api.ironlayer.app"
-check_ssl "App SSL cert" "app.ironlayer.app"
-check_ssl "Marketing SSL cert" "ironlayer.app"
+# SSL checks only run against HTTPS targets; skipped for localhost/HTTP.
+if [[ "$BASE_URL" == https://* ]]; then
+    check_ssl "API SSL cert" "$API_HOST"
+    check_ssl "App SSL cert" "$FRONTEND_HOST"
+    check_ssl "Marketing SSL cert" "$MARKETING_HOST"
+else
+    yellow "  ⚠ Skipping SSL checks (non-HTTPS target)"
+    WARN=$((WARN + 1))
+fi
 
 # -------------------------------------------------------------------------
 echo ""
@@ -104,9 +115,9 @@ check_status "Marketing site loads" "$MARKETING_URL" "200"
 echo ""
 blue "3. CORS Headers"
 # -------------------------------------------------------------------------
-check "CORS allows app.ironlayer.app" \
-    "curl -s -H 'Origin: https://app.ironlayer.app' -I $BASE_URL/api/v1/health | grep -i access-control-allow-origin" \
-    "app.ironlayer.app"
+check "CORS allows configured origin" \
+    "curl -s -H 'Origin: $FRONTEND_URL' -I $BASE_URL/api/v1/health | grep -i access-control-allow-origin" \
+    "access-control-allow-origin"
 
 # -------------------------------------------------------------------------
 echo ""

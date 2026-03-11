@@ -250,7 +250,7 @@ variable "llm_api_key" {
 variable "cors_origins" {
   description = "Allowed CORS origins for the API service"
   type        = list(string)
-  default     = ["https://app.ironlayer.app"]
+  default     = ["https://app.ironlayer.example.com"]
 }
 
 # -----------------------------------------------------------------------------

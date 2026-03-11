@@ -19,7 +19,7 @@ _HSTS_VALUE = "max-age=63072000; includeSubDomains; preload"
 _DEFAULT_CSP = (
     "default-src 'self'; "
     "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
+    "style-src 'self'; "
     "img-src 'self' data:; "
     "font-src 'self'; "
     "frame-ancestors 'none'; "
