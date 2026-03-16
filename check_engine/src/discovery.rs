@@ -7,8 +7,10 @@
 //! Project type detection uses a priority order:
 //! 1. `ironlayer.yaml` / `ironlayer.yml` → IronLayer
 //! 2. `dbt_project.yml` → dbt
-//! 3. Sample `.sql` files for IronLayer-style headers → IronLayer
-//! 4. Fallback → RawSql
+//! 3. `.sqlmesh/` directory OR `config.yaml`/`config.yml` containing `model_defaults:`
+//!    OR `sqlmesh.yml` → SQLMesh
+//! 4. Sample `.sql` files for IronLayer-style headers → IronLayer
+//! 5. Fallback → RawSql
 
 use std::path::Path;
 
@@ -57,12 +59,68 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         return ProjectType::Dbt;
     }
 
+    if is_sqlmesh_project(root) {
+        return ProjectType::SQLMesh;
+    }
+
     // Sample up to 5 .sql files for IronLayer-style headers
     if has_ironlayer_headers(root) {
         return ProjectType::IronLayer;
     }
 
     ProjectType::RawSql
+}
+
+/// Detect whether the root directory is a SQLMesh project.
+///
+/// Recognition order:
+/// 1. `.sqlmesh/` directory exists (created by `sqlmesh init`)
+/// 2. `config.yaml` or `config.yml` at root contains a `model_defaults:` key
+///    (the canonical SQLMesh project config key)
+/// 3. `sqlmesh.yml` exists at root (alternative naming convention)
+fn is_sqlmesh_project(root: &Path) -> bool {
+    // Hard signal: SQLMesh always creates this state directory on first run
+    if root.join(".sqlmesh").is_dir() {
+        return true;
+    }
+
+    // Alternative explicit marker file
+    if root.join("sqlmesh.yml").is_file() || root.join("sqlmesh.yaml").is_file() {
+        return true;
+    }
+
+    // Check config.yaml / config.yml for SQLMesh-specific keys
+    for candidate in &["config.yaml", "config.yml"] {
+        let path = root.join(candidate);
+        if path.is_file() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if is_sqlmesh_config(&content) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Return `true` if the config file content looks like a SQLMesh project config.
+///
+/// SQLMesh project configs contain at least one of these top-level keys:
+/// - `model_defaults:` — defines default model behaviour
+/// - `gateways:` — connection definitions (SQLMesh-specific term)
+/// - `default_gateway:` — selects the active gateway
+fn is_sqlmesh_config(content: &str) -> bool {
+    const SQLMESH_KEYS: &[&str] = &["model_defaults:", "gateways:", "default_gateway:"];
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        for key in SQLMESH_KEYS {
+            if trimmed.starts_with(key) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Check if any SQL file in the first 5 found has IronLayer-style `-- name:` headers.

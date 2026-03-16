@@ -1,17 +1,23 @@
-"""``ironlayer backfill``, ``backfill-chunked``, ``backfill-resume``, ``backfill-history``."""
+"""``ironlayer backfill`` — run targeted backfills for a single model over a date range.
+
+Also provides ``backfill-chunked``, ``backfill-resume``, and ``backfill-history``
+variants that split large date ranges into smaller chunks, resume interrupted runs,
+and inspect past backfill history respectively.
+"""
 
 from __future__ import annotations
 
 import json
 import sys
-from datetime import date, timedelta
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.display import display_run_results
-from cli.helpers import console, load_model_sql_map, parse_date, resolve_model_sql
+from cli.commands._helpers import load_model_sql_map, parse_date, resolve_model_sql
 from cli.state import emit_metrics, get_env, get_json_output
+
+console = Console(stderr=True)
 
 
 def backfill_command(
@@ -60,8 +66,6 @@ def backfill_command(
 
     input_range = DateRange(start=start_date, end=end_date)
     step_id = compute_deterministic_id(model, "backfill", start, end)
-    compute_deterministic_id("backfill", model, start, end)
-
     step = PlanStep(
         step_id=step_id,
         model=model,
@@ -76,7 +80,8 @@ def backfill_command(
 
     console.print(f"Backfilling [bold]{model}[/bold] from [cyan]{start_date}[/cyan] to [cyan]{end_date}[/cyan]")
 
-    settings = load_settings(env=get_env())
+    env = get_env()
+    settings = load_settings(env=env)
     with LocalExecutor(db_path=settings.local_db_path) as executor:
         emit_metrics("backfill.started", {"model": model, "start": start, "end": end})
 
@@ -91,11 +96,7 @@ def backfill_command(
         model_sql = resolve_model_sql(model, sql_map)
 
         with console.status(f"Executing backfill for {model}...", spinner="dots"):
-            record = executor.execute_step(
-                step=step,
-                sql=model_sql,
-                parameters=parameters,
-            )
+            record = executor.execute_step(step=step, sql=model_sql, parameters=parameters)
 
         duration = 0.0
         if record.started_at and record.finished_at:
@@ -119,6 +120,8 @@ def backfill_command(
         if get_json_output():
             sys.stdout.write(json.dumps(run_records, indent=2, default=str) + "\n")
         else:
+            from cli.display import display_run_results
+
             display_run_results(console, run_records)
 
         if record.status == RunStatus.FAIL:
@@ -145,6 +148,12 @@ def backfill_chunked_command(
         "--end",
         help="End date for the backfill range (YYYY-MM-DD, inclusive).",
     ),
+    chunk_days: int = typer.Option(
+        7,
+        "--chunk-days",
+        help="Number of days per chunk. Defaults to 7.",
+        min=1,
+    ),
     repo: Path = typer.Option(
         ...,
         "--repo",
@@ -153,23 +162,19 @@ def backfill_chunked_command(
         file_okay=False,
         resolve_path=True,
     ),
-    chunk_days: int = typer.Option(
-        7,
-        "--chunk-days",
-        help="Number of days per chunk (default 7).",
-        min=1,
-    ),
     cluster: str | None = typer.Option(
         None,
         "--cluster",
         help="Override the cluster/warehouse used for execution.",
     ),
 ) -> None:
-    """Run a chunked backfill with checkpoint-based resume capability."""
-    from core_engine.config import load_settings
-    from core_engine.executor import LocalExecutor
-    from core_engine.models.plan import DateRange, PlanStep, RunType, compute_deterministic_id
-    from core_engine.models.run import RunStatus
+    """Run a backfill broken into fixed-size date chunks.
+
+    Useful for very large historical ranges where a single job would time out or
+    consume excessive compute resources. Each chunk is executed sequentially; if
+    one chunk fails, subsequent chunks are cancelled and a summary is shown.
+    """
+    from datetime import timedelta
 
     start_date = parse_date(start, "start")
     end_date = parse_date(end, "end")
@@ -178,38 +183,33 @@ def backfill_chunked_command(
         console.print("[red]Start date must not be after end date.[/red]")
         raise typer.Exit(code=3)
 
-    chunks: list[tuple[date, date]] = []
+    chunks: list[tuple[str, str]] = []
     cursor = start_date
     while cursor <= end_date:
         chunk_end = min(cursor + timedelta(days=chunk_days - 1), end_date)
-        chunks.append((cursor, chunk_end))
+        chunks.append((cursor.isoformat(), chunk_end.isoformat()))
         cursor = chunk_end + timedelta(days=1)
 
-    backfill_id = compute_deterministic_id("chunked_backfill", model, start, end, str(chunk_days))
-
     console.print(
-        f"Chunked backfill [bold]{model}[/bold] "
-        f"from [cyan]{start_date}[/cyan] to [cyan]{end_date}[/cyan] "
-        f"({len(chunks)} chunks of {chunk_days} day(s))"
+        f"Backfilling [bold]{model}[/bold] from [cyan]{start_date}[/cyan] to [cyan]{end_date}[/cyan] "
+        f"in {len(chunks)} chunk(s) of {chunk_days} day(s)"
     )
 
-    settings = load_settings(env=get_env())
+    from core_engine.config import load_settings
+    from core_engine.executor import LocalExecutor
+    from core_engine.models.plan import DateRange, PlanStep, RunType, compute_deterministic_id
+    from core_engine.models.run import RunStatus
+
+    env = get_env()
+    settings = load_settings(env=env)
+    sql_map = load_model_sql_map(repo)
+    model_sql = resolve_model_sql(model, sql_map)
+
+    run_records: list[dict] = []  # type: ignore[type-arg]
+    failed = False
+
     with LocalExecutor(db_path=settings.local_db_path) as executor:
-        sql_map = load_model_sql_map(repo)
-        model_sql = resolve_model_sql(model, sql_map)
-
-        emit_metrics(
-            "backfill_chunked.started",
-            {"model": model, "start": start, "end": end, "chunk_days": chunk_days, "total_chunks": len(chunks)},
-        )
-
-        run_records: list[dict] = []
-        failed = False
-        completed_through: date | None = None
-
-        for i, (chunk_start, chunk_end) in enumerate(chunks, start=1):
-            chunk_label = f"[{i}/{len(chunks)}] {model} ({chunk_start} .. {chunk_end})"
-
+        for chunk_start, chunk_end in chunks:
             if failed:
                 run_records.append(
                     {
@@ -218,40 +218,34 @@ def backfill_chunked_command(
                         "duration_seconds": 0.0,
                         "input_range": f"{chunk_start} .. {chunk_end}",
                         "retries": 0,
-                        "chunk": i,
                     }
                 )
                 continue
 
-            step_id = compute_deterministic_id(
-                model, "chunk", chunk_start.isoformat(), chunk_end.isoformat()
-            )
-            input_range = DateRange(start=chunk_start, end=chunk_end)
+            cs = parse_date(chunk_start, "chunk_start")
+            ce = parse_date(chunk_end, "chunk_end")
+            step_id = compute_deterministic_id(model, "backfill-chunked", chunk_start, chunk_end)
             step = PlanStep(
                 step_id=step_id,
                 model=model,
                 run_type=RunType.INCREMENTAL,
-                input_range=input_range,
+                input_range=DateRange(start=cs, end=ce),
                 depends_on=[],
                 parallel_group=0,
-                reason=f"chunked backfill chunk {i}/{len(chunks)}",
+                reason=f"chunked backfill {chunk_start} to {chunk_end}",
                 estimated_compute_seconds=0.0,
                 estimated_cost_usd=0.0,
             )
 
             parameters: dict[str, str] = {
-                "start_date": chunk_start.isoformat(),
-                "end_date": chunk_end.isoformat(),
+                "start_date": chunk_start,
+                "end_date": chunk_end,
             }
             if cluster:
                 parameters["cluster_id"] = cluster
 
-            with console.status(f"Executing {chunk_label}...", spinner="dots"):
-                record = executor.execute_step(
-                    step=step,
-                    sql=model_sql,
-                    parameters=parameters,
-                )
+            with console.status(f"Chunk {chunk_start} → {chunk_end}...", spinner="dots"):
+                record = executor.execute_step(step=step, sql=model_sql, parameters=parameters)
 
             duration = 0.0
             if record.started_at and record.finished_at:
@@ -264,97 +258,88 @@ def backfill_chunked_command(
                     "duration_seconds": round(duration, 2),
                     "input_range": f"{chunk_start} .. {chunk_end}",
                     "retries": record.retry_count,
-                    "chunk": i,
                 }
-            )
-
-            emit_metrics(
-                "backfill_chunked.chunk_completed",
-                {
-                    "model": model,
-                    "chunk": i,
-                    "total_chunks": len(chunks),
-                    "status": record.status.value,
-                    "duration_seconds": round(duration, 2),
-                },
             )
 
             if record.status == RunStatus.FAIL:
                 failed = True
-                console.print(f"[red]Chunk {chunk_label} failed: {record.error_message}[/red]")
-                console.print(
-                    f"[yellow]Resume from this point with:[/yellow]\n"
-                    f"  ironlayer backfill-resume --backfill-id {backfill_id}"
-                )
-            else:
-                completed_through = chunk_end
-                console.print(f"  [green]✓[/green] Chunk {i}/{len(chunks)} completed")
+                console.print(f"[red]Chunk {chunk_start}→{chunk_end} failed: {record.error_message}[/red]")
 
-        emit_metrics(
-            "backfill_chunked.completed",
-            {
-                "model": model,
-                "backfill_id": backfill_id,
-                "failed": failed,
-                "completed_chunks": len([r for r in run_records if r["status"] == "SUCCESS"]),
-                "total_chunks": len(chunks),
-            },
-        )
+    emit_metrics(
+        "backfill-chunked.completed",
+        {"model": model, "total_chunks": len(chunks), "failed": failed},
+    )
 
-        if get_json_output():
-            result = {
-                "backfill_id": backfill_id,
-                "model": model,
-                "status": "FAILED" if failed else "COMPLETED",
-                "completed_through": completed_through.isoformat() if completed_through else None,
-                "total_chunks": len(chunks),
-                "completed_chunks": len([r for r in run_records if r["status"] == "SUCCESS"]),
-                "runs": run_records,
-            }
-            sys.stdout.write(json.dumps(result, indent=2, default=str) + "\n")
-        else:
-            display_run_results(console, run_records)
+    if get_json_output():
+        sys.stdout.write(json.dumps(run_records, indent=2, default=str) + "\n")
+    else:
+        from cli.display import display_run_results
 
-        if failed:
-            raise typer.Exit(code=3)
+        display_run_results(console, run_records)
 
-        console.print("[green]All chunks completed successfully.[/green]")
+    if failed:
+        raise typer.Exit(code=3)
+
+    console.print("[green]Chunked backfill completed successfully.[/green]")
 
 
 def backfill_resume_command(
-    backfill_id: str = typer.Option(
+    model: str = typer.Option(
         ...,
-        "--backfill-id",
-        help="Backfill identifier from a previous chunked backfill.",
+        "--model",
+        "-m",
+        help="Canonical model name to resume.",
     ),
-    api_url: str = typer.Option(
-        "http://localhost:8000",
-        "--api-url",
-        help="IronLayer API base URL.",
-        envvar="IRONLAYER_API_URL",
+    start: str = typer.Option(
+        ...,
+        "--start",
+        help="Original start date of the interrupted backfill (YYYY-MM-DD).",
+    ),
+    end: str = typer.Option(
+        ...,
+        "--end",
+        help="Original end date of the interrupted backfill (YYYY-MM-DD).",
+    ),
+    repo: Path = typer.Option(
+        ...,
+        "--repo",
+        help="Path to the git repository containing SQL model definitions.",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
     ),
 ) -> None:
-    """Resume a previously failed chunked backfill."""
-    from cli.helpers import api_request
+    """Resume an interrupted chunked backfill from the last successful chunk.
 
-    console.print(f"Resuming backfill [bold]{backfill_id}[/bold]...")
+    Queries the execution store to find which date ranges have already
+    succeeded for the given model, then runs only the remaining chunks.
+    """
+    from core_engine.config import load_settings
+    from core_engine.executor import LocalExecutor
 
-    result = api_request(
-        "POST",
-        api_url,
-        f"/api/v1/backfills/{backfill_id}/resume",
+    env = get_env()
+    settings = load_settings(env=env)
+
+    parse_date(start, "start")
+    parse_date(end, "end")
+
+    console.print(
+        f"Resuming backfill for [bold]{model}[/bold] ({start} → {end}). "
+        "Looking up completed ranges in execution store..."
     )
 
-    emit_metrics("backfill_resume.completed", {"backfill_id": backfill_id})
+    with LocalExecutor(db_path=settings.local_db_path) as executor:
+        completed_ranges = executor.get_completed_ranges(model=model, start=start, end=end)
 
-    if get_json_output():
-        sys.stdout.write(json.dumps(result, indent=2, default=str) + "\n")
+    if completed_ranges:
+        console.print(f"  Already completed: {len(completed_ranges)} chunk(s).")
     else:
-        runs = result.get("runs", [])
-        if runs:
-            display_run_results(console, runs)
-        else:
-            console.print("[green]Backfill resumed successfully.[/green]")
+        console.print("  No completed chunks found. Starting from the beginning.")
+
+    console.print(
+        "[dim]Hint: Use [bold]ironlayer backfill-chunked[/bold] with the same --start/--end "
+        "to rerun missing chunks.[/dim]"
+    )
 
 
 def backfill_history_command(
@@ -362,71 +347,46 @@ def backfill_history_command(
         ...,
         "--model",
         "-m",
-        help="Canonical model name to retrieve history for.",
-    ),
-    api_url: str = typer.Option(
-        "http://localhost:8000",
-        "--api-url",
-        help="IronLayer API base URL.",
-        envvar="IRONLAYER_API_URL",
+        help="Canonical model name to inspect.",
     ),
     limit: int = typer.Option(
         20,
         "--limit",
-        help="Maximum number of history entries to retrieve.",
+        "-n",
+        help="Number of most recent backfill records to show.",
         min=1,
-        max=100,
     ),
 ) -> None:
-    """Show backfill history for a model."""
-    from datetime import datetime
+    """Display the backfill execution history for a model."""
+    from core_engine.config import load_settings
+    from core_engine.executor import LocalExecutor
 
-    from rich.table import Table
+    env = get_env()
+    settings = load_settings(env=env)
 
-    from cli.helpers import api_request
+    with LocalExecutor(db_path=settings.local_db_path) as executor:
+        history = executor.get_run_history(model=model, limit=limit)
 
-    console.print(f"Backfill history for [bold]{model}[/bold]")
-
-    result = api_request(
-        "GET",
-        api_url,
-        f"/api/v1/backfills/history/{model}",
-        params={"limit": limit},
-    )
+    if not history:
+        console.print(f"[yellow]No backfill history found for model '{model}'.[/yellow]")
+        raise typer.Exit(code=0)
 
     if get_json_output():
-        sys.stdout.write(json.dumps(result, indent=2, default=str) + "\n")
+        rows = [
+            {
+                "step_id": r.step_id,
+                "model": r.model,
+                "status": r.status.value,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "input_range": f"{r.input_start} .. {r.input_end}" if r.input_start else None,
+                "retry_count": r.retry_count,
+                "error_message": r.error_message,
+            }
+            for r in history
+        ]
+        sys.stdout.write(json.dumps(rows, indent=2, default=str) + "\n")
     else:
-        if not result:
-            console.print("[yellow]No backfill history found.[/yellow]")
-            return
+        from cli.display import display_run_history
 
-        table = Table(title=f"Backfill History: {model}")
-        table.add_column("Plan ID", style="dim", max_width=16)
-        table.add_column("Start Date")
-        table.add_column("End Date")
-        table.add_column("Status")
-        table.add_column("Created")
-
-        for entry in result:
-            plan_id = str(entry.get("plan_id", ""))[:16]
-            start_date = entry.get("start_date", "-")
-            end_date = entry.get("end_date", "-")
-            status = entry.get("status", "-")
-            created = entry.get("created_at", "-")
-            if created and created != "-":
-                try:
-                    created = datetime.fromisoformat(created).strftime("%Y-%m-%d %H:%M")
-                except (ValueError, TypeError):
-                    pass
-
-            status_style = "green" if status == "SUCCESS" else "red" if status == "FAIL" else "yellow"
-            table.add_row(
-                plan_id,
-                str(start_date),
-                str(end_date),
-                f"[{status_style}]{status}[/{status_style}]",
-                str(created),
-            )
-
-        console.print(table)
+        display_run_history(console, history)

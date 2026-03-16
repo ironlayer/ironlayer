@@ -1,4 +1,4 @@
-"""``ironlayer lineage`` -- display upstream/downstream lineage."""
+"""``ironlayer lineage`` — display upstream/downstream lineage for a model."""
 
 from __future__ import annotations
 
@@ -8,13 +8,11 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.console import Console
 
-from cli.display import (
-    display_cross_model_column_lineage,
-    display_lineage,
-)
-from cli.helpers import console
 from cli.state import get_json_output
+
+console = Console(stderr=True)
 
 
 def lineage_command(
@@ -36,8 +34,8 @@ def lineage_command(
         "--column",
         "-c",
         help=(
-            "Column name to trace.  When provided, switches to column-level "
-            "lineage mode.  Without --column, shows table-level lineage."
+            "Column name to trace. When provided, switches to column-level "
+            "lineage mode. Without --column, shows table-level lineage."
         ),
     ),
     depth: int = typer.Option(
@@ -48,7 +46,13 @@ def lineage_command(
         max=200,
     ),
 ) -> None:
-    """Display upstream and downstream lineage for a model."""
+    """Display upstream and downstream lineage for a model.
+
+    By default shows table-level lineage (upstream/downstream models).
+    Use --column/-c to switch to column-level lineage, tracing a
+    specific output column back through the DAG to its source tables
+    and columns.
+    """
     from core_engine.graph import build_dag, get_downstream, get_upstream
     from core_engine.loader import load_models_from_directory
 
@@ -77,9 +81,7 @@ def lineage_command(
         raise typer.Exit(code=3)
 
     if column is not None:
-        from core_engine.graph import (
-            trace_column_across_dag,
-        )
+        from core_engine.graph import trace_column_across_dag
         from core_engine.sql_toolkit import Dialect
 
         model_sql_map: dict[str, str] = {}
@@ -122,6 +124,8 @@ def lineage_command(
             }
             sys.stdout.write(json.dumps(result, indent=2) + "\n")
         else:
+            from cli.display import display_cross_model_column_lineage
+
             display_cross_model_column_lineage(console, cross_lineage)
         return
 
@@ -136,4 +140,6 @@ def lineage_command(
         }
         sys.stdout.write(json.dumps(result, indent=2) + "\n")
     else:
+        from cli.display import display_lineage
+
         display_lineage(console, model, upstream, downstream)

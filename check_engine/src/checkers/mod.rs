@@ -17,6 +17,7 @@ pub mod ref_resolver;
 pub mod sql_header;
 pub mod sql_safety;
 pub mod sql_syntax;
+pub mod sqlmesh_project;
 pub mod test_adequacy;
 pub mod yaml_schema;
 
@@ -61,7 +62,8 @@ pub trait Checker: Send + Sync {
 ///
 /// Returns a vector of boxed checker trait objects, one per check category.
 /// Includes Phase 1 (HDR), Phase 2 (SQL, SAF, REF, NAME), Phase 3
-/// (YML, DBT, CON), and extended checkers (DBK, INC, PERF, TST).
+/// (YML, DBT, CON), extended checkers (DBK, INC, PERF, TST), and
+/// SQLMesh-specific checks (SMQ).
 #[must_use]
 pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
     vec![
@@ -72,6 +74,7 @@ pub fn build_checker_registry() -> Vec<Box<dyn Checker>> {
         Box::new(naming::NamingChecker),
         Box::new(yaml_schema::YamlSchemaChecker),
         Box::new(dbt_project::DbtProjectChecker),
+        Box::new(sqlmesh_project::SQLMeshProjectChecker),
         Box::new(model_consistency::ModelConsistencyChecker),
         Box::new(databricks_sql::DatabricksSqlChecker),
         Box::new(incremental_logic::IncrementalLogicChecker),

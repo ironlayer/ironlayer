@@ -581,10 +581,17 @@ impl CheckEngine {
 ///   all project types.
 fn should_run_checker(checker_name: &str, project_type: &ProjectType) -> bool {
     match checker_name {
+        // IronLayer-only checks
         "sql_header" | "incremental_logic" | "test_adequacy" => {
             *project_type == ProjectType::IronLayer
         }
+        // dbt-only checks
         "dbt_project" => *project_type == ProjectType::Dbt,
+        // SQLMesh-only checks
+        "sqlmesh_project" => *project_type == ProjectType::SQLMesh,
+        // All other checks run for all project types (sql_syntax, sql_safety,
+        // ref_resolver, naming, yaml_schema, model_consistency, databricks_sql,
+        // performance, etc.)
         _ => true,
     }
 }
@@ -1122,6 +1129,20 @@ mod tests {
         assert!(should_run_checker("performance", &ProjectType::IronLayer));
         assert!(should_run_checker("performance", &ProjectType::Dbt));
         assert!(should_run_checker("performance", &ProjectType::RawSql));
+        // SQLMesh-specific checker
+        assert!(should_run_checker(
+            "sqlmesh_project",
+            &ProjectType::SQLMesh
+        ));
+        assert!(!should_run_checker(
+            "sqlmesh_project",
+            &ProjectType::IronLayer
+        ));
+        assert!(!should_run_checker("sqlmesh_project", &ProjectType::Dbt));
+        assert!(!should_run_checker(
+            "sqlmesh_project",
+            &ProjectType::RawSql
+        ));
     }
 
     #[test]

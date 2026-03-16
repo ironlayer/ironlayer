@@ -194,6 +194,7 @@ fn rule_id_to_name(rule_id: &str) -> String {
         "NAME" => format!("NamingConvention{}", &rule_id[4..]),
         "YML" => format!("YamlSchema{}", &rule_id[3..]),
         "DBT" => format!("DbtProject{}", &rule_id[3..]),
+        "SMQ" => format!("SQLMeshProject{}", &rule_id[3..]),
         "CON" => format!("ModelConsistency{}", &rule_id[3..]),
         _ => rule_id.to_owned(),
     }
@@ -263,6 +264,10 @@ fn rule_id_to_short_description(rule_id: &str) -> String {
         "DBT004" => "Unrecognized materialization".to_owned(),
         "DBT005" => "No unique test on any column".to_owned(),
         "DBT006" => "No not_null test on primary key".to_owned(),
+        "SMQ001" => "Missing MODEL() DDL block".to_owned(),
+        "SMQ002" => "Incremental model missing grain/unique_key".to_owned(),
+        "SMQ003" => "INCREMENTAL_BY_TIME_RANGE missing @start_ds/@end_ds".to_owned(),
+        "SMQ004" => "Model name not snake_case".to_owned(),
         "CON001" => "Duplicate model name".to_owned(),
         "CON002" => "Declared dependency not in refs".to_owned(),
         "CON003" => "Ref not in declared dependencies".to_owned(),

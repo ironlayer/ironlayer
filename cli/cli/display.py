@@ -597,3 +597,62 @@ def display_check_results(console: Console, result: Any) -> None:
         f"{result.total_infos} info(s)  "
         f"({result.elapsed_ms}ms)\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# Backfill history
+# ---------------------------------------------------------------------------
+
+
+def display_run_history(console: Console, history: list) -> None:  # type: ignore[type-arg]
+    """Render a table of past backfill/run records.
+
+    Parameters
+    ----------
+    console:
+        Rich console to write to.
+    history:
+        List of run record objects with attributes: step_id, model, status,
+        started_at, finished_at, retry_count, error_message, input_start,
+        input_end.
+    """
+    if not history:
+        console.print("[dim]No history records found.[/dim]")
+        return
+
+    table = Table(
+        title="Backfill History",
+        show_lines=False,
+        pad_edge=True,
+        expand=False,
+    )
+    table.add_column("Model", style="bold")
+    table.add_column("Status")
+    table.add_column("Input Range")
+    table.add_column("Started At", style="dim")
+    table.add_column("Duration", justify="right")
+    table.add_column("Retries", justify="center")
+
+    for r in history:
+        status = r.status.value if hasattr(r.status, "value") else str(r.status)
+        duration = "-"
+        if getattr(r, "started_at", None) and getattr(r, "finished_at", None):
+            delta = (r.finished_at - r.started_at).total_seconds()
+            duration = f"{delta:.2f}s"
+        input_range = (
+            f"{r.input_start} .. {r.input_end}"
+            if getattr(r, "input_start", None)
+            else "-"
+        )
+        started_str = r.started_at.strftime("%Y-%m-%d %H:%M:%S") if getattr(r, "started_at", None) else "-"
+
+        table.add_row(
+            getattr(r, "model", "?"),
+            _coloured_status(status),
+            input_range,
+            started_str,
+            duration,
+            str(getattr(r, "retry_count", 0)),
+        )
+
+    console.print(table)

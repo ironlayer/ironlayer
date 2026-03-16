@@ -1,4 +1,4 @@
-"""``ironlayer apply`` -- execute a plan."""
+"""``ironlayer apply`` — execute a previously generated plan."""
 
 from __future__ import annotations
 
@@ -7,15 +7,12 @@ import sys
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.display import display_run_results
-from cli.helpers import (
-    console,
-    format_input_range,
-    load_model_sql_map,
-    resolve_model_sql,
-)
+from cli.commands._helpers import format_input_range, load_model_sql_map, resolve_model_sql
 from cli.state import emit_metrics, get_env, get_json_output
+
+console = Console(stderr=True)
 
 
 def apply_command(
@@ -54,7 +51,7 @@ def apply_command(
     """Execute a previously generated plan."""
     from core_engine.config import load_settings
     from core_engine.executor import LocalExecutor
-    from core_engine.models.run import RunRecord, RunStatus
+    from core_engine.models.run import RunStatus
     from core_engine.planner import deserialize_plan
 
     try:
@@ -70,29 +67,30 @@ def apply_command(
         console.print(f"[red]Failed to load models from repo: {exc}[/red]")
         raise typer.Exit(code=3) from exc
 
-    if not auto_approve and get_env() != "dev":
+    env = get_env()
+    if not auto_approve and env != "dev":
         if not approve_by:
             console.print("[red]Non-dev environments require --approve-by or --auto-approve.[/red]")
             raise typer.Exit(code=3)
         console.print(f"Plan approved by: [bold]{approve_by}[/bold]")
 
     if execution_plan.summary.total_steps == 0:
-        console.print("[green]Plan has zero steps -- nothing to execute.[/green]")
+        console.print("[green]Plan has zero steps — nothing to execute.[/green]")
         raise typer.Exit(code=0)
 
-    settings = load_settings(env=get_env())
+    settings = load_settings(env=env)
 
     emit_metrics(
         "apply.started",
         {
             "plan_id": execution_plan.plan_id,
             "total_steps": execution_plan.summary.total_steps,
-            "env": get_env(),
+            "env": env,
             "approved_by": approve_by or ("auto" if auto_approve else "dev-default"),
         },
     )
 
-    run_records: list[dict] = []
+    run_records: list[dict] = []  # type: ignore[type-arg]
     failed = False
 
     with LocalExecutor(db_path=settings.local_db_path) as executor:
@@ -121,7 +119,7 @@ def apply_command(
                     parameters["cluster_id"] = override_cluster
 
                 model_sql = resolve_model_sql(step.model, sql_map)
-                record: RunRecord = executor.execute_step(
+                record = executor.execute_step(
                     step=step,
                     sql=model_sql,
                     parameters=parameters,
@@ -168,6 +166,8 @@ def apply_command(
     if get_json_output():
         sys.stdout.write(json.dumps(run_records, indent=2, default=str) + "\n")
     else:
+        from cli.display import display_run_results
+
         display_run_results(console, run_records)
 
     if failed:
