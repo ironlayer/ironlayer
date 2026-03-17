@@ -1,0 +1,25 @@
+---
+description: AI cost awareness when using LLMs for advisory features.
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# AI Cost Awareness
+
+## When AI Is Used
+
+IronLayer's AI advisory layer (`ai_engine/`) annotates plans with cost and risk. AI is **advisory only** — plans are valid without it.
+
+## Cost-Saving Patterns
+
+- Cache identical prompts when possible
+- Use smaller models for classification vs. complex reasoning
+- Batch operations when feasible
+- Never hardcode API keys — read from `os.environ`
+
+## Budget Considerations
+
+If integrating LLM calls:
+- Set reasonable token limits
+- Track usage for cost attribution
+- Consider local models for high-volume tasks

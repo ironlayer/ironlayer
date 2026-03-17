@@ -1,0 +1,49 @@
+{
+  // ============================================================================
+  // IronLayer MCP Configuration — Public Template
+  //
+  // This file is the canonical template for .cursor/mcp.json in public repos
+  // (e.g. ironlayer_oss). No Exodus IP — only IronLayer + generic tools.
+  // Managed by: make sync-ai
+  // Source: iron-layer-dev-workspace/ai/cursor/mcp.json.template-public
+  //
+  // SETUP: From ironlayer_oss repo root, run `uv sync` then Cursor will use
+  //   uv run ironlayer mcp serve. Or install: pip install ironlayer[mcp]
+  // ============================================================================
+  "mcpServers": {
+
+    // ─── IronLayer MCP Server ───────────────────────────────────────────────
+    // Built into the IronLayer package. 8 tools: plan, lineage, diff, validate,
+    // models, transpile, show. Start via: ironlayer mcp serve
+    "ironlayer": {
+      "command": "uv",
+      "args": ["run", "ironlayer", "mcp", "serve"],
+      "description": "IronLayer tools — plan, lineage, diff, validate (8 tools)"
+    },
+
+    // ─── GitHub MCP Server ────────────────────────────────────────────────
+    // Official GitHub MCP server from Anthropic.
+    // Provides tools: list_repos, get_file, create_pr, review_pr, get_issues, etc.
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      },
+      "description": "GitHub API tools — repos, PRs, issues, files, reviews"
+    },
+
+    // ─── Filesystem MCP Server ──────────────────────────────────────────────
+    // Provides: read_file, write_file, list_dir, search_files.
+    // Scoped to project root (current working directory when Cursor starts MCP).
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${env:HOME}"
+      ],
+      "description": "Filesystem tools — read, write, list, search (scoped to HOME)"
+    }
+  }
+}

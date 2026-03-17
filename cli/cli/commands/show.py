@@ -1,4 +1,4 @@
-"""``ironlayer show`` -- display plan summary."""
+"""``ironlayer show`` — display a human-readable summary of a saved plan file."""
 
 from __future__ import annotations
 
@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.display import display_plan_summary
-from cli.helpers import console
 from cli.state import get_json_output
+
+console = Console(stderr=True)
 
 
 def show_command(
@@ -35,4 +36,6 @@ def show_command(
     if get_json_output():
         sys.stdout.write(plan_json.strip() + "\n")
     else:
+        from cli.display import display_plan_summary
+
         display_plan_summary(console, execution_plan)

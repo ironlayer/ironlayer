@@ -1,254 +1,182 @@
-# CLAUDE.md — Exodus / IronLayer Platform
+# CLAUDE.md — IronLayer
 
-> **Single source of truth for AI agents working across the Exodus / IronLayer workspace.**
-> Covers workspace-level context. Each product repo has its own CLAUDE.md for repo-specific context.
+> Agent context for the IronLayer repo. Read by Claude Code.
 > Last updated: March 2026
 
 ---
 
-## What Is Exodus?
+## What IronLayer Is
 
-Exodus is an **AI-native data platform company** building three products that together eliminate the fragmented, manual work of modern data engineering:
-
-| Product | Tag | What It Does |
-|---|---|---|
-| **IronLayer** | SHIP | SQL control plane — runs BEFORE dbt or SQLMesh. Deterministic plans, cost modeling, column-level lineage, schema guardrails. Framework-agnostic. |
-| **Exodus Foundation** | BUILD | Turnkey production data stack — Terraform + dbt/SQLMesh + extractors deployed to client Databricks in < 1 week. |
-| **Exodus Autopilot** | RUN | Agent fleet — GitHub App (AI PR review), automated pipeline monitoring, self-healing agents. |
-
-**One-line pitch:** *"AI that gets smarter about YOUR data stack with every PR it reviews."*
-
----
-
-## Repository Map
+IronLayer is an **AI-native SQL transformation control plane** for Databricks — the `terraform plan` / `terraform apply` for your dbt models.
 
 ```
-# Repos live as siblings in a shared parent directory.
-# activate.sh sets WORKSPACE_ROOT; paths resolve relative to it.
-#
-├── iron-layer-dev-workspace/    # Workspace orchestrator — AI configs, standards, tooling
-├── exodus-core/                 # Shared kernel (auth, llm, security, db, memory, mcp)
-├── ironlayer_oss/               # IronLayer — SHIP (public, Apache 2.0)
-├── ironlayer_infra/             # Exodus Foundation — BUILD (private)
-├── exodus-autopilot/            # Exodus Autopilot — RUN (private)
-├── exodus-client-template/      # Per-client config template
-├── exodus-terraform/            # GitHub org Terraform management
-├── exodus-migrate/              # Redshift→Databricks migration CLI
-├── Data-eXchange/               # Rust CLI utility (dx diff, validate, query)
-│
-├── dpb-data-platform-in-a-box/  # [REFERENCE] Legacy monolith — agent code reference
-└── AEGIS-DWH-IN-A-BOX-V2/      # [REFERENCE] Prototype
+Tagline: "Know what will run. Know what it costs. Know what it breaks."
+License: Apache 2.0 (core)
+Repo:    public — ironlayer/ironlayer_oss on GitHub
+```
+
+```
+Git repo → git diff → model loader → SQL parser → DAG builder
+                                                      ↓
+State store ← watermarks ← interval planner ← structural diff
+    ↑                                                   ↓
+Execution records                          plan JSON → executor → Databricks
+                                                     ↓ (optional)
+                                              AI engine → advisory JSON
 ```
 
 ---
 
-## Architecture Principles
+## Two-Layer Architecture
 
-### 1. Hybrid: Shared Kernel + Product Repos
-`exodus-core` is the shared Python package. Product repos depend on it; they don't duplicate shared logic.
-- Auth, LLM routing, security, DB, memory → `exodus-core`
-- Plan engine, lineage, cost, framework detection → `ironlayer_oss`
-- Terraform, dbt/SQLMesh, extractors → `ironlayer_infra`
-- Agent fleet, GitHub App, billing → `exodus-autopilot`
+### Layer A — Deterministic Core (`core_engine/`)
 
-### 2. Databricks-Native CI/CD
-All CI/CD runs on Databricks job compute (cheapest). SQL Warehouses are user-facing only.
+Same input → same output. Always.
 
-### 3. Two-Pass AI Review
-- Pass 1: `qwen2.5-coder:32b` (vLLM, Mac Studio) — fast, $0
-- Pass 2: `claude-opus-4` — conditional, only when confidence < 70% or BLOCK detected
+- Content-based IDs (SHA-256 of plan content)
+- Sorted JSON keys, stable SQL canonicalization
+- No timestamps in plan payloads
+- No LLM in the execution path
 
-### 4. Client-Agnostic Core
-Platform IP in the Docker image. Client-specific knowledge in `exodus-client-template`.
+**Core modules:**
 
-### 5. Budget-Protected AI
-All Claude calls through `exodus-core` LLM router with `EXODUS_BUDGET_LIMIT` cap and SHA-256 response cache.
+| Module | Responsibility |
+|--------|---------------|
+| `loader/` | Load models (raw .sql, dbt, SQLMesh), ref resolution, YAML headers |
+| `parser/` | SQL parsing via SQLGlot, normalization, AST |
+| `graph/` | DAG build (NetworkX), topological sort, upstream/downstream, column lineage |
+| `diff/` | Structural diff (content hashes), AST diff, cosmetic vs structural detection |
+| `planner/` | Interval planning, plan serialization, run types |
+| `executor/` | Local (DuckDB), Databricks; cluster templates, retry, schema introspection |
+| `sql_toolkit/` | SQLGlot: transpiler, qualifier, scope analysis, safety checks |
+| `contracts/` | Schema contract validation |
+| `state/` | DB layer, Alembic migrations, repository pattern |
+| `models/` | `ModelDefinition`, `Plan`, `PlanStep`, `DiffResult` dataclasses |
 
-### 6. Everything Terraform
-All GitHub repos, branch protection, environments, and secrets managed by `exodus-terraform`.
+### Layer B — AI Advisory (`ai_engine/`)
 
----
+**Advisory only.** AI annotates plans; it never changes them.
 
-## Build and Test Commands
-
-```bash
-# Activate workspace (always use this)
-source activate.sh
-
-# Any repo — Python
-uv run pytest tests/ -v
-uv run ruff check .
-uv run mypy . --ignore-missing-imports
-
-# ironlayer_infra — SQL + Terraform
-sqlfluff lint dbt-framework/models/ --dialect databricks
-terraform fmt -check -recursive terraform/
-dbt compile --target dev            # dbt Core projects
-sqlmesh plan --dry-run              # SQLMesh projects
-
-# Data-eXchange — Rust
-cargo fmt --check && cargo clippy && cargo test
-
-# Pre-commit (all repos)
-pre-commit run --all-files
-
-# IronLayer CLI
-ironlayer plan                   # Validate execution plan
-ironlayer diff                   # Schema/data diff
-ironlayer status                 # System health
-
-# Exodus Autopilot CLI
-exodus review code <path>        # AI code review (local first)
-exodus agent run --item <ID>     # Run backlog item
-exodus ai-usage                  # Track AI spend
-```
+- Cost prediction (from execution telemetry)
+- Risk scoring (structural vs cosmetic diff, downstream impact)
+- SQL optimization suggestions
+- Non-blocking: plans are valid without AI advisory
 
 ---
 
-## Claude Skills (available in this workspace)
-
-```bash
-cat ai/claude/skills/{skill-name}/SKILL.md
-```
-
-| Skill | When to Use |
-|---|---|
-| `exodus-pr-review` | Reviewing PRs with BLOCK/WARN/NOTE output (dbt + SQLMesh aware) |
-| `exodus-dbt-model` | Creating dbt Core staging/intermediate/mart models |
-| `exodus-sqlmesh` | Creating SQLMesh models, converting dbt→SQLMesh, plan/apply workflows |
-| `exodus-extractor` | Adding new data source extractors |
-| `exodus-kimball-design` | Designing star schemas (dbt + SQLMesh model kinds) |
-| `exodus-terraform` | Creating Terraform modules (Databricks, AWS, GitHub) |
-| `exodus-pipeline-design` | Designing end-to-end data pipelines (dbt or SQLMesh) |
-| `exodus-data-quality` | Adding dbt tests and SQLMesh audits / data quality rules |
-| `exodus-dbt-cloud` | Managing dbt Cloud Enterprise projects, jobs, and environments |
-| `exodus-dev-loop` | PRIVIA development loop for non-trivial tasks |
-
----
-
-## Agent Conventions
+## Model Kinds and Materialization
 
 ```python
-from exodus_core.agents.base import BaseAgent, AgentResult
-from exodus_core.llm import ModelTier
+# Model kinds (how IronLayer tracks and executes)
+class ModelKind(str, Enum):
+    FULL_REFRESH           = "FULL_REFRESH"
+    INCREMENTAL_BY_TIME    = "INCREMENTAL_BY_TIME_RANGE"
+    APPEND_ONLY            = "APPEND_ONLY"
+    MERGE_BY_KEY           = "MERGE_BY_KEY"
 
-class MyAgent(BaseAgent):
-    AGENT_NAME = "MyAgent"
-    AGENT_DESCRIPTION = "What this agent does."
-    DEFAULT_TIER = ModelTier.STANDARD
-    MAX_TOKENS = 4096
-    PREFER_LOCAL = True  # Try vLLM first
-
-    def _get_agent_specific_instructions(self) -> str:
-        return "Detailed instructions for the agent's role."
-
-    def analyze(self, input_data: str) -> AgentResult:
-        response = self._call_claude(f"Analyze: {input_data}")
-        self._track_usage()
-        return AgentResult(success=True, summary=response)
+# Materialization (how it lands in Databricks)
+class Materialization(str, Enum):
+    TABLE              = "TABLE"
+    VIEW               = "VIEW"
+    MERGE              = "MERGE"
+    INSERT_OVERWRITE   = "INSERT_OVERWRITE"
 ```
 
 ---
 
-## Coding Standards
-
-### Python
-- Type hints on ALL function signatures
-- Docstrings on all public methods
-- `rich.console.Console` for output — never `print()`
-- `@dataclass` for structured return types
-- `structlog` for structured logging
-- Never hardcode API keys — read from `os.environ` or `~/.exodus/env.local`
-- `uv run` for all Python commands (never `python` or `pip`)
-- Ruff: line-length=120, mypy for type checking
-
-### SQL (dbt + SQLMesh)
-- UPPERCASE keywords
-- **dbt Core:** CTE pattern with `{{ config() }}`, `{{ ref() }}`, `{{ source() }}`; every model needs YAML schema file
-- **SQLMesh:** `MODEL()` DDL block before the query; grain + audits required on incremental models; `@start_ds`/`@end_ds` for time-range incremental
-- `{{ surrogate_key([...]) }}` (dbt) / `@safe_divide(...)` macro (SQLMesh) — never raw MD5 or division
-- For SQLMesh projects use `sqlmesh.mdc` rule and `exodus-sqlmesh` skill
-
-### Terraform
-- `for_each` with named maps — NEVER `count` for multi-resource
-- Tag all AWS resources with `common_tags`
-- Module structure: `main.tf`, `variables.tf`, `outputs.tf`, `versions.tf`
-- S3 backend + DynamoDB locking
-
-### Git
-```
-type(scope): description
-
-Types: feat, fix, docs, style, refactor, test, chore, ci, perf
-Scopes: core, llm, auth, security, plan, lineage, terraform, dbt, sqlmesh, agents, github-app, cicd, ai, standards, tooling, workspace, config, bundle, monitoring, memory, ironlayer, extractors, cli, docs
-```
-
----
-
-## Workflow & Backlog
-
-All agents follow [standards/WORKFLOW_RULES.md](../../standards/WORKFLOW_RULES.md) (six rules: backlog-first, verify dependencies, no stubs, verification suite, update memory/lessons, conventional commits).
-
-- **Canonical backlog:** [development_docs/UNIFIED_BACKLOG.md](../../development_docs/UNIFIED_BACKLOG.md)
-- **Legacy code promotion:** [standards/LEGACY_CODE_PROMOTION.md](../../standards/LEGACY_CODE_PROMOTION.md)
-- **Development loop:** PRIVIA (Plan → Review → Implement → Verify → Inspect → Accept) for non-trivial tasks. See `exodus-dev-loop` skill.
-
-Each repo may have a `CLAUDE_REPO.md` for repo-specific context that supplements this workspace-level CLAUDE.md. The sync mechanism (`make sync-ai`) only touches `CLAUDE.md` — repo-specific files are preserved.
-
----
-
-## Key Documents
-
-| Document | Purpose |
-|----------|---------|
-| [README.md](../../README.md) | Workspace overview, products, quick start |
-| [docs/COFOUNDER_SETUP_GUIDE.md](../../docs/COFOUNDER_SETUP_GUIDE.md) | First-time setup and onboarding |
-| [docs/REPO_INDEX.md](../../docs/REPO_INDEX.md) | Full repo index with roles and status |
-| [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) | System architecture overview |
-| [docs/ENVIRONMENT_GUIDE.md](../../docs/ENVIRONMENT_GUIDE.md) | Dev/staging/prod connection details |
-| [docs/VERSIONING.md](../../docs/VERSIONING.md) | Version management strategy |
-| [development_docs/UNIFIED_BACKLOG.md](../../development_docs/UNIFIED_BACKLOG.md) | Master backlog (all initiatives) |
-| [development_docs/FEATURE_REPO_MAPPING.md](../../development_docs/FEATURE_REPO_MAPPING.md) | Feature-to-repo mapping |
-| [standards/README.md](../../standards/README.md) | Coding standards index |
-| [tooling/env/README.md](../../tooling/env/README.md) | Environment configuration guide |
-| [docs/adr/](../../docs/adr/) | Architecture Decision Records |
-
----
-
-## Environment Variables
+## CLI Reference
 
 ```bash
-# Core — ~/.exodus/env.local
-ANTHROPIC_API_KEY=sk-ant-xxx
-DATABRICKS_HOST=https://xxx.azuredatabricks.net
-DATABRICKS_TOKEN=dapiXXX
-DATABRICKS_WAREHOUSE_ID=xxx
-GITHUB_TOKEN=ghp_xxx
-
-# GitHub App (Exodus Review Engine)
-GITHUB_APP_ID=xxx
-GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
-GITHUB_WEBHOOK_SECRET=xxx
-
-# Billing
-STRIPE_SECRET_KEY=sk_xxx
-
-# Exodus config
-EXODUS_BUDGET_LIMIT=15.00
-EXODUS_USE_LOCAL_LLMS=true
-VLLM_BASE_URL=http://localhost:8000
-VLLM_BASE_URL_REMOTE=http://100.x.x.x:8000  # Mac Studio via Tailscale
-WORKSPACE_ROOT=<auto-set by activate.sh>
-EXODUS_CORE_PATH=<auto-set by activate.sh>
+ironlayer init my-project           # create project
+ironlayer models ./my-project       # list all models with metadata
+ironlayer plan ./project HEAD~1 HEAD  # generate execution plan from git diff
+ironlayer plan ./project HEAD~1 HEAD --output plan.json
+ironlayer show plan.json            # display a plan file
+ironlayer apply plan.json           # execute a plan
+ironlayer apply plan.json --auto-approve  # skip confirmation
+ironlayer lineage ./project --model staging.orders   # table lineage
+ironlayer diff ./project HEAD~1 HEAD --model orders  # semantic diff
+ironlayer validate ./project        # schema contract validation
+ironlayer transpile query.sql --from redshift --to databricks
+ironlayer mcp serve                 # start MCP server (stdio)
+ironlayer mcp serve --transport sse --port 3333  # SSE transport
 ```
 
 ---
 
-## What NOT to Build Right Now
+## MCP Tools (8)
 
-- NL-to-SQL Studio — nice demo, not needed for first clients
-- React Canvas — Streamlit is sufficient
-- Meltano expansion — clients have their own extractors
-- Prometheus/Grafana — GitHub Actions logs are sufficient
-- SaaS API — build at 5+ clients
-- Jira integration — enterprise feature
+Invoked via `ironlayer mcp serve` (stdio default):
+
+| Tool | Description |
+|------|------------|
+| `ironlayer_plan` | Plan from git diff — returns steps, cost estimate, risk score |
+| `ironlayer_show` | Load and display a saved plan JSON |
+| `ironlayer_lineage` | Upstream/downstream table lineage |
+| `ironlayer_column_lineage` | Column-level lineage (single or all columns) |
+| `ironlayer_diff` | Semantic SQL diff (cosmetic vs structural) |
+| `ironlayer_validate` | Schema contract and safety validation |
+| `ironlayer_models` | List all models with metadata |
+| `ironlayer_transpile` | SQL dialect conversion (Redshift → Databricks, etc.) |
+
+MCP dependency: `pip install ironlayer[mcp]` (optional extra — pulls `mcp`, `starlette`, `uvicorn`).
+
+---
+
+## State Management
+
+IronLayer tracks execution state to power incremental runs:
+
+- **Watermarks** — last executed timestamp per model
+- **Content hashes** — detect structural changes
+- **Execution records** — success/failure, duration, rows processed
+- **Database** — SQLite (local dev) or PostgreSQL (production, multi-tenant API)
+- **Migrations** — Alembic, `core_engine/state/migrations/`
+
+---
+
+## Testing Strategy
+
+```bash
+uv run pytest tests/unit/          # fast, no external deps
+uv run pytest tests/integration/   # requires DuckDB (local) or Databricks
+uv run pytest tests/e2e/           # full plan → execute → verify cycle
+uv run pytest tests/benchmark/     # performance benchmarks
+```
+
+Coverage target: 85%+ for `core_engine/` (deterministic code = highly testable).
+
+```python
+# Mock Databricks for unit tests
+@pytest.fixture
+def mock_databricks():
+    with patch('core_engine.executor.WorkspaceClient') as mock:
+        yield mock.return_value
+```
+
+---
+
+## Repo Structure
+
+```
+ironlayer/
+├── core_engine/        Layer A — deterministic (ironlayer-core PyPI package)
+├── ai_engine/          Layer B — AI advisory
+├── cli/                 Typer CLI + MCP server
+│   └── cli/mcp/         tools.py, server.py
+├── api/                 FastAPI control plane (multi-tenant, billing)
+├── frontend/            React SPA (plan viewer, lineage explorer)
+├── docs/                Architecture, quickstart, CLI reference
+└── examples/            Demo project, GitHub Action workflow
+```
+
+---
+
+## PR Requirements
+
+```bash
+uv run pytest tests/ -v -x
+uv run ruff check . && uv run ruff format --check .
+uv run mypy core_engine/ cli/ ai_engine/
+# Plans must be deterministic — add tests for new planner logic
+```

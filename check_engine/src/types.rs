@@ -96,6 +96,8 @@ pub enum CheckCategory {
     NamingConvention,
     /// dbt-specific project structure issues (DBT001-DBT006).
     DbtProject,
+    /// SQLMesh-specific project structure issues (SMQ001-SMQ004).
+    SQLMeshProject,
     /// Cross-model consistency issues (CON001-CON005).
     ModelConsistency,
     /// File/directory organization issues.
@@ -121,6 +123,7 @@ impl std::fmt::Display for CheckCategory {
             Self::YamlSchema => write!(f, "YamlSchema"),
             Self::NamingConvention => write!(f, "NamingConvention"),
             Self::DbtProject => write!(f, "DbtProject"),
+            Self::SQLMeshProject => write!(f, "SQLMeshProject"),
             Self::ModelConsistency => write!(f, "ModelConsistency"),
             Self::FileStructure => write!(f, "FileStructure"),
             Self::DatabricksSql => write!(f, "DatabricksSql"),
@@ -289,6 +292,8 @@ pub enum ProjectType {
     IronLayer,
     /// dbt project (has `dbt_project.yml`).
     Dbt,
+    /// SQLMesh project (has `.sqlmesh/` directory or `config.yaml` with `model_defaults`).
+    SQLMesh,
     /// Plain SQL files with no framework detected.
     RawSql,
 }
@@ -298,6 +303,7 @@ impl std::fmt::Display for ProjectType {
         match self {
             Self::IronLayer => write!(f, "ironlayer"),
             Self::Dbt => write!(f, "dbt"),
+            Self::SQLMesh => write!(f, "sqlmesh"),
             Self::RawSql => write!(f, "raw_sql"),
         }
     }

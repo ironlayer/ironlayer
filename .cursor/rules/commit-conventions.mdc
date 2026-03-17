@@ -1,0 +1,69 @@
+---
+description: Git commit conventions and branch naming for IronLayer.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Git Workflow Conventions
+
+## Commit Format (Conventional Commits)
+
+```
+type(scope): description
+
+[optional body — explain WHY not WHAT]
+
+[optional footer: Refs #123, Closes #456, BREAKING CHANGE: ...]
+```
+
+### Types
+
+| Type | When to Use |
+|------|-------------|
+| `feat` | New feature or capability |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `style` | Formatting, no logic change |
+| `refactor` | Code restructuring, no behavior change |
+| `test` | Adding or updating tests |
+| `chore` | Build, CI, tooling changes |
+| `ci` | CI/CD pipeline changes |
+| `perf` | Performance improvement |
+
+### Scopes (IronLayer)
+
+| Scope | Description |
+|-------|-------------|
+| `plan` | Plan engine |
+| `lineage` | Column-level lineage |
+| `cost` | Cost modeling |
+| `mcp` | MCP server tools |
+| `cli` | CLI changes |
+| `core_engine` | Deterministic core |
+| `ai_engine` | AI advisory layer |
+
+### Examples
+
+```
+feat(plan): add column-level impact scoring to execution plan
+feat(mcp): add lineage query tool to MCP server
+fix(executor): handle Databricks timeout with retry
+docs(cli): add CLI reference documentation
+test(planner): add interval planning unit tests
+```
+
+## Branch Naming
+
+```
+feature/<description>   # New features
+fix/<issue-description> # Bug fixes
+docs/<topic>            # Documentation updates
+refactor/<area>         # Code cleanup
+```
+
+## PR Guidelines
+
+1. Title follows conventional commit format
+2. Description includes: Summary, Test Plan, Checklist
+3. All tests must pass
+4. Plans must be deterministic — add tests for new planner logic

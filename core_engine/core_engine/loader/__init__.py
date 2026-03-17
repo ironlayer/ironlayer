@@ -6,6 +6,14 @@ from core_engine.loader.dbt_loader import (
     load_models_from_dbt_manifest,
     parse_dbt_node,
 )
+from core_engine.loader.framework_detector import (
+    DetectionResult,
+    FrameworkDetectionError,
+    FrameworkKind,
+    detect_framework,
+    framework_info,
+    load_models_auto,
+)
 from core_engine.loader.model_loader import (
     HeaderParseError,
     ModelLoadError,
@@ -26,13 +34,19 @@ from core_engine.loader.sqlmesh_loader import (
 
 __all__ = [
     "DbtManifestError",
+    "DetectionResult",
+    "FrameworkDetectionError",
+    "FrameworkKind",
     "HeaderParseError",
     "ModelLoadError",
     "SQLMeshLoadError",
     "UnresolvedRefError",
     "build_model_registry",
+    "detect_framework",
     "discover_dbt_manifest",
     "discover_sqlmesh_project",
+    "framework_info",
+    "load_models_auto",
     "load_models_from_dbt_manifest",
     "load_models_from_directory",
     "load_models_from_sqlmesh_project",

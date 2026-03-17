@@ -1,55 +1,105 @@
-"""``ironlayer mcp serve`` -- MCP server for AI assistant integration."""
+"""``ironlayer mcp serve`` — start the IronLayer MCP server."""
 
 from __future__ import annotations
 
 import typer
+from rich.console import Console
 
-from cli.helpers import console
-from cli.state import get_json_output
+console = Console(stderr=True)
 
 mcp_app = typer.Typer(
     name="mcp",
-    help="MCP (Model Context Protocol) server for AI assistant integration.",
+    help="MCP server management commands.",
     no_args_is_help=True,
 )
 
 
 @mcp_app.command("serve")
-def mcp_serve_command(
+def serve_command(
     transport: str = typer.Option(
         "stdio",
         "--transport",
         "-t",
-        help="Transport type: 'stdio' (default) or 'sse'.",
+        help=(
+            "MCP transport protocol. "
+            "'stdio' (default) is used by Cursor and Claude Desktop. "
+            "'sse' (Server-Sent Events) is for remote/HTTP deployments."
+        ),
     ),
     port: int = typer.Option(
         3333,
         "--port",
         "-p",
-        help="Port for SSE transport (ignored for stdio).",
+        help="Port to listen on when using the 'sse' transport.",
     ),
     host: str = typer.Option(
-        "127.0.0.1",
+        "0.0.0.0",
         "--host",
-        help="Bind address for SSE transport. Use 0.0.0.0 for all interfaces.",
+        help="Host interface to bind when using the 'sse' transport.",
     ),
 ) -> None:
-    """Start the IronLayer MCP server."""
-    import asyncio
+    """Start the IronLayer MCP server.
 
-    try:
-        from cli.mcp.server import run_sse, run_stdio
-    except SystemExit as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+    For Cursor / Claude Desktop, run::
+
+        ironlayer mcp serve
+
+    The default ``stdio`` transport communicates over stdin/stdout and is
+    compatible with all MCP-aware clients.
+
+    For remote / shared deployments run::
+
+        ironlayer mcp serve --transport sse --port 3333
+
+    The ``sse`` transport starts an HTTP server exposing the MCP protocol
+    over Server-Sent Events.
+    """
+    if transport not in {"stdio", "sse"}:
+        console.print(f"[red]Unknown transport '{transport}'. Choose 'stdio' or 'sse'.[/red]")
+        raise typer.Exit(code=3)
 
     if transport == "stdio":
-        if not get_json_output():
-            console.print("[dim]Starting IronLayer MCP server (stdio)...[/dim]")
-        asyncio.run(run_stdio())
-    elif transport == "sse":
-        console.print(f"[bold]Starting IronLayer MCP server (SSE) on {host}:{port}[/bold]")
-        asyncio.run(run_sse(host=host, port=port))
+        _serve_stdio()
     else:
-        console.print(f"[red]Unknown transport '{transport}'. Use 'stdio' or 'sse'.[/red]")
-        raise typer.Exit(code=1)
+        _serve_sse(host=host, port=port)
+
+
+def _serve_stdio() -> None:
+    """Start the MCP server using the stdio transport."""
+    try:
+        from cli.mcp.server import create_mcp_server
+
+        mcp_server = create_mcp_server()
+        mcp_server.run_stdio()
+    except ImportError as exc:
+        console.print(
+            "[red]MCP dependencies not installed. "
+            "Install them with: [bold]pip install ironlayer\\[mcp\\][/bold][/red]"
+        )
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]MCP server error: {exc}[/red]")
+        raise typer.Exit(code=3) from exc
+
+
+def _serve_sse(host: str, port: int) -> None:
+    """Start the MCP server using the SSE/HTTP transport."""
+    try:
+        import uvicorn
+
+        from cli.mcp.server import create_mcp_server
+
+        mcp_server = create_mcp_server()
+        starlette_app = mcp_server.as_asgi()
+
+        console.print(f"IronLayer MCP server starting on [bold]http://{host}:{port}[/bold]")
+        uvicorn.run(starlette_app, host=host, port=port, log_level="warning")
+    except ImportError as exc:
+        console.print(
+            "[red]SSE transport dependencies not installed. "
+            "Install them with: [bold]pip install ironlayer\\[mcp\\][/bold][/red]"
+        )
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]MCP server error: {exc}[/red]")
+        raise typer.Exit(code=3) from exc

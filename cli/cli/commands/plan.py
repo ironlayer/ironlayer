@@ -1,4 +1,4 @@
-"""``ironlayer plan`` -- generate execution plan from git diff."""
+"""``ironlayer plan`` — generate a deterministic execution plan from a git diff."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ from datetime import date
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.display import display_plan_summary
-from cli.helpers import console, load_stored_token, parse_date
 from cli.state import emit_metrics, get_env, get_json_output
+from cli.commands._helpers import parse_date
+
+console = Console(stderr=True)
 
 
 def plan_command(
@@ -62,11 +64,12 @@ def plan_command(
             raise typer.Exit(code=0)
 
         dag = build_dag(models)
+
         changed_files = get_changed_files(repo, base, target)
         sql_changed = [cf for cf in changed_files if cf.path.endswith(".sql")]
 
         model_map = {m.name: m for m in models}
-        changed_model_names = set()
+        changed_model_names: set[str] = set()
         for cf in sql_changed:
             for m in models:
                 if m.file_path.endswith(cf.path) or cf.path.endswith(m.file_path):
@@ -91,9 +94,11 @@ def plan_command(
                 current_versions[m.name] = m.content_hash
 
         diff_result = compute_structural_diff(previous_versions, current_versions)
+
         ref_date = parse_date(as_of_date, "as-of-date") if as_of_date else date.today()
 
-        settings = load_settings(env=get_env())
+        env = get_env()
+        settings = load_settings(env=env)
         planner_config = PlannerConfig(
             default_lookback_days=settings.default_lookback_days,
         )
@@ -126,18 +131,10 @@ def plan_command(
         if get_json_output():
             sys.stdout.write(plan_json + "\n")
         else:
+            from cli.display import display_plan_summary
+
             display_plan_summary(console, execution_plan)
             console.print(f"\nPlan written to [bold]{out}[/bold]")
-
-            if not load_stored_token():
-                from cli.cloud import load_stored_token as _cloud_token
-
-                if not _cloud_token():
-                    console.print(
-                        "\n[dim]Tip: Get AI-powered cost estimates and risk scoring"
-                        " -- run [bold]ironlayer login[/bold] to connect to"
-                        " IronLayer Cloud.[/dim]"
-                    )
 
         raise typer.Exit(code=0)
 

@@ -1,0 +1,56 @@
+---
+description: IronLayer MCP server — available tools and usage patterns.
+globs: ["**/mcp/**", "**/tools.py"]
+alwaysApply: false
+---
+
+# IronLayer MCP Server
+
+## Overview
+
+IronLayer provides an MCP server for AI assistants (Cursor, Claude Code) with 8 tools for plan, lineage, diff, and validation.
+
+Start via: `ironlayer mcp serve` (stdio) or `ironlayer mcp serve --transport sse --port 3333`
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `ironlayer_plan` | Generate execution plan from git diff — returns steps, cost estimate, risk score |
+| `ironlayer_show` | Load and display a saved plan JSON |
+| `ironlayer_lineage` | Upstream/downstream table lineage |
+| `ironlayer_column_lineage` | Column-level lineage (single or all columns) |
+| `ironlayer_diff` | Semantic SQL diff (cosmetic vs structural) |
+| `ironlayer_validate` | Schema contract and safety validation |
+| `ironlayer_models` | List all models with metadata (kind, materialization, last run) |
+| `ironlayer_transpile` | SQL dialect conversion (Redshift → Databricks, etc.) |
+
+## Using MCP Tools in Cursor
+
+Once configured in `.cursor/mcp.json`, tools are available via the agent panel:
+- "Run `ironlayer_plan` on the dbt project at ./my-project"
+- "Show lineage for staging.orders"
+- "Diff HEAD~1 and HEAD for model fct_revenue"
+
+## Extending the MCP Server
+
+```python
+# cli/mcp/tools.py
+from mcp import FastMCP
+
+mcp = FastMCP("ironlayer")
+
+
+@mcp.tool()
+async def my_new_tool(param: str) -> dict:
+    """One-line description."""
+    result = await some_service.do_thing(param)
+    return {"status": "ok", "data": result}
+```
+
+Rules for new tools:
+1. One tool = one well-defined action
+2. All tools must be async
+3. Input validation via Pydantic models
+4. Return structured dicts (not raw strings)
+5. Write a unit test for the tool logic

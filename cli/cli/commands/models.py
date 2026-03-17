@@ -1,4 +1,4 @@
-"""``ironlayer models`` -- list models in a repository."""
+"""``ironlayer models`` — list all SQL models discovered in a repository."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ import sys
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.display import display_model_list
-from cli.helpers import console
 from cli.state import get_json_output
+
+console = Console(stderr=True)
 
 
 def models_command(
@@ -54,4 +55,6 @@ def models_command(
         ]
         sys.stdout.write(json.dumps(rows, indent=2) + "\n")
     else:
+        from cli.display import display_model_list
+
         display_model_list(console, model_defs)

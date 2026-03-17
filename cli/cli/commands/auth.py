@@ -1,12 +1,43 @@
-"""``ironlayer login``, ``logout``, ``whoami`` -- authentication."""
+"""``ironlayer login / logout / whoami`` — authentication commands."""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
+from rich.console import Console
 
-from cli.helpers import console, credentials_path
+console = Console(stderr=True)
+
+
+def _credentials_path() -> Path:
+    return Path.home() / ".ironlayer" / "credentials.json"
+
+
+def _save_credentials(api_url: str, access_token: str, refresh_token: str, email: str) -> None:
+    cred_dir = Path.home() / ".ironlayer"
+    cred_dir.mkdir(parents=True, exist_ok=True)
+    cred_path = cred_dir / "credentials.json"
+    cred_data = {
+        "api_url": api_url,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "email": email,
+    }
+    cred_path.write_text(json.dumps(cred_data, indent=2), encoding="utf-8")
+    cred_path.chmod(0o600)
+
+
+def _load_stored_token() -> str | None:
+    cred_path = _credentials_path()
+    if not cred_path.exists():
+        return None
+    try:
+        creds = json.loads(cred_path.read_text(encoding="utf-8"))
+        return creds.get("access_token")
+    except Exception:
+        return None
 
 
 def login_command(
@@ -31,10 +62,13 @@ def login_command(
         hide_input=True,
     ),
 ) -> None:
-    """Authenticate with a IronLayer API server and store credentials locally."""
-    import httpx
+    """Authenticate with an IronLayer API server and store credentials locally.
 
-    from cli.cloud import save_full_credentials
+    Credentials are saved to ``~/.ironlayer/credentials.json`` (mode 0600).
+    Subsequent CLI commands will automatically use the stored token when
+    ``IRONLAYER_API_TOKEN`` is not set.
+    """
+    import httpx
 
     login_url = f"{api_url.rstrip('/')}/api/v1/auth/login"
     console.print(f"[dim]Authenticating with {api_url} …[/dim]")
@@ -52,14 +86,12 @@ def login_command(
         detail = exc.response.text
         try:
             detail = exc.response.json().get("detail", detail)
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except Exception:
             pass
         console.print(f"[red]Login failed ({exc.response.status_code}): {detail}[/red]")
         raise typer.Exit(code=1) from exc
     except httpx.ConnectError as exc:
-        console.print(
-            f"[red]Could not connect to {api_url}. Check the URL and ensure the API is running.[/red]"
-        )
+        console.print(f"[red]Could not connect to {api_url}. Check the URL and ensure the API is running.[/red]")
         raise typer.Exit(code=1) from exc
 
     access_token = data.get("access_token", "")
@@ -70,34 +102,40 @@ def login_command(
         console.print("[red]Login response did not include an access token.[/red]")
         raise typer.Exit(code=1)
 
-    # BL-105: Store credentials via OS keychain (with TOML fallback).
-    save_full_credentials(api_url, access_token, refresh_token, email)
+    _save_credentials(api_url, access_token, refresh_token, email)
 
+    cred_path = _credentials_path()
     console.print(f"[green]✓ Logged in as {user.get('display_name', email)}[/green]")
     console.print(f"[dim]  Tenant:      {data.get('tenant_id', 'unknown')}[/dim]")
     console.print(f"[dim]  Role:        {user.get('role', 'unknown')}[/dim]")
-    console.print(f"[dim]  Credentials: stored in OS keychain[/dim]")
+    console.print(f"[dim]  Credentials: {cred_path}[/dim]")
 
 
 def logout_command() -> None:
-    """Remove stored credentials."""
-    from cli.cloud import delete_full_credentials
+    """Remove stored credentials.
 
-    # BL-105: Remove from keychain + TOML file (also removes any legacy JSON).
-    delete_full_credentials()
-    console.print("[green]✓ Logged out — credentials removed.[/green]")
+    Clears the local credential file created by ``ironlayer login``.
+    This does **not** revoke the token server-side.
+    """
+    cred_path = _credentials_path()
+    if cred_path.exists():
+        cred_path.unlink()
+        console.print("[green]✓ Logged out — credentials removed.[/green]")
+    else:
+        console.print("[dim]No stored credentials found.[/dim]")
 
 
 def whoami_command() -> None:
     """Show the currently authenticated user."""
-    import httpx
-
-    from cli.cloud import load_full_credentials
-
-    # BL-105: Load from OS keychain / TOML (migrates legacy JSON automatically).
-    creds = load_full_credentials()
-    if creds is None:
+    cred_path = _credentials_path()
+    if not cred_path.exists():
         console.print("[yellow]Not logged in. Run [bold]ironlayer login[/bold] first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    try:
+        creds = json.loads(cred_path.read_text(encoding="utf-8"))
+    except Exception:
+        console.print("[red]Could not read credentials file.[/red]")
         raise typer.Exit(code=1)
 
     api_url = creds.get("api_url", "")
@@ -107,6 +145,8 @@ def whoami_command() -> None:
     if not api_url or not token:
         console.print("[yellow]Credentials incomplete. Run [bold]ironlayer login[/bold] again.[/yellow]")
         raise typer.Exit(code=1)
+
+    import httpx
 
     try:
         with httpx.Client(timeout=10.0) as client:

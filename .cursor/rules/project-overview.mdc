@@ -1,0 +1,50 @@
+---
+description: IronLayer — product overview, architecture, and tech stack. Always active.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# IronLayer — SQL Transformation Control Plane
+
+## What IronLayer Is
+
+IronLayer is an **AI-native SQL transformation control plane** for Databricks — the `terraform plan` / `terraform apply` for your dbt models.
+
+> "Know what will run. Know what it costs. Know what it breaks."
+
+- **License:** Apache 2.0 (core)
+- **Repo:** public — ironlayer/ironlayer_oss on GitHub
+
+## Key Capabilities
+
+- `ironlayer plan` — validated execution plan with risk scores, cost estimates, downstream impact
+- MCP server (8 tools for Cursor/AI)
+- Framework-agnostic — auto-detects dbt vs. SQLMesh
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Core** | Python, SQLGlot, NetworkX |
+| **Execution** | DuckDB (local), Databricks |
+| **State** | SQLite (dev), PostgreSQL (prod) |
+| **CLI** | Typer |
+| **MCP** | FastMCP (stdio, SSE) |
+
+## Key Directories
+
+```
+ironlayer/
+├── core_engine/        Deterministic plan engine (loader, parser, graph, diff, planner, executor)
+├── ai_engine/          AI advisory (cost, risk, suggestions)
+├── cli/                Typer CLI + MCP server
+├── api/                FastAPI control plane (optional)
+└── docs/               Architecture, quickstart
+```
+
+## Architecture Principles
+
+1. **Deterministic core** — Same input → same output; no LLM in execution path
+2. **AI advisory only** — AI annotates plans; never changes them
+3. **Content-based IDs** — SHA-256 of plan content for reproducibility
+4. **Framework-agnostic** — Supports dbt Core, dbt Cloud, and SQLMesh
