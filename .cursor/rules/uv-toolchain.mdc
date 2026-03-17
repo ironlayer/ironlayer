@@ -1,0 +1,50 @@
+---
+description: UV, Ruff, and type checker conventions. Always use uv run, never bare python or pip.
+globs: ["**/pyproject.toml", "**/uv.lock", "**/*.py"]
+alwaysApply: false
+---
+
+# UV / Ruff Toolchain Conventions
+
+## Rules
+
+- **Always `uv run`** — never call `python`, `python3`, or `pip` directly:
+  ```bash
+  uv run pytest tests/ -v
+  uv run ruff check .
+  uv run mypy core_engine/ cli/ ai_engine/
+  ```
+- **Always `uv sync`** to install deps — never `pip install`
+- **Commit `uv.lock`** — lockfile must be checked in
+- **Never commit `.venv/`** — it is gitignored
+
+## Ruff — Linter + Formatter
+
+```bash
+uv run ruff check .        # Lint (use --fix to auto-fix)
+uv run ruff format .       # Format (replaces Black)
+```
+
+Both run in CI and pre-commit.
+
+## Common Commands
+
+```bash
+uv sync                    # Install all deps from uv.lock
+uv add requests            # Add a dependency
+uv run pytest tests/ -v    # Run in project's virtual environment
+uv lock                    # Regenerate uv.lock
+```
+
+## Pre-commit
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+```

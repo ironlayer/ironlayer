@@ -1,0 +1,61 @@
+---
+description: Testing conventions for IronLayer Python code.
+globs: ["**/tests/**/*.py", "**/*_test.py", "**/conftest.py"]
+alwaysApply: false
+---
+
+# Testing Conventions — IronLayer
+
+## Test Layout
+
+```
+tests/
+├── unit/                   # Fast, no I/O, no API calls
+│   ├── test_planner.py
+│   ├── test_graph.py
+│   └── test_diff.py
+├── integration/            # Real Databricks — skip without credentials
+│   └── test_executor.py
+└── conftest.py             # Shared fixtures
+```
+
+## Fixtures — Mock External Services in Unit Tests
+
+```python
+# conftest.py
+from unittest.mock import Mock, patch
+import pytest
+
+
+@pytest.fixture
+def mock_databricks():
+    """Mock Databricks WorkspaceClient for unit tests."""
+    with patch('core_engine.executor.WorkspaceClient') as mock_cls:
+        client = Mock()
+        client.sql.return_value = Mock(fetch_all=Mock(return_value=[]))
+        mock_cls.return_value = client
+        yield client
+```
+
+## Markers
+
+```python
+@pytest.mark.integration   # Requires real credentials
+@pytest.mark.skipif(
+    not os.getenv("DATABRICKS_TOKEN"),
+    reason="DATABRICKS_TOKEN not set",
+)
+```
+
+## Coverage Target
+
+- **Unit tests:** 85%+ for `core_engine/` (deterministic code = highly testable)
+- **Integration tests:** smoke-test happy paths for executor
+
+## Running Tests
+
+```bash
+uv run pytest tests/unit/ -v --tb=short
+uv run pytest tests/unit/ --cov=core_engine --cov-report=term-missing
+uv run pytest tests/integration/ -v -m integration
+```
