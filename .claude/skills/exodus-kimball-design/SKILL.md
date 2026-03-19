@@ -1,7 +1,7 @@
 ---
-name: exodus-kimball-design
+name: iron-kimball-design
 description: >
-  Design dimensional models (star schemas) following Kimball methodology for the Exodus
+  Design dimensional models (star schemas) following Kimball methodology for the TheAiGroup
   Foundation data warehouse. Use when designing new data domains, creating fact and
   dimension tables, planning grain decisions, or evaluating slowly changing dimensions.
 triggers:
@@ -170,4 +170,4 @@ When a client uses SQLMesh instead of dbt, map the Kimball model types to SQLMes
 | Seed / lookup | `materialized='seed'` | `kind SEED` |
 
 SQLMesh native SCD2 tracks history automatically — no manual `valid_from/valid_to/is_current` logic needed.
-Use `exodus-sqlmesh` skill when generating the actual SQLMesh model files.
+Use `iron-sqlmesh` skill when generating the actual SQLMesh model files.

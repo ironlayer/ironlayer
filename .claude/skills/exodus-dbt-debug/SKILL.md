@@ -1,5 +1,5 @@
 ---
-name: exodus-dbt-debug
+name: iron-dbt-debug
 description: >
   Diagnose and fix dbt errors — compilation failures, test failures, runtime errors on Databricks.
   Use when a dbt run failed and you need to identify root cause and suggest fixes.
@@ -31,8 +31,8 @@ outputs:
 | `dbt_test` | dbt | Reproduce test failure (dbt Core) |
 | `get_model_details` | dbt | Failing model SQL and config |
 | `get_lineage` | dbt | Upstream dependencies |
-| `ironlayer_diff` | exodus-core | Semantic SQL diff |
-| `ironlayer_validate` | exodus-core | Schema contract validation |
+| `ironlayer_diff` | ironrecall-core | Semantic SQL diff |
+| `ironlayer_validate` | ironrecall-core | Schema contract validation |
 
 ---
 
@@ -104,7 +104,7 @@ Identify:
 ## Step 5 — Validate Schema (IronLayer)
 
 ```
-Call exodus-core MCP: ironlayer_validate
+Call ironrecall-core MCP: ironlayer_validate
 Arguments: project_path
 
 Check for:

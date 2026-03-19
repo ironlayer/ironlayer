@@ -1,10 +1,10 @@
 ---
-name: exodus-dbt-model
+name: iron-dbt-model
 description: >
   Generate dbt Core models following Foundation medallion architecture (staging/intermediate/marts),
   Kimball conventions, and the project's naming patterns. Use when creating new dbt models for
-  Exodus-internal projects (Foundation, ironlayer_infra, client templates).
-  For dbt Cloud Enterprise client work, use the exodus-dbt-cloud skill instead.
+  TheAiGroup-internal projects (Foundation, ironlayer-infra, client templates).
+  For dbt Cloud Enterprise client work, use the iron-dbt-cloud skill instead.
 triggers:
   - "create a dbt model for"
   - "add staging model for"
@@ -19,14 +19,14 @@ outputs:
 
 # dbt Core Model Generator
 
-> **This skill is for dbt Core projects** — Exodus Foundation (`exodus-foundation/dbt`),
-> ironlayer_infra (`dbt-framework/`), and client templates (`exodus-client-template/dbt-framework/`).
+> **This skill is for dbt Core projects** — Iron Foundation (`iron-foundation/dbt`),
+> ironlayer-infra (`dbt-framework/`), and client templates (`iron-client-template/dbt-framework/`).
 >
 > **For dbt Cloud Enterprise client work** (Remote MCP, Semantic Layer, Discovery API, job triggers),
-> use the `exodus-dbt-cloud` skill instead.
+> use the `iron-dbt-cloud` skill instead.
 >
 > **For SQLMesh projects** (clients who have chosen SQLMesh as their transformation framework),
-> use the `exodus-sqlmesh` skill instead. SQLMesh uses `MODEL()` DDL blocks, not `{{ config() }}`.
+> use the `iron-sqlmesh` skill instead. SQLMesh uses `MODEL()` DDL blocks, not `{{ config() }}`.
 
 ---
 

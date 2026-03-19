@@ -1,7 +1,7 @@
 ---
-name: exodus-data-quality
+name: iron-data-quality
 description: >
-  Generate data quality tests and validation rules for Exodus Foundation. Covers dbt tests,
+  Generate data quality tests and validation rules for Iron Foundation. Covers dbt tests,
   DLT expectations, source freshness checks, anomaly detection config, and custom SQL validations.
   Use when adding tests to models, building quality frameworks, or debugging data issues.
 triggers:
@@ -22,7 +22,7 @@ outputs:
 
 Generate comprehensive data quality tests for Foundation — covering dbt, DLT, freshness, and anomaly detection.
 
-> **Framework note:** This skill covers dbt Core data quality. For SQLMesh projects, data quality is enforced via `audits` in the `MODEL()` DDL block and unit tests in `tests/*.yaml`. See the `exodus-sqlmesh` skill for SQLMesh-specific quality patterns.
+> **Framework note:** This skill covers dbt Core data quality. For SQLMesh projects, data quality is enforced via `audits` in the `MODEL()` DDL block and unit tests in `tests/*.yaml`. See the `iron-sqlmesh` skill for SQLMesh-specific quality patterns.
 
 ---
 

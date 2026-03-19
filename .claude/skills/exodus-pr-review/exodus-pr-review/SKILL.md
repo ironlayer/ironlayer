@@ -1,7 +1,7 @@
 ---
-name: exodus-pr-review
+name: iron-pr-review
 description: >
-  Review pull requests against Exodus coding standards, architecture patterns, and data
+  Review pull requests against TheAiGroup coding standards, architecture patterns, and data
   warehouse conventions. Produces structured BLOCK/WARN/NOTE output compatible
   with the PRHealingAgent loop. Use when reviewing PRs locally, checking agent-created
   code, or validating changes before merge.
@@ -11,7 +11,7 @@ triggers:
   - "check the agent's PR"
   - "is this PR ready to merge"
   - "review before merge"
-  - "exodus review"
+  - "ironpilot review"
 outputs:
   - Structured review comment with BLOCK/WARN/NOTE findings
   - Confidence score (0-100)

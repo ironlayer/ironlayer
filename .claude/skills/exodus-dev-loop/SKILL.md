@@ -1,7 +1,7 @@
 ---
-name: exodus-dev-loop
+name: iron-dev-loop
 description: >
-  Guide through the Exodus development loops — PRIVIA (developer workflow) and
+  Guide through the TheAiGroup development loops — PRIVIA (developer workflow) and
   PEVR (agent loop). Use when starting any non-trivial coding task, structuring
   your implementation plan, or reviewing completed work.
 triggers:
@@ -16,7 +16,7 @@ outputs:
   - Commit message
 ---
 
-# Exodus Development Loop
+# TheAiGroup Development Loop
 
 ## Two Loops — Know Which Applies
 
@@ -83,7 +83,7 @@ Self-check before implementing:
 
 - [ ] All acceptance criteria are achievable with the listed steps
 - [ ] Tests are included in the plan
-- [ ] No steps violate Exodus standards (naming, typing, structure)
+- [ ] No steps violate TheAiGroup standards (naming, typing, structure)
 - [ ] No hidden dependencies or missing prerequisite steps
 - [ ] Scope is appropriate — not too broad, not leaving gaps
 - [ ] Risk level is correctly assessed
@@ -169,7 +169,7 @@ Acceptance criteria:
 
 Quality checks:
 - [ ] Consistent with surrounding code style
-- [ ] All symbols named per Exodus standards
+- [ ] All symbols named per TheAiGroup standards
 - [ ] No hardcoded values that should be config or env vars
 - [ ] No hard-coded Claude model IDs (use tier aliases)
 - [ ] Error handling appropriate
@@ -213,4 +213,4 @@ Use conventional commit format. Scopes: `ironlayer`, `autopilot`, `foundation`, 
 - Cursor rule: `ai/cursor/rules/development-loop.mdc`
 - Model routing: `ai/model-routing.yml` and `ai/cursor/rules/model-routing.mdc`
 - Plan template: `ai/shared/prompts/plan-template.md`
-- AutopilotAgent PEVR: `exodus-autopilot/autopilot/agents/base.py`
+- AutopilotAgent PEVR: `ironpilot/autopilot/agents/base.py`

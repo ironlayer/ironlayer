@@ -1,7 +1,7 @@
 ---
-name: exodus-extractor
+name: iron-extractor
 description: >
-  Create new data source extractors for Exodus Foundation. Generates Python extractor
+  Create new data source extractors for Iron Foundation. Generates Python extractor
   classes, YAML source configs, and unit tests following the Foundation framework.
   Use when adding a new API data source, creating extraction jobs, or onboarding a new data feed.
 triggers:
@@ -252,7 +252,7 @@ uv run python -m foundation.extractors.cli run {name} --dry-run
 
 ## After Creating
 
-1. Create staging models: use the `exodus-dbt-model` skill — `stg_{name}__*.sql`
+1. Create staging models: use the `iron-dbt-model` skill — `stg_{name}__*.sql`
 2. Add to bundle config: enable in `config/client.yml` bundle toggles
 3. Register in extractor CLI if needed: `foundation/extractors/cli.py`
 4. Add source definition in `dbt/models/staging/{name}/__sources.yml`

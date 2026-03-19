@@ -1,5 +1,5 @@
 ---
-name: exodus-dbt-monitor
+name: iron-dbt-monitor
 description: >
   Monitor dbt Cloud jobs, check run status, detect failures, and surface actionable diagnostics.
   Use when checking job health, source freshness, model health, or generating a status report.
@@ -121,7 +121,7 @@ Output format:
 
 | Pattern | Recommendation |
 |---------|----------------|
-| Compilation error | Check refs, schema YAML; use exodus-dbt-debug |
+| Compilation error | Check refs, schema YAML; use iron-dbt-debug |
 | Test failure | Identify test, check data; adjust threshold or fix model |
 | Runtime (Spark/Databricks) | Parse error code; check SQL, incremental config |
 | Source freshness warn | Check extractor; adjust freshness threshold |

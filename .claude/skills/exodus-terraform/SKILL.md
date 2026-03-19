@@ -1,7 +1,7 @@
 ---
-name: exodus-terraform
+name: iron-terraform
 description: >
-  Generate Terraform modules and resources for Exodus Foundation multi-cloud infrastructure.
+  Generate Terraform modules and resources for Iron Foundation multi-cloud infrastructure.
   Use when creating new modules, adding AWS/Azure/GCP/Databricks resources, modifying
   environments, or reviewing Terraform code.
 triggers:
@@ -21,7 +21,7 @@ outputs:
 
 # Terraform Module Generator
 
-> Generate modules that follow Exodus conventions: `for_each`, shared tagging,
+> Generate modules that follow TheAiGroup conventions: `for_each`, shared tagging,
 > module-per-concern, environment composition, and multi-cloud support.
 
 ---
@@ -118,7 +118,7 @@ locals {
   common_tags = {
     Project     = var.client_name
     Environment = var.environment
-    Product     = "exodus-foundation"
+    Product     = "iron-foundation"
     ManagedBy   = "terraform"
     Module      = "module-name"
   }
@@ -189,10 +189,10 @@ resource "aws_kms_key" "foundation" {
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "exodus-terraform-state"
+    bucket         = "iron-terraform-state"
     key            = "${var.client_name}/${var.environment}/module-name.tfstate"
     region         = "us-east-2"
-    dynamodb_table = "exodus-terraform-locks"
+    dynamodb_table = "iron-terraform-locks"
     encrypt        = true
   }
 }

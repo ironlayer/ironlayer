@@ -1,5 +1,5 @@
 ---
-name: exodus-sqlmesh
+name: iron-sqlmesh
 description: >
   Generate SQLMesh models, run plan/apply workflows, convert between dbt and SQLMesh formats,
   and use SQLMesh table diff for CI data validation. Use when creating SQLMesh models for clients
@@ -22,11 +22,11 @@ outputs:
   - "config.yaml"
 ---
 
-# SQLMesh Model Generator — Exodus
+# SQLMesh Model Generator — TheAiGroup
 
 > **This skill is for SQLMesh projects** — clients or projects using SQLMesh as their transformation framework.
-> For dbt Core projects (Foundation, ironlayer_infra), use `exodus-dbt-model`.
-> For dbt Cloud Enterprise client work, use `exodus-dbt-cloud`.
+> For dbt Core projects (Foundation, ironlayer-infra), use `iron-dbt-model`.
+> For dbt Cloud Enterprise client work, use `iron-dbt-cloud`.
 
 ---
 
@@ -451,7 +451,7 @@ Recommend IronLayer-native (raw SQL) when:
 
 ---
 
-## Exodus Project Config Template
+## TheAiGroup Project Config Template
 
 When setting up a new SQLMesh project for a client:
 

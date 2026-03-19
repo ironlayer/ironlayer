@@ -1,7 +1,7 @@
 ---
-name: exodus-pipeline-design
+name: iron-pipeline-design
 description: >
-  Design end-to-end data pipelines for Exodus Foundation. Use when planning data flows
+  Design end-to-end data pipelines for Iron Foundation. Use when planning data flows
   from source to mart, choosing between pipeline approaches (DLT vs batch), or designing
   orchestration with IronLayer integration.
 triggers:

@@ -1,9 +1,9 @@
 ---
-name: exodus-dbt-cloud
+name: iron-dbt-cloud
 description: >
-  Manage, review, and integrate with a client's dbt Cloud Enterprise environment via Exodus consulting.
+  Manage, review, and integrate with a client's dbt Cloud Enterprise environment via TheAiGroup consulting.
   Covers Remote MCP setup, Semantic Layer queries, Discovery API, job management, and CI/CD integration.
-  Use when working with a client on dbt Cloud, not for Exodus-internal dbt Core projects.
+  Use when working with a client on dbt Cloud, not for TheAiGroup-internal dbt Core projects.
 triggers:
   - "connect to dbt Cloud"
   - "query client metrics"
@@ -23,21 +23,21 @@ outputs:
 # dbt Cloud Enterprise — Client Consulting Skill
 
 > **This skill is for client dbt Cloud Enterprise environments.**
-> For Exodus-internal dbt Core projects (Foundation, ironlayer_infra), use `exodus-dbt-model`.
-> For clients using SQLMesh (not dbt Cloud) as their transformation framework, use `exodus-sqlmesh` instead.
+> For TheAiGroup-internal dbt Core projects (Foundation, ironlayer-infra), use `iron-dbt-model`.
+> For clients using SQLMesh (not dbt Cloud) as their transformation framework, use `iron-sqlmesh` instead.
 
 ---
 
 ## Context: What Is Different About dbt Cloud Engagements
 
-| Dimension | Exodus Internal (dbt Core) | Client Consulting (dbt Cloud Enterprise) |
+| Dimension | TheAiGroup Internal (dbt Core) | Client Consulting (dbt Cloud Enterprise) |
 |-----------|---------------------------|------------------------------------------|
 | Execution | Local CLI (`dbt run`, `dbt build`) | dbt Cloud Jobs (no local CLI) |
 | Metadata | Local manifest.json | Discovery API (Remote MCP) |
 | Metrics | Not implemented yet | dbt Semantic Layer |
 | Lineage | Local DAG | Discovery API lineage graph |
 | CI | GitHub Actions + Databricks job compute | dbt Cloud CI Jobs (Slim CI) |
-| Review | Exodus PR engine + local compile | Exodus PR engine + Remote MCP metadata |
+| Review | TheAiGroup PR engine + local compile | TheAiGroup PR engine + Remote MCP metadata |
 | AI agents | Cursor subagents | dbt Analyst/Discovery Agents + Cursor |
 
 ---
@@ -57,7 +57,7 @@ echo $DBT_CLOUD_PROD_ENV_ID
 # Expected: list of all production models with schema and test status
 ```
 
-If vars are missing, add them to `~/.exodus/env.local`:
+If vars are missing, add them to `~/.iron/env.local`:
 ```bash
 export DBT_CLOUD_HOST="https://<account>.us1.dbt.com"
 export DBT_CLOUD_TOKEN="<service-token>"
@@ -192,10 +192,10 @@ Use the Semantic Layer when a client asks a business question about their data:
 
 ## Step 4 — CI/CD Integration (Job Trigger Pattern)
 
-When Exodus needs to trigger a dbt Cloud job as part of PR review:
+When TheAiGroup needs to trigger a dbt Cloud job as part of PR review:
 
 ```python
-# Pattern for exodus-autopilot/agents/dbt_cloud_runner.py
+# Pattern for ironpilot/agents/dbt_cloud_runner.py
 
 async def trigger_ci_run(client_id: str, pr_number: int) -> dict:
     """Trigger a dbt Cloud Slim CI job for a PR and return run details."""
@@ -208,7 +208,7 @@ async def trigger_ci_run(client_id: str, pr_number: int) -> dict:
     # 2. Trigger the run
     run = await mcp_dbt_cloud("trigger_job_run", {
         "job_id": ci_job["id"],
-        "cause": f"Exodus PR Review — PR #{pr_number}"
+        "cause": f"TheAiGroup PR Review — PR #{pr_number}"
     })
 
     # 3. Poll until complete (max 10 min)
@@ -254,7 +254,7 @@ After an engagement, create a client handoff document:
 ## Known Issues / Tech Debt
 - {issue}
 
-## Exodus Integration Status
+## TheAiGroup Integration Status
 - [ ] Remote MCP connected
 - [ ] PR review engine configured
 - [ ] CI job integration active
