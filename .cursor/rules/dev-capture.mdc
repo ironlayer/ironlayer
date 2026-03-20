@@ -1,0 +1,41 @@
+---
+description: Captures engineering insights to dev-journal.md and engineering-patterns.md during development.
+globs: ["**/*.py", "**/*.rs", "**/*.ts", "**/*.tsx", "**/*.tf", "**/*.sql", "**/*.md", "**/*.toml", "**/*.yaml", "**/*.yml"]
+alwaysApply: false
+---
+
+# Dev Capture — Engineering Insights
+
+While working on any code or documentation, watch for insights worth capturing.
+
+## Capture to `docs/dev-journal.md` when:
+- You discover non-obvious behavior
+- A debugging session reveals something surprising
+- You make an architectural decision with tradeoffs
+- You find a workaround for a tool/library limitation
+
+### Format
+```markdown
+### YYYY-MM-DD: {Title}
+**Context**: What you were doing.
+**Lesson**: What you learned.
+**Pattern**: Generalized takeaway (if applicable).
+```
+
+## Capture to `docs/engineering-patterns.md` when:
+- You identify a reusable code pattern
+- You solve a problem that will recur
+- You establish a convention others should follow
+
+### Format
+```markdown
+### {Pattern Title}
+**Problem**: What situation triggers this.
+**Pattern**: The reusable solution.
+**Example**: Concrete code snippet.
+```
+
+## Rules
+- Only capture things that help future developers — no status updates
+- Mark extracted journal entries with `[→ engineering-patterns.md]`
+- Don't interrupt flow — capture after completing the current task
