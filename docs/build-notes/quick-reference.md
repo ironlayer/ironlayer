@@ -66,3 +66,14 @@ VLLM_BASE_URL_REMOTE    # Remote vLLM endpoint (Mac Studio via Tailscale)
 WORKSPACE_ROOT          # Auto-set by activate.sh
 IRONRECALL_CORE_PATH    # Auto-set by activate.sh
 ```
+
+
+## Related Files
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Full project context for AI agents |
+| `docs/dev-journal.md` | Non-obvious discoveries and debugging breakthroughs |
+| `docs/engineering-patterns.md` | Reusable patterns for this repo |
+| `docs/backlog-execution.md` | Current work items and status |
+| `.claude/skills/` | Available agent skills (building-item, resuming-build, capturing-lesson) |

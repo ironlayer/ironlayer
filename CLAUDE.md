@@ -1,254 +1,197 @@
-# CLAUDE.md — TheAiGroup / IronLayer Platform
+# CLAUDE.md — ironlayer_oss
 
-> **Single source of truth for AI agents working across TheAiGroup / IronLayer workspace.**
-> Covers workspace-level context. Each product repo has its own CLAUDE.md for repo-specific context.
-> Last updated: March 2026
+> IronLayer open-source SQL control plane for Databricks (Apache 2.0). Deterministic execution plans from git diffs, with AI-powered cost modeling, risk scoring, and SQL optimization. Framework-agnostic — works with dbt Core, SQLMesh, and raw SQL.
 
----
-
-## What Is TheAiGroup?
-
-TheAiGroup is an **AI-native data platform company** building three products that together eliminate the fragmented, manual work of modern data engineering:
-
-| Product | Tag | What It Does |
-|---|---|---|
-| **IronLayer** | SHIP | SQL control plane — runs BEFORE dbt or SQLMesh. Deterministic plans, cost modeling, column-level lineage, schema guardrails. Framework-agnostic. |
-| **Iron Foundation** | BUILD | Turnkey production data stack — Terraform + dbt/SQLMesh + extractors deployed to client Databricks in < 1 week. |
-| **IronPilot** | RUN | Agent fleet — GitHub App (AI PR review), automated pipeline monitoring, self-healing agents. |
-
-**One-line pitch:** *"AI that gets smarter about YOUR data stack with every PR it reviews."*
+> **Note:** This repo is currently named `ironlayer_oss`. A future rename to `ironlayer` is tracked in I-38.
 
 ---
 
-## Repository Map
+## Package Map
 
 ```
-# Repos live as siblings in a shared parent directory.
-# activate.sh sets WORKSPACE_ROOT; paths resolve relative to it.
-#
-├── iron-dev-workspace/             # Workspace orchestrator — AI configs, standards, tooling
-├── ironrecall-core/                # Shared kernel (auth, llm, security, db, memory, mcp)
-├── ironlayer/                      # IronLayer — SHIP (public, Apache 2.0)
-├── ironlayer-infra/                # Iron Foundation — BUILD (private)
-├── ironpilot/                      # IronPilot — RUN (private)
-├── iron-client-template/           # Per-client config template
-├── iron-terraform/                 # GitHub org Terraform management
-├── ironmigrate/                    # Redshift→Databricks migration CLI
-├── ironexchange/                   # Rust CLI utility (dx diff, validate, query)
-│
-├── dpb-data-platform-in-a-box/     # [REFERENCE] Legacy monolith — agent code reference
-└── AEGIS-DWH-IN-A-BOX-V2/         # [REFERENCE] Prototype
+ironlayer_oss/
+├── core_engine/          # ironlayer-core v0.2.0 — deterministic SQL plan engine, lineage, schema diff
+│   └── core_engine/      #   SQLGlot parsing, NetworkX DAG, SQLAlchemy 2.0 async state, DuckDB local
+├── ai_engine/            # ai-engine v0.1.0 — cost modeling, risk scoring, SQL optimization
+│   └── ai_engine/        #   scikit-learn models, optional Anthropic LLM, DuckDB analytics
+├── api/                  # ironlayer-api v0.1.0 — FastAPI control-plane REST API
+│   └── api/              #   JWT auth, Stripe billing, Prometheus metrics, Redis caching
+├── cli/                  # ironlayer v0.2.0 — Typer CLI (`ironlayer plan`, `ironlayer diff`)
+│   └── cli/              #   Rich output, keyring credential storage, optional MCP server
+├── check_engine/         # ironlayer-check-engine v0.3.0 — Rust/PyO3 validation (90 rules, 12 categories)
+│   └── src/              #   Rayon parallel, regex, TOML config, benchmarks via Criterion
+├── frontend/             # React 18 + TypeScript + Tailwind dashboard
+│   └── src/              #   Vite build, ReactFlow lineage graph, Recharts, Playwright e2e
+├── infra/                # Docker, Terraform, Helm, Prometheus, Grafana
+├── tests/                # Cross-package / integration tests
+├── examples/             # Demo project, sample models, GitHub Action workflow
+├── docs/                 # Architecture, API reference, CLI reference, engineering docs
+├── scripts/              # dev_setup.sh, e2e_smoke_test.sh
+├── pyproject.toml        # uv workspace root — members: core_engine, ai_engine, api, cli
+├── Cargo.toml            # Rust workspace root — member: check_engine
+└── docker-compose.yml    # Full local stack: API, AI service, frontend, Postgres, Redis, Prometheus, Grafana
 ```
 
----
-
-## Architecture Principles
-
-### 1. Hybrid: Shared Kernel + Product Repos
-`ironrecall-core` is the shared Python package. Product repos depend on it; they don't duplicate shared logic.
-- Auth, LLM routing, security, DB, memory → `ironrecall-core`
-- Plan engine, lineage, cost, framework detection → `ironlayer`
-- Terraform, dbt/SQLMesh, extractors → `ironlayer-infra`
-- Agent fleet, GitHub App, billing → `ironpilot`
-
-### 2. Databricks-Native CI/CD
-All CI/CD runs on Databricks job compute (cheapest). SQL Warehouses are user-facing only.
-
-### 3. Two-Pass AI Review
-- Pass 1: `qwen2.5-coder:32b` (vLLM, Mac Studio) — fast, $0
-- Pass 2: `claude-opus-4` — conditional, only when confidence < 70% or BLOCK detected
-
-### 4. Client-Agnostic Core
-Platform IP in the Docker image. Client-specific knowledge in `iron-client-template`.
-
-### 5. Budget-Protected AI
-All Claude calls through `ironrecall-core` LLM router with `IRON_BUDGET_LIMIT` cap and SHA-256 response cache.
-
-### 6. Everything Terraform
-All GitHub repos, branch protection, environments, and secrets managed by `iron-terraform`.
+**Workspace dependency graph:** `cli` → `core_engine` ← `api` → `ai_engine`. The `check_engine` Rust crate is a PyO3 extension imported by `core_engine`.
 
 ---
 
-## Build and Test Commands
+## Locked Technical Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | **SQLGlot pinned to 25.34.1** | Last MIT-licensed version before Fivetran acquisition risk. Do NOT upgrade without legal review. |
+| 2 | **uv workspace** (not Poetry, not pip) | Single lockfile, fast resolution, workspace-aware `uv run --package`. |
+| 3 | **Ruff line-length=120** | Set in root `pyproject.toml`. No per-package overrides. E501 ignored (handled by formatter). |
+| 4 | **mypy strict mode** at workspace level | Per-package configs relax `disallow_untyped_defs` during migration; workspace `pyproject.toml` is the target. |
+| 5 | **SQLAlchemy 2.0 async** + asyncpg (prod) / aiosqlite (dev) | Async-first persistence. PostgreSQL 16 in production, SQLite for local dev and tests. |
+| 6 | **Pydantic v2** everywhere | Settings via `pydantic-settings`. No v1 compat shims. |
+| 7 | **Hatchling** build backend | All four Python packages use `hatchling`. No setuptools. |
+| 8 | **PyO3 abi3-py311** stable ABI | Single Rust wheel works across Python 3.11+. Rayon for parallel rule execution. |
+| 9 | **React 18 + Vite + Tailwind 3** | No Next.js. SPA served by Nginx in Docker. ReactFlow for lineage visualization. |
+| 10 | **FastAPI 0.115.x** pinned | Both `api` and `ai_engine` pin `>=0.115,<0.116`. Upgrade together. |
+| 11 | **Redis for caching/queues** | docker-compose maps to port 6380 (host) → 6379 (container). |
+| 12 | **Prometheus + Grafana** observability | Pushgateway for check_engine metrics, postgres_exporter for DB health, custom API `/metrics`. |
+| 13 | **Apache 2.0 license** | Every package has its own `LICENSE` file. OSS repo; no proprietary dependencies. |
+
+---
+
+## Core Rules
+
+1. **Never upgrade SQLGlot** past 25.34.1 without explicit legal + architectural review.
+2. **`uv run` for everything** — never bare `python`, `pip`, or `pytest`. Always `uv run --package <pkg>` for package-scoped commands.
+3. **Type hints on all function signatures.** Docstrings on all public methods.
+4. **`rich.console.Console` for output** — never `print()`. Use `structlog` for structured logging.
+5. **No hardcoded secrets.** Read from `os.environ` or config files. Never commit `.env` files.
+6. **Conventional commits:** `type(scope): description`. Types: feat, fix, docs, refactor, test, chore, ci, perf.
+7. **Ruff is the single linter and formatter.** No flake8, black, or isort. Run `make format` then `make lint`.
+8. **Tests must pass before merge.** Coverage gates enforced per package (see Testing section).
+9. **Sync with ironlayer_infra** via `make sync-rules` (copies CLAUDE.md and AGENTS.md from infra to OSS). BACKLOG.md and LESSONS.md are private and intentionally NOT synced.
+10. **B008 ignored** — FastAPI `Depends()` pattern uses function calls in default arguments. This is intentional.
+
+---
+
+## Local Development (from Makefile)
 
 ```bash
-# Activate workspace (always use this)
-source activate.sh
+# Install all packages + frontend
+make install                    # uv sync --all-packages && cd frontend && npm install
 
-# Any repo — Python
-uv run pytest tests/ -v
-uv run ruff check .
-uv run mypy . --ignore-missing-imports
+# Lint (Ruff + mypy across all 4 packages)
+make lint                       # ruff check + mypy per package
 
-# ironlayer-infra — SQL + Terraform
-sqlfluff lint dbt-framework/models/ --dialect databricks
-terraform fmt -check -recursive terraform/
-dbt compile --target dev            # dbt Core projects
-sqlmesh plan --dry-run              # SQLMesh projects
+# Format (Ruff)
+make format                     # ruff format + ruff check --fix
 
-# ironexchange — Rust
-cargo fmt --check && cargo clippy && cargo test
+# Run full local stack
+make docker-up                  # docker compose up -d (Postgres, Redis, API, AI, frontend, Prometheus, Grafana)
+make docker-down                # docker compose down
 
-# Pre-commit (all repos)
-pre-commit run --all-files
+# Database migrations
+make migrate                    # alembic upgrade head (core_engine state DB)
+make migrate-create msg="..."   # alembic revision --autogenerate
 
-# IronLayer CLI
-ironlayer plan                   # Validate execution plan
-ironlayer diff                   # Schema/data diff
-ironlayer status                 # System health
+# Rust check_engine
+cd check_engine && cargo build --release --features extension-module
+cargo test                      # unit tests
+cargo bench                     # Criterion benchmarks
 
-# IronPilot CLI
-ironpilot review code <path>     # AI code review (local first)
-ironpilot agent run --item <ID>  # Run backlog item
-ironpilot ai-usage               # Track AI spend
+# Frontend
+cd frontend && npm run dev      # Vite dev server
+cd frontend && npm run build    # tsc + vite build
+cd frontend && npm run test     # Vitest
+cd frontend && npm run test:e2e # Playwright
+
+# Cleanup caches
+make clean                      # removes __pycache__, .pytest_cache, .mypy_cache, .ruff_cache
+
+# Emergency rollback (Azure Container Apps)
+make rollback                   # all services
+make rollback TARGET=api        # single service
+
+# Sync AI config to OSS repo
+make sync-rules                 # copies CLAUDE.md + AGENTS.md from infra → OSS
 ```
 
 ---
 
-## Claude Skills (available in this workspace)
+## Testing (with coverage gates)
 
 ```bash
-cat ai/claude/skills/{skill-name}/SKILL.md
+# All tests
+make test                       # runs test-unit + test-integration
+
+# Unit tests with coverage gates
+make test-unit
+#   core_engine  → --cov-fail-under=70
+#   ai_engine    → --cov-fail-under=75
+#   api          → --cov-fail-under=75
+#   cli          → no minimum (coverage reported)
+
+# Integration tests
+make test-integration           # core_engine/tests/integration/
+
+# E2E tests
+make test-e2e                   # core_engine/tests/e2e/
+
+# Benchmarks
+make test-benchmark             # core_engine/tests/benchmark/ (-m benchmark)
+
+# Slow tests (AI model tests)
+make test-slow                  # ai_engine/tests/ (-m slow)
+
+# Frontend tests
+cd frontend && npm run test     # Vitest (unit + component)
+cd frontend && npm run test:e2e # Playwright (browser e2e)
+
+# Rust check_engine
+cd check_engine && cargo test
+cd check_engine && cargo bench  # Criterion HTML reports in target/criterion/
 ```
 
-| Skill | When to Use |
-|---|---|
-| `iron-pr-review` | Reviewing PRs with BLOCK/WARN/NOTE output (dbt + SQLMesh aware) |
-| `iron-dbt-model` | Creating dbt Core staging/intermediate/mart models |
-| `iron-sqlmesh` | Creating SQLMesh models, converting dbt→SQLMesh, plan/apply workflows |
-| `iron-extractor` | Adding new data source extractors |
-| `iron-kimball-design` | Designing star schemas (dbt + SQLMesh model kinds) |
-| `iron-terraform` | Creating Terraform modules (Databricks, AWS, GitHub) |
-| `iron-pipeline-design` | Designing end-to-end data pipelines (dbt or SQLMesh) |
-| `iron-data-quality` | Adding dbt tests and SQLMesh audits / data quality rules |
-| `iron-dbt-cloud` | Managing dbt Cloud Enterprise projects, jobs, and environments |
-| `iron-dev-loop` | PRIVIA development loop for non-trivial tasks |
-
----
-
-## Agent Conventions
-
-```python
-from ironrecall_core.agents.base import BaseAgent, AgentResult
-from ironrecall_core.llm import ModelTier
-
-class MyAgent(BaseAgent):
-    AGENT_NAME = "MyAgent"
-    AGENT_DESCRIPTION = "What this agent does."
-    DEFAULT_TIER = ModelTier.STANDARD
-    MAX_TOKENS = 4096
-    PREFER_LOCAL = True  # Try vLLM first
-
-    def _get_agent_specific_instructions(self) -> str:
-        return "Detailed instructions for the agent's role."
-
-    def analyze(self, input_data: str) -> AgentResult:
-        response = self._call_claude(f"Analyze: {input_data}")
-        self._track_usage()
-        return AgentResult(success=True, summary=response)
-```
-
----
-
-## Coding Standards
-
-### Python
-- Type hints on ALL function signatures
-- Docstrings on all public methods
-- `rich.console.Console` for output — never `print()`
-- `@dataclass` for structured return types
-- `structlog` for structured logging
-- Never hardcode API keys — read from `os.environ` or `~/.iron/env.local`
-- `uv run` for all Python commands (never `python` or `pip`)
-- Ruff: line-length=120, mypy for type checking
-
-### SQL (dbt + SQLMesh)
-- UPPERCASE keywords
-- **dbt Core:** CTE pattern with `{{ config() }}`, `{{ ref() }}`, `{{ source() }}`; every model needs YAML schema file
-- **SQLMesh:** `MODEL()` DDL block before the query; grain + audits required on incremental models; `@start_ds`/`@end_ds` for time-range incremental
-- `{{ surrogate_key([...]) }}` (dbt) / `@safe_divide(...)` macro (SQLMesh) — never raw MD5 or division
-- For SQLMesh projects use `sqlmesh.mdc` rule and `iron-sqlmesh` skill
-
-### Terraform
-- `for_each` with named maps — NEVER `count` for multi-resource
-- Tag all AWS resources with `common_tags`
-- Module structure: `main.tf`, `variables.tf`, `outputs.tf`, `versions.tf`
-- S3 backend + DynamoDB locking
-
-### Git
-```
-type(scope): description
-
-Types: feat, fix, docs, style, refactor, test, chore, ci, perf
-Scopes: core, llm, auth, security, plan, lineage, terraform, dbt, sqlmesh, agents, github-app, cicd, ai, standards, tooling, workspace, config, bundle, monitoring, memory, ironlayer, extractors, cli, docs
-```
-
----
-
-## Workflow & Backlog
-
-All agents follow [standards/WORKFLOW_RULES.md](../../standards/WORKFLOW_RULES.md) (six rules: backlog-first, verify dependencies, no stubs, verification suite, update memory/lessons, conventional commits).
-
-- **Canonical backlog:** [development_docs/UNIFIED_BACKLOG.md](../../development_docs/UNIFIED_BACKLOG.md)
-- **Legacy code promotion:** [standards/LEGACY_CODE_PROMOTION.md](../../standards/LEGACY_CODE_PROMOTION.md)
-- **Development loop:** PRIVIA (Plan → Review → Implement → Verify → Inspect → Accept) for non-trivial tasks. See `iron-dev-loop` skill.
-
-Each repo may have a `CLAUDE_REPO.md` for repo-specific context that supplements this workspace-level CLAUDE.md. The sync mechanism (`make sync-ai`) only touches `CLAUDE.md` — repo-specific files are preserved.
-
----
-
-## Key Documents
-
-| Document | Purpose |
-|----------|---------|
-| [README.md](../../README.md) | Workspace overview, products, quick start |
-| [docs/COFOUNDER_SETUP_GUIDE.md](../../docs/COFOUNDER_SETUP_GUIDE.md) | First-time setup and onboarding |
-| [docs/REPO_INDEX.md](../../docs/REPO_INDEX.md) | Full repo index with roles and status |
-| [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) | System architecture overview |
-| [docs/ENVIRONMENT_GUIDE.md](../../docs/ENVIRONMENT_GUIDE.md) | Dev/staging/prod connection details |
-| [docs/VERSIONING.md](../../docs/VERSIONING.md) | Version management strategy |
-| [development_docs/UNIFIED_BACKLOG.md](../../development_docs/UNIFIED_BACKLOG.md) | Master backlog (all initiatives) |
-| [development_docs/FEATURE_REPO_MAPPING.md](../../development_docs/FEATURE_REPO_MAPPING.md) | Feature-to-repo mapping |
-| [standards/README.md](../../standards/README.md) | Coding standards index |
-| [tooling/env/README.md](../../tooling/env/README.md) | Environment configuration guide |
-| [docs/adr/](../../docs/adr/) | Architecture Decision Records |
+**Test configuration:** `asyncio_mode = "auto"` across all packages. Pytest paths scoped per package in each `pyproject.toml`.
 
 ---
 
 ## Environment Variables
 
-```bash
-# Core — ~/.iron/env.local
-ANTHROPIC_API_KEY=sk-ant-xxx
-DATABRICKS_HOST=https://xxx.azuredatabricks.net
-DATABRICKS_TOKEN=dapiXXX
-DATABRICKS_WAREHOUSE_ID=xxx
-GITHUB_TOKEN=ghp_xxx
-
-# GitHub App (Iron Review Engine)
-GITHUB_APP_ID=xxx
-GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
-GITHUB_WEBHOOK_SECRET=xxx
-
-# Billing
-STRIPE_SECRET_KEY=sk_xxx
-
-# Iron config
-IRON_BUDGET_LIMIT=15.00
-IRON_USE_LOCAL_LLMS=true
-VLLM_BASE_URL=http://localhost:8000
-VLLM_BASE_URL_REMOTE=http://100.x.x.x:8000  # Mac Studio via Tailscale
-WORKSPACE_ROOT=<auto-set by activate.sh>
-IRONRECALL_CORE_PATH=<auto-set by activate.sh>
-```
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `API_DATABASE_URL` | prod | `sqlite+aiosqlite:///...` | Async DB URL. PostgreSQL in prod, SQLite in dev. |
+| `API_AI_ENGINE_URL` | yes | `http://localhost:8001` | AI engine service endpoint. |
+| `API_PLATFORM_ENV` | no | `dev` | Environment: `dev`, `staging`, `prod`. |
+| `AI_ENGINE_SHARED_SECRET` | prod | `change-me-in-production` | Inter-service auth between API and AI engine. |
+| `AI_ENGINE_PORT` | no | `8001` | AI engine listen port. |
+| `REDIS_URL` | prod | `redis://redis:6379/0` | Redis connection for caching and queues. |
+| `JWT_SECRET` | prod | `dev-change-me-...` | JWT signing secret. Must be strong in prod. |
+| `API_CREDENTIAL_ENCRYPTION_KEY` | prod | `dev-change-me-...` | Fernet key for encrypting stored credentials. |
+| `API_METRICS_TOKEN` | prod | `dev-metrics-token` | Bearer token for `/metrics` endpoint (Prometheus). |
+| `API_ALLOWED_REPO_BASE` | no | `/workspace` | Base path for local repo access from API container. |
+| `AUTH_MODE` | no | `development` | Auth mode. `development` disables strict auth. |
+| `LLM_ENABLED` | no | `false` | Enable LLM calls in AI engine. |
+| `ANTHROPIC_API_KEY` | if LLM | — | Claude API key for AI advisory features. |
+| `DATABRICKS_HOST` | runtime | — | Databricks workspace URL. |
+| `DATABRICKS_TOKEN` | runtime | — | Databricks personal access token. |
+| `DATABRICKS_WAREHOUSE_ID` | runtime | — | SQL Warehouse for query execution. |
+| `STRIPE_SECRET_KEY` | prod | — | Stripe billing integration. |
+| `GF_ADMIN_PASSWORD` | no | `changeme` | Grafana admin password (docker-compose). |
 
 ---
 
-## What NOT to Build Right Now
+## Playbook Documentation (cross-references)
 
-- NL-to-SQL Studio — nice demo, not needed for first clients
-- React Canvas — Streamlit is sufficient
-- Meltano expansion — clients have their own extractors
-- Prometheus/Grafana — GitHub Actions logs are sufficient
-- SaaS API — build at 5+ clients
-- Jira integration — enterprise feature
+All operational and development playbooks live under `docs/`:
+
+| Document | Path | Purpose |
+|----------|------|---------|
+| **Quick Reference** | [`docs/build-notes/quick-reference.md`](docs/build-notes/quick-reference.md) | One-page cheat sheet for common commands, ports, and service URLs. |
+| **Dev Journal** | [`docs/dev-journal.md`](docs/dev-journal.md) | Chronological log of design decisions, trade-offs, and lessons learned. |
+| **Engineering Patterns** | [`docs/engineering-patterns.md`](docs/engineering-patterns.md) | Reusable patterns: async DB sessions, Pydantic model conventions, error handling, testing strategies. |
+| **Backlog Execution** | [`docs/backlog-execution.md`](docs/backlog-execution.md) | Current sprint items, priority ordering, and completion criteria. |
+| **Bot Activity Log** | [`docs/build-notes/bot-activity-log.jsonl`](docs/build-notes/bot-activity-log.jsonl) | Machine-readable JSONL log of automated agent actions on this repo. |
+| **Plans** | [`docs/build-notes/plans/`](docs/build-notes/plans/) | Detailed implementation plans for major features and migrations. |
+| **Architecture** | [`docs/architecture.md`](docs/architecture.md) | System architecture, component interactions, data flow diagrams. |
+| **API Reference** | [`docs/api-reference.md`](docs/api-reference.md) | REST API endpoints, request/response schemas, auth flows. |
+| **CLI Reference** | [`docs/cli-reference.md`](docs/cli-reference.md) | All `ironlayer` CLI commands, flags, and usage examples. |
+| **Production Readiness** | [`docs/production-readiness-checklist.md`](docs/production-readiness-checklist.md) | Pre-deployment checklist for staging and production releases. |
+| **Release Verification** | [`docs/release-verification.md`](docs/release-verification.md) | Post-release smoke tests and rollback procedures. |
