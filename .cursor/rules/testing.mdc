@@ -1,0 +1,222 @@
+---
+description: Testing conventions and patterns for TheAiGroup Python repos.
+globs: ["**/tests/**/*.py", "**/*_test.py", "**/conftest.py"]
+alwaysApply: false
+---
+
+# Testing Conventions — TheAiGroup
+
+## Test Layout
+
+```
+tests/
+├── unit/                   # Fast, no I/O, no API calls
+│   ├── test_plan_engine.py
+│   ├── test_llm_router.py
+│   └── test_prompt_guard.py
+├── integration/            # Real APIs, real Databricks — skip without credentials
+│   ├── test_github_app.py
+│   └── test_dbt_runner.py
+└── conftest.py             # Shared fixtures
+```
+
+## Fixtures — Never Make Real API Calls in Unit Tests
+
+```python
+# conftest.py
+import os
+from unittest.mock import Mock, patch
+import pytest
+
+
+@pytest.fixture
+def mock_llm_router():
+    """Mock ironrecall-core LLM router — zero API cost in tests."""
+    with patch("ironrecall_core.llm.LLMRouter") as mock_cls:
+        router = Mock()
+        router.call.return_value = {
+            "summary": "Test summary",
+            "findings": [],
+            "confidence": 85,
+        }
+        router.call_stream.return_value = iter(["chunk1", "chunk2"])
+        mock_cls.return_value = router
+        yield router
+
+
+@pytest.fixture
+def mock_github_client():
+    """Mock GitHub API client."""
+    with patch("ironrecall_core.integrations.github.GitHubClient") as mock_cls:
+        client = Mock()
+        client.create_review.return_value = {"id": 12345, "state": "COMMENT"}
+        client.get_pr_diff.return_value = "diff content"
+        mock_cls.return_value = client
+        yield client
+
+
+@pytest.fixture
+def mock_databricks():
+    """Mock Databricks SQL connector."""
+    with patch("ironrecall_core.db.databricks.DatabricksConnector") as mock_cls:
+        conn = Mock()
+        conn.execute.return_value = [{"count": 42}]
+        mock_cls.return_value = conn
+        yield conn
+```
+
+## Markers
+
+```python
+@pytest.mark.integration   # Requires real credentials + live services
+@pytest.mark.slow          # > 10 seconds — skip in pre-commit
+@pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY"),
+    reason="ANTHROPIC_API_KEY not set",
+)
+@pytest.mark.skipif(
+    not os.getenv("DATABRICKS_TOKEN"),
+    reason="DATABRICKS_TOKEN not set",
+)
+```
+
+## Coverage Target
+
+- **Unit tests:** 80%+ line coverage for all `ironrecall_core.*` and product packages
+- **Integration tests:** smoke-test happy paths for GitHub App, dbt runner, Databricks connector
+- Run with: `uv run pytest tests/unit/ --cov={package} --cov-report=term-missing`
+
+## Agent Testing Pattern
+
+```python
+from unittest.mock import Mock, patch
+import pytest
+from ironpilot.agents.code_reviewer import CodeReviewAgent
+from ironrecall_core.agents.base import AgentResult
+
+
+def test_code_reviewer_finds_block(mock_llm_router):
+    mock_llm_router.call.return_value = {
+        "findings": [
+            {"severity": "BLOCK", "file": "models/mart.sql", "line": 42, "message": "Missing surrogate key"}
+        ],
+        "confidence": 90,
+        "escalate": False,
+    }
+    agent = CodeReviewAgent()
+    result = agent.review_diff("mock diff content")
+
+    assert result.has_blocks is True
+    assert len(result.findings) == 1
+    assert result.findings[0].severity == "BLOCK"
+    mock_llm_router.call.assert_called_once()
+
+
+def test_code_reviewer_escalates_low_confidence(mock_llm_router):
+    mock_llm_router.call.return_value = {
+        "findings": [],
+        "confidence": 55,
+        "escalate": True,
+    }
+    agent = CodeReviewAgent()
+    result = agent.review_diff("complex diff")
+
+    assert result.escalate is True
+    assert result.confidence < 70
+```
+
+## Type Checking
+
+Use **ty** (Astral's new type checker) as the primary type checker. Fall back to mypy only for repos not yet migrated.
+
+```bash
+# ty — preferred (10-100x faster than mypy)
+uv run ty check
+
+# mypy — legacy, during migration period only
+uv run mypy . --ignore-missing-imports
+
+# CI check order (run both during migration, remove mypy once ty is stable)
+uv run ty check && uv run pytest tests/unit/ -v
+```
+
+**Migration path:** `ironrecall-core` and `ironlayer` use `ty` now. Other repos add `ty` when unit test coverage exceeds 60%. Once `ty` hits stable release, `mypy` is removed from all repos.
+
+**ty config in `pyproject.toml`:**
+```toml
+[tool.ty]
+python-version = "3.11"
+
+[[tool.ty.overrides]]
+module = "databricks.*"
+ignore-missing-imports = true
+```
+
+## SQLMesh Testing
+
+SQLMesh has its own testing layer independent of pytest. These live in `tests/*.yaml` within the SQLMesh project.
+
+```yaml
+# tests/test_fct_orders.yaml
+model: {client}_prod.gold.fct_orders
+
+inputs:
+  {client}_raw.staging.stg_payments__orders:
+    rows:
+      - order_id: "ord-1"
+        amount_usd: 100.00
+        event_date: "2025-01-15"
+
+outputs:
+  query:
+    rows:
+      - order_id: "ord-1"
+        amount_usd: 100.0000
+
+overrides:
+  start: "2025-01-15"
+  end: "2025-01-15"
+```
+
+Run SQLMesh tests:
+```bash
+sqlmesh test                   # All unit tests
+sqlmesh test fct_orders        # Specific model test
+# Or via MCP tool: sqlmesh_test
+```
+
+**SQLMesh audits** (defined in MODEL DDL, not pytest):
+```sql
+MODEL (
+  name prod.gold.fct_orders,
+  ...
+  audits (
+    UNIQUE_VALUES(columns=(order_id)),
+    NOT_NULL(columns=(order_id, event_date)),
+    NUMBER_OF_ROWS(threshold := 1000)
+  ),
+);
+```
+
+Audits run automatically during `sqlmesh run`. They are the SQLMesh equivalent of dbt schema tests.
+
+---
+
+## Running Tests
+
+```bash
+# All unit tests (fast — run pre-commit)
+uv run pytest tests/unit/ -v --tb=short
+
+# With coverage
+uv run pytest tests/unit/ --cov=ironpilot --cov-report=term-missing -q
+
+# Integration tests (require credentials)
+uv run pytest tests/integration/ -v -m integration
+
+# Run a specific test file
+uv run pytest tests/unit/test_code_reviewer.py -v
+
+# Watch mode (re-run on file changes)
+uv run pytest-watch tests/unit/
+```

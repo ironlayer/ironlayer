@@ -36,7 +36,9 @@ terraform.tfvars
 .claude/projects/
 
 # Cursor IDE
-.cursor/
+# Cursor IDE (track rules and skills, ignore the rest)
+.cursor/*
+!.cursor/rules/
 
 # Private governance files (synced from infra repo only)
 BACKLOG.md
