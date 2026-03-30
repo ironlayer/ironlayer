@@ -35,7 +35,7 @@ memchr = "2"
 unicode-segmentation = "1"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
-toml = "0.8"
+toml = "1.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
