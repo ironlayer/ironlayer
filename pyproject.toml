@@ -7,7 +7,7 @@ requires-python = ">=3.11,<3.13"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-cov>=4.1",
+    "pytest-cov>=7.1.0",
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.12",
     "ruff>=0.2",
